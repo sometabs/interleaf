@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Interleaf">
+  <title>Interleaf</title>
+
+  <defs>
+    <clipPath id="page">
+      <rect x="78" y="60" width="292" height="392" rx="24"/>
+    </clipPath>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#18181b"/>
+
+  <!-- Drawn first so the page occludes it, leaving only the fore-edge sliver. -->
+  <rect x="298" y="122" width="152" height="268" rx="16" fill="#2563eb"/>
+
+  <rect x="78" y="60" width="292" height="392" rx="24" fill="#ffffff"/>
+  <g clip-path="url(#page)">
+    <rect x="78" y="60" width="26" height="392" fill="#e7e7ea"/>
+  </g>
+
+  <g stroke="#d7d8dd" stroke-width="14" stroke-linecap="round">
+    <path d="M136 112H248"/>
+    <path d="M136 149H224"/>
+    <path d="M136 186H192"/>
+  </g>
+</svg>

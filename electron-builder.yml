@@ -1,0 +1,50 @@
+appId: com.interleaf.app
+productName: Interleaf
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,README.md,ARCHITECTURE.md}'
+  - '!{.env,.env.*}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tests,vitest.config.ts,SECURITY.md}'
+  # Must stay top-level: a platform-specific `files` key replaces this list
+  # rather than extending it, packaging every devDependency.
+  - '!node_modules/better-sqlite3/{deps,src,build}/**'
+  # Header-only C++ glue, never needed at runtime.
+  - '!node_modules/node-addon-api/**'
+  # Two of the eight prebuilds, ~2 MB each. Both ship in both artifacts for the
+  # reason above; excluding `linux*` here is what broke `build:linux`.
+  - '!node_modules/better-sqlite3/prebuilds/darwin-*'
+  - '!node_modules/better-sqlite3/prebuilds/linuxmusl-*'
+  - '!node_modules/better-sqlite3/prebuilds/linux-arm64.node'
+  - '!node_modules/better-sqlite3/prebuilds/win32-arm64.node'
+asarUnpack:
+  - resources/**
+  # Native bindings cannot be loaded from inside an asar archive.
+  - '**/*.node'
+win:
+  executableName: interleaf
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+# No macOS target: building one needs a Mac and an Apple Developer account to
+# notarize with, and an unnotarized .dmg is refused by Gatekeeper.
+linux:
+  # Snap is absent deliberately: snapcraft only builds on a Linux host.
+  target:
+    - AppImage
+    - deb
+  maintainer: sometabs
+  category: Utility
+  synopsis: Offline book journal with tagged notes, reviews, and recommendations
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+# `null` is load-bearing: omitting the key makes electron-builder infer the
+# GitHub provider from `repository` and try to upload a release.
+publish: null

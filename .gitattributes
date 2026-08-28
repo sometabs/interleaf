@@ -1,0 +1,16 @@
+# Without this, Git on Windows applies core.autocrlf and the first commit from
+# another machine rewrites every line ending.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary
+*.node binary
+*.db binary
+*.sqlite binary
+
+# Still committed and reviewed, just collapsed in diffs.
+package-lock.json linguist-generated=true -diff
+
+# Otherwise GitHub's language stats call this a SQL project.
+*.sql linguist-detectable=false

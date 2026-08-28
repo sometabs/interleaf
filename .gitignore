@@ -1,0 +1,57 @@
+# dependencies
+node_modules/
+
+# build output
+out/
+dist/
+
+# caches
+.eslintcache
+coverage/
+*.tsbuildinfo
+.cache/
+.vite/
+
+# local environment
+.env
+.env.*
+*.local
+
+# code signing material, which is not recoverable once pushed
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.mobileprovision
+
+# the library itself, which lives in the OS app-data folder and never here
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+covers/
+
+# editor and OS
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+.idea/
+
+# logs
+*.log*
+npm-debug.log*
+
+# scratch and merge leftovers
+*.bak
+*.orig
+*.rej
+*.tgz
+scratch/
+
+# private notes, kept locally and not published
+ARCHITECTURE.md
+SECURITY.md

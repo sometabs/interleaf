@@ -1,0 +1,367 @@
+@import 'tailwindcss';
+
+/* No webfonts: the CSP allows nothing off-disk, and this has to work with the
+   network unplugged. */
+@theme {
+  --color-canvas: #f7f7f8;
+  --color-surface: #ffffff;
+  --color-sunken: #f1f1f4;
+  --color-hover: #ececef;
+
+  --color-hairline: #e7e7ea;
+  --color-hairline-strong: #d7d8dd;
+
+  --color-ink: #18181b;
+  --color-ink-muted: #61626b;
+  --color-ink-faint: #9496a0;
+
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft: #eef4ff;
+
+  --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+  --color-star: #f59e0b;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-raised: 0 2px 4px rgb(16 24 40 / 0.04), 0 4px 12px rgb(16 24 40 / 0.08);
+  --shadow-pop: 0 12px 32px rgb(16 24 40 / 0.14);
+
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-read: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+
+  --text-base: 15px;
+
+  /* One turn of the loading spinner. The reduced-motion block restates the
+     animation, so this is the only place the number lives. */
+  --spin-duration: 2.5s;
+}
+
+@layer base {
+  :root {
+    /* The app commits to light, so tell the platform: otherwise a dark-mode
+       OS renders scrollbars and native controls dark against white cards. */
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-hairline-strong);
+    border: 3px solid transparent;
+    border-radius: 8px;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-faint);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      /* Without this an *infinite* animation does not stop: it repeats every
+         hundredth of a millisecond, forever, which is a vibrating smear. */
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    /* Exempt from the rule above: a frozen ring indicates nothing. */
+    .spinner {
+      animation: interleaf-spin var(--spin-duration) linear infinite !important;
+    }
+  }
+}
+
+@layer components {
+  /* Three shapes carry the whole UI: a card, a button, a field. Defining them
+     once keeps every screen consistent without a component library. */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-ink);
+    transition:
+      background 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .btn:hover:not(:disabled) {
+    background: var(--color-hover);
+  }
+
+  .btn-primary {
+    background: var(--color-accent);
+    border-color: transparent;
+    color: #fff;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+  }
+
+  /* The confirm button of a destructive dialog. Solid red, so the button that
+     ends something never looks like the button that saves it. */
+  .btn-destructive {
+    background: var(--color-danger);
+    border-color: transparent;
+    color: #fff;
+  }
+
+  .btn-destructive:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+
+  .btn-outline {
+    background: var(--color-surface);
+    border-color: var(--color-hairline-strong);
+    box-shadow: var(--shadow-card);
+  }
+
+  .btn-ghost {
+    color: var(--color-ink-muted);
+    font-size: 13px;
+    padding: 5px 9px;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+  }
+
+  .field {
+    width: 100%;
+    padding: 8px 11px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-hairline-strong);
+    border-radius: var(--radius-control);
+    font: inherit;
+    color: var(--color-ink);
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  .field::placeholder {
+    color: var(--color-ink-faint);
+  }
+
+  .field:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
+  }
+
+  /* Tune `--spin-duration`, not this line: the base layer keeps it spinning
+     under reduced motion. */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    border: 2px solid var(--color-hairline-strong);
+    border-top-color: var(--color-accent);
+    border-radius: 999px;
+    animation: interleaf-spin var(--spin-duration) linear infinite;
+  }
+
+  @keyframes interleaf-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--color-sunken);
+    color: var(--color-ink-muted);
+    font-size: 12px;
+  }
+
+  /* The editor renders real HTML, so these style the document itself rather
+     than a preview of it. */
+  .note-prose {
+    font-family: var(--font-sans);
+    /* Set by the editor from the reading preference; the literal is the value
+       the preference defaults to, for anything that renders prose outside one. */
+    font-size: var(--note-font-size, 16px);
+    line-height: 1.75;
+    outline: none;
+    min-height: 100%;
+    /* `anywhere` rather than `break-word`: it also shrinks the intrinsic width,
+       which stops a flex parent being sized by the longest word. */
+    overflow-wrap: anywhere;
+  }
+
+  .note-prose > * + * {
+    margin-top: 0.75em;
+  }
+
+  .note-prose h1 {
+    font-size: 1.55em;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+
+  .note-prose h2 {
+    font-size: 1.3em;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+
+  .note-prose h3 {
+    font-size: 1.12em;
+    font-weight: 650;
+  }
+
+  .note-prose h4,
+  .note-prose h5,
+  .note-prose h6 {
+    font-weight: 650;
+  }
+
+  .note-prose ul,
+  .note-prose ol {
+    padding-left: 1.4em;
+  }
+
+  .note-prose ul {
+    list-style: disc;
+  }
+
+  .note-prose ol {
+    list-style: decimal;
+  }
+
+  .note-prose li::marker {
+    color: var(--color-ink-faint);
+  }
+
+  .note-prose li > * + * {
+    margin-top: 0.25em;
+  }
+
+  .note-prose blockquote {
+    padding-left: 0.9em;
+    border-left: 2px solid var(--color-hairline-strong);
+    color: var(--color-ink-muted);
+    font-style: italic;
+  }
+
+  .note-prose code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--color-sunken);
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+  }
+
+  .note-prose pre {
+    padding: 0.7em 0.9em;
+    background: var(--color-sunken);
+    border-radius: var(--radius-control);
+    overflow-x: auto;
+  }
+
+  .note-prose pre code {
+    background: none;
+    padding: 0;
+  }
+
+  .note-prose a {
+    color: var(--color-accent);
+  }
+
+  /* An empty document shows the prompt instead of nothing at all. Attached to
+     the first block only, so it disappears the moment anything is typed. */
+  .note-prose.is-editor-empty:first-child::before,
+  .note-prose > p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--color-ink-faint);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+}
