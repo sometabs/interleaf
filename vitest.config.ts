@@ -2,7 +2,10 @@ import { resolve } from 'path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
-const alias = { '@shared': resolve(__dirname, 'src/shared') }
+const alias = {
+  '@shared': resolve(__dirname, 'src/shared'),
+  electron: resolve(__dirname, 'tests/stubs/electron.ts')
+}
 
 export default defineConfig({
   resolve: { alias },
