@@ -27,8 +27,14 @@ function setup(
     deleteAllNotes: vi.fn(async () => counts.notes ?? 0),
     deleteEverything: vi.fn(async () => undefined),
     restoreDismissed: vi.fn(async () => undefined),
-    exportVault: vi.fn(async () => ({ dir: 'C:/vault', files: 3 })),
-    importVault: vi.fn(async () => ({ books: 2, notes: 5 }))
+    exportBackup: vi.fn(async () => ({
+      dir: 'C:/backup',
+      books: 2,
+      notes: 5,
+      covers: 4,
+      files: 3
+    })),
+    restoreBackup: vi.fn(async () => ({ books: 2, notes: 5, covers: 4, replaced: 'C:/old.bak' }))
   }
 
   installBridge(
@@ -128,43 +134,52 @@ describe('the Data screen', () => {
     expect(button.hasAttribute('disabled')).toBe(true)
   })
 
-  it('exports a vault, naming where it went', async () => {
+  it('backs up, naming where it went and what went with it', async () => {
     const spies = setup()
 
-    await press('Export')
+    await press('Back up')
 
-    await waitFor(() => expect(spies.exportVault).toHaveBeenCalled())
-    expect(await screen.findByText(/Exported 3 files to C:\/vault/)).toBeDefined()
+    await waitFor(() => expect(spies.exportBackup).toHaveBeenCalled())
+    expect(await screen.findByText(/2 books and 5 notes/)).toBeDefined()
+    expect(await screen.findByText(/3 Markdown files, to C:\/backup/)).toBeDefined()
   })
 
   // A cancelled picker returns null, which is not a failure.
-  it('says nothing when the export picker is cancelled', async () => {
+  it('says nothing when the backup picker is cancelled', async () => {
     const cancelled = vi.fn(async () => null)
-    setup({}, [], { exportVault: cancelled })
+    setup({}, [], { exportBackup: cancelled })
 
-    await press('Export')
+    await press('Back up')
 
     await waitFor(() => expect(cancelled).toHaveBeenCalled())
-    expect(screen.queryByText(/Exported/)).toBeNull()
+    expect(screen.queryByText(/Backed up/)).toBeNull()
   })
 
-  it('imports a vault back in', async () => {
+  it('asks before restoring, since it replaces the whole library', async () => {
     const spies = setup()
 
-    await press('Import')
+    await press('Restore backup')
 
-    await waitFor(() => expect(spies.importVault).toHaveBeenCalled())
-    expect(await screen.findByText(/Imported 2 books and 5 notes/)).toBeDefined()
+    expect(await screen.findByText(/Restore a backup\?/)).toBeDefined()
+    expect(spies.restoreBackup).not.toHaveBeenCalled()
   })
 
-  // The importer looks for `books/` and `notes/` inside what was picked, so a
-  // wrong folder is otherwise indistinguishable from a failure.
-  it('says which folder to pick when it finds nothing', async () => {
-    setup({}, [], { importVault: vi.fn(async () => ({ books: 0, notes: 0 })) })
+  it('restores nothing when the confirmation is refused', async () => {
+    const spies = setup()
 
-    await press('Import')
+    await press('Restore backup')
+    await press('Cancel')
 
-    expect(await screen.findByText(/pick the folder that contains/i)).toBeDefined()
+    expect(spies.restoreBackup).not.toHaveBeenCalled()
+  })
+
+  it('restores once the confirmation is accepted', async () => {
+    const spies = setup()
+
+    await press('Restore backup')
+    await press('Choose a backup')
+
+    await waitFor(() => expect(spies.restoreBackup).toHaveBeenCalled())
   })
 })
 

@@ -8,19 +8,19 @@ import {
   useDeleteAllNotes,
   useDeleteEverything,
   useDismissed,
-  useExportVault,
-  useImportVault,
+  useExportBackup,
+  useRestoreBackup,
   useRestoreDismissed
 } from '../lib/queries'
 import { formatDate } from '../lib/dates'
 import Empty from './Empty'
 
 // Counts sit on every button so "Delete all books" reads as "delete these 47".
-// Export is at the top because it is the only undo any of this has.
+// Backup is at the top because it is the only undo any of this has.
 export default function Data(): ReactNode {
   const { data: counts } = useDataCounts()
-  const exportVault = useExportVault()
-  const importVault = useImportVault()
+  const exportBackup = useExportBackup()
+  const restoreBackup = useRestoreBackup()
 
   const deleteBooks = useDeleteAllBooks()
   const deleteNotes = useDeleteAllNotes()
@@ -28,24 +28,26 @@ export default function Data(): ReactNode {
 
   const busy = deleteBooks.isPending || deleteNotes.isPending || deleteAll.isPending
 
-  async function onExport(): Promise<void> {
+  async function onBackup(): Promise<void> {
     // A null result is the folder picker being cancelled, not a failure.
-    const result = await exportVault.mutateAsync()
-    if (result) notify(`Exported ${result.files} files to ${result.dir}`)
+    const result = await exportBackup.mutateAsync()
+    if (!result) return
+    notify(
+      `Backed up ${result.books} books and ${result.notes} notes, ` +
+        `with ${result.files} Markdown files, to ${result.dir}`
+    )
   }
 
-  async function onImport(): Promise<void> {
-    // A null result is the folder picker being cancelled, not a failure.
-    const result = await importVault.mutateAsync()
-    if (!result) return
-
-    // The importer looks for `books/` and `notes/` inside what was picked, so
-    // zero and zero means the wrong folder rather than an empty vault.
-    if (result.books === 0 && result.notes === 0) {
-      notify('Nothing to import. Pick the folder that contains the books and notes folders.')
-      return
-    }
-    notify(`Imported ${result.books} books and ${result.notes} notes`)
+  async function onRestore(): Promise<void> {
+    const ok = await confirm({
+      title: 'Restore a backup?',
+      body: 'Everything in your library now is replaced by what is in the backup. A copy of the current library is kept beside it. Interleaf restarts once it is done.',
+      confirmLabel: 'Choose a backup',
+      destructive: true
+    })
+    if (!ok) return
+    // Success never returns here: the app relaunches onto the restored file.
+    await restoreBackup.mutateAsync()
   }
 
   async function onDeleteBooks(): Promise<void> {
@@ -94,44 +96,39 @@ export default function Data(): ReactNode {
         </header>
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-[14px] font-medium">Export and import</h2>
+          <h2 className="text-[14px] font-medium">Backup</h2>
 
-          {/* Overwrites its folder rather than versioning it, so exporting
-              somewhere new leaves the previous copy untouched. */}
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px]">Export a vault</p>
+              <p className="text-[14px]">Back up everything</p>
               <p className="mt-0.5 text-[13px] text-ink-muted">
-                Your books and notes as Markdown files you own
+                Everything, plus a Markdown copy you can read anywhere
               </p>
             </div>
             <button
               type="button"
               className="btn btn-primary shrink-0"
-              onClick={onExport}
-              disabled={exportVault.isPending}
+              onClick={onBackup}
+              disabled={exportBackup.isPending}
             >
-              {exportVault.isPending ? 'Exporting…' : 'Export'}
+              {exportBackup.isPending ? 'Backing up…' : 'Back up'}
             </button>
           </div>
 
-          {/* Adds to the library rather than replacing it: the vault importer
-              matches on what is already there, so re-importing the same folder
-              does not produce a second copy of every book. */}
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px]">Import a vault</p>
+              <p className="text-[14px]">Restore a backup</p>
               <p className="mt-0.5 text-[13px] text-ink-muted">
-                Adds a folder of Markdown to what you already have
+                Replaces your library, then restarts
               </p>
             </div>
             <button
               type="button"
               className="btn btn-outline shrink-0"
-              onClick={onImport}
-              disabled={importVault.isPending}
+              onClick={onRestore}
+              disabled={restoreBackup.isPending}
             >
-              {importVault.isPending ? 'Importing…' : 'Import'}
+              {restoreBackup.isPending ? 'Restoring…' : 'Restore backup'}
             </button>
           </div>
         </section>

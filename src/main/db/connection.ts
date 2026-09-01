@@ -9,7 +9,7 @@ import { resolveDbPath } from './userdata'
 
 let db: Database.Database | null = null
 
-function getDbPath(): string {
+export function getDbPath(): string {
   return resolveDbPath(app.getPath('userData'))
 }
 

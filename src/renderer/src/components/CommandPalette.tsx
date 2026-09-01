@@ -5,7 +5,7 @@ import { Command } from 'cmdk'
 import { useState, type ReactNode } from 'react'
 
 import { notify } from '../lib/feedback'
-import { useCreateNote, useExportVault, useImportVault, useSearch } from '../lib/queries'
+import { useCreateNote, useExportBackup, useSearch } from '../lib/queries'
 import { useView } from '../lib/view'
 
 interface Props {
@@ -19,8 +19,7 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
   const [query, setQuery] = useState('')
 
   const createNote = useCreateNote()
-  const exportVault = useExportVault()
-  const importVault = useImportVault()
+  const exportBackup = useExportBackup()
   const { data: hits = [] } = useSearch(query)
 
   function run(action: () => void): void {
@@ -46,22 +45,15 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
     { id: 'quotes', label: 'Go to Quotes', run: () => navigate({ kind: 'quotes' }) },
     { id: 'discover', label: 'Go to Discover', run: () => navigate({ kind: 'discover' }) },
     {
-      id: 'export',
-      label: 'Back up as Markdown',
-      hint: 'Plain .md files you own',
+      // Restoring is not here: it replaces the library and restarts the app,
+      // which is not something to reach by typing three letters.
+      id: 'backup',
+      label: 'Back up the library',
+      hint: 'The database, its covers and a Markdown copy',
       run: () =>
-        exportVault.mutate(undefined, {
+        exportBackup.mutate(undefined, {
           onSuccess: (result) =>
-            result && notify(`Backed up ${result.files} files to ${result.dir}`)
-        })
-    },
-    {
-      id: 'import',
-      label: 'Import vault from Markdown',
-      run: () =>
-        importVault.mutate(undefined, {
-          onSuccess: (result) =>
-            result && notify(`Imported ${result.books} books and ${result.notes} notes.`)
+            result && notify(`Backed up ${result.books} books to ${result.dir}`)
         })
     }
   ]

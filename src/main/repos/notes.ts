@@ -58,17 +58,21 @@ export function createNote(db: Database, input: NewNote): Note {
     const bodyMd = data.bodyMd ?? ''
     const title = data.title?.trim() || deriveTitle(bodyMd)
 
+    // coalesce rather than two statements: the column is NOT NULL, and its
+    // default is only applied when the column is left out entirely.
     const info = db
       .prepare(
-        `INSERT INTO note (book_id, kind, title, body_md, tag)
-         VALUES (@bookId, @kind, @title, @bodyMd, @tag)`
+        `INSERT INTO note (book_id, kind, title, body_md, tag, created_at, updated_at)
+         VALUES (@bookId, @kind, @title, @bodyMd, @tag,
+                 coalesce(@createdAt, unixepoch()), coalesce(@createdAt, unixepoch()))`
       )
       .run({
         bookId: data.bookId ?? null,
         kind: data.kind ?? 'thought',
         title,
         bodyMd,
-        tag: asNoteTag(data.tag)
+        tag: asNoteTag(data.tag),
+        createdAt: data.createdAt ?? null
       })
 
     return Number(info.lastInsertRowid)

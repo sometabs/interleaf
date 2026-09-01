@@ -1,20 +1,20 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
 
 import { HARVEST_PROGRESS_CHANNEL, type InterleafApi, IPC_CHANNELS } from '../../shared/api'
 import { READING_LANGUAGES } from '../../shared/languages'
-import { getDb } from '../db/connection'
+import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
 import * as books from '../repos/books'
 import * as data from '../repos/data'
 import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
 import * as searchRepo from '../repos/search'
+import * as backup from '../services/backup'
 import { harvestCandidates } from '../services/harvest'
 import { addFromOpenLibrary, enrich } from '../services/library'
 import { coversDir, importCoverFile } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
-import * as vault from '../services/vault'
 
 // Typed as `InterleafApi` so drift from the contract is a compile error.
 const api: InterleafApi = {
@@ -143,15 +143,36 @@ const api: InterleafApi = {
     })
   },
 
-  async exportVault() {
-    const dir = await pickDirectory('Choose where to export your vault', 'Export here')
+  async exportBackup() {
+    const dir = await pickDirectory('Choose where to write the backup', 'Back up here')
     if (!dir) return null
-    return vault.exportVault(getDb(), dir, coversDir())
+    return backup.exportBackup(getDb(), dir, coversDir())
   },
-  async importVault() {
-    const dir = await pickDirectory('Choose a vault folder to import', 'Import from here')
+  async restoreBackup() {
+    const dir = await pickDirectory('Choose a backup folder to restore', 'Restore from here')
     if (!dir) return null
-    return vault.importVault(getDb(), dir, coversDir())
+
+    // The file is replaced rather than edited, so nothing may hold it open.
+    closeDb()
+    let result: backup.RestoreResult
+    try {
+      result = backup.restoreBackup(dir, getDbPath(), coversDir())
+    } catch (err) {
+      // A refused restore leaves the old library untouched; reopen it.
+      initDb()
+      throw err
+    }
+
+    // Every screen still holds rows from the library that was just replaced, so
+    // the app comes back rather than refreshing. Not in this tick: the reply is
+    // still on its way out, and the caller's promise would never settle.
+    setTimeout(() => {
+      app.relaunch()
+      // `quit` runs a teardown a window handler can cancel or delay, which lets
+      // the replacement process start while this one still holds userData.
+      app.exit(0)
+    }, 200)
+    return result
   },
 
   async listDismissed() {

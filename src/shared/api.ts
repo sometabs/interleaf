@@ -66,6 +66,9 @@ export interface NewNote {
   title?: string
   bodyMd?: string
   tag?: string | null
+  // Unix seconds. Importers pass the date the passage was written down;
+  // everything else lets the schema default to now.
+  createdAt?: number
 }
 
 export interface NotePatch {
@@ -157,14 +160,20 @@ export interface HarvestProgress {
 // `InterleafApi`.
 export const HARVEST_PROGRESS_CHANNEL = 'harvest:progress'
 
-export interface ExportResult {
+export interface BackupResult {
   dir: string
+  books: number
+  notes: number
+  covers: number
   files: number
 }
 
-export interface ImportResult {
+export interface RestoreResult {
   books: number
   notes: number
+  covers: number
+  // The copy taken of the library that was replaced, if there was one.
+  replaced: string | null
 }
 
 export interface DismissedBook {
@@ -218,8 +227,9 @@ export interface InterleafApi {
   dismissRecommendation(olid: string): Promise<void>
   saveRecommendation(olid: string): Promise<Book>
 
-  exportVault(): Promise<ExportResult | null>
-  importVault(): Promise<ImportResult | null>
+  exportBackup(): Promise<BackupResult | null>
+  // Replaces the whole library, so the app relaunches onto the restored file.
+  restoreBackup(): Promise<RestoreResult | null>
 
   listDismissed(): Promise<DismissedBook[]>
   restoreDismissed(olid: string): Promise<void>
@@ -262,8 +272,8 @@ export const IPC_CHANNELS = [
   'getRecommendationTree',
   'dismissRecommendation',
   'saveRecommendation',
-  'exportVault',
-  'importVault',
+  'exportBackup',
+  'restoreBackup',
   'listDismissed',
   'restoreDismissed',
   'dataCounts',

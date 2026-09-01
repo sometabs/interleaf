@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
 
 import { downloadCover } from './openlibrary'
@@ -10,6 +10,22 @@ export function coversDir(): string {
   const dir = join(app.getPath('userData'), 'covers')
   mkdirSync(dir, { recursive: true })
   return dir
+}
+
+// `cover-*` files are Open Library thumbnails for books nobody owns, which
+// Discover refetches on demand. Only a shelf jacket can be orphaned.
+export function pruneOrphanCovers(dir: string, keep: ReadonlySet<string>): number {
+  let removed = 0
+  for (const name of readdirSync(dir)) {
+    if (!name.startsWith('book-') || keep.has(name)) continue
+    try {
+      rmSync(join(dir, name), { force: true })
+      removed++
+    } catch {
+      // A locked file is not worth failing a launch over.
+    }
+  }
+  return removed
 }
 
 // The name arrives from the renderer, so anything escaping the cache directory

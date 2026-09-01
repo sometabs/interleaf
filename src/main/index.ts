@@ -5,10 +5,11 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 import icon from '../../resources/icon.png?asset'
 import { initDb, closeDb } from './db/connection'
+import { referencedCovers } from './services/backup'
 import { resolveUserDataDir } from './db/userdata'
 import { registerIpcHandlers } from './ipc/handlers'
 import { isAppUrl, isExternalLink } from './navigation'
-import { coverForId, resolveCoverPath } from './services/covers'
+import { coverForId, coversDir, pruneOrphanCovers, resolveCoverPath } from './services/covers'
 
 // Must run before anything touches disk.
 app.setPath('userData', resolveUserDataDir(app.getPath('appData')))
@@ -100,7 +101,8 @@ app.whenReady().then(() => {
   })
 
   // Open before the renderer exists to ask it anything.
-  initDb()
+  const db = initDb()
+  pruneOrphanCovers(coversDir(), referencedCovers(db))
   registerCoverProtocol()
   registerIpcHandlers()
 

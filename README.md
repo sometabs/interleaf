@@ -82,8 +82,13 @@ they show the passage rather than a title you'd have to invent.
 similar books, and ranks them against your taste. Every suggestion tells you which of your books it
 resembles. Nothing is uploaded, and no profile is built about you anywhere.
 
-**Your data, in plain text.** Export writes a folder of Markdown files you can read in any editor,
-back up, or keep in Git. Import reads them back.
+**Backups.** One button writes your whole library to a folder you choose: the database, the covers,
+and a Markdown copy of everything you have written. Another button reads it back, replacing what you
+have. Nothing is lost in either direction.
+
+**Your data, in plain text.** The Markdown in that folder is yours to read in any editor or keep in
+Git: each book with its status and rating, its review, its notes and its quotes, each dated. It is
+written for reading rather than for restoring, which the database beside it does.
 
 ## Getting around
 
@@ -115,7 +120,7 @@ asks for one request per second, and Interleaf respects it.
 
 ## Development
 
-778 tests across 52 files, run in two environments. The database, the Open Library client and the
+774 tests across 52 files, run in two environments. The database, the Open Library client and the
 recommender are tested in plain Node. The React components are mounted in jsdom, a simulated
 browser, so those tests click real buttons and type into real editors.
 

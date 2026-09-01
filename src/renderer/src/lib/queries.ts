@@ -17,10 +17,10 @@ import type {
   BookSubjects,
   DataCounts,
   DismissedBook,
-  ExportResult,
+  BackupResult,
   HarvestProgress,
   HarvestResult,
-  ImportResult,
+  RestoreResult,
   NewBook,
   NewNote,
   Note,
@@ -341,17 +341,11 @@ export function useDeleteEverything(): UseMutationResult<void, Error, void> {
   })
 }
 
-export function useExportVault(): UseMutationResult<ExportResult | null, Error, void> {
-  return useMutation({ mutationFn: () => api().exportVault() })
+export function useExportBackup(): UseMutationResult<BackupResult | null, Error, void> {
+  return useMutation({ mutationFn: () => api().exportBackup() })
 }
 
-export function useImportVault(): UseMutationResult<ImportResult | null, Error, void> {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: () => api().importVault(),
-    onSuccess: () => {
-      invalidateBooks(client)
-      invalidateNotes(client)
-    }
-  })
+// No cache invalidation: a successful restore relaunches the app.
+export function useRestoreBackup(): UseMutationResult<RestoreResult | null, Error, void> {
+  return useMutation({ mutationFn: () => api().restoreBackup() })
 }

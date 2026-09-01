@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -196,5 +196,38 @@ describe('cover id validation', () => {
 
     expect(() => importCoverFile(ESCAPES as unknown as number, source)).toThrow(CoverError)
     expect(existsSync(join(dir, 'escaped.jpg'))).toBe(false)
+  })
+})
+
+describe('sweeping the cover cache', () => {
+  function seedCache(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'interleaf-prune-'))
+    writeFileSync(join(dir, 'book-1-99.jpg'), 'IN USE')
+    writeFileSync(join(dir, 'book-404-7.jpg'), 'ORPHANED')
+    writeFileSync(join(dir, 'cover-12345.jpg'), 'A BOOK NOBODY OWNS')
+    return dir
+  }
+
+  it('removes a jacket whose book is gone', async () => {
+    const { pruneOrphanCovers } = await load()
+    const dir = seedCache()
+    try {
+      expect(pruneOrphanCovers(dir, new Set(['book-1-99.jpg']))).toBe(1)
+      expect(existsSync(join(dir, 'book-404-7.jpg'))).toBe(false)
+      expect(existsSync(join(dir, 'book-1-99.jpg'))).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the Discover thumbnails, which belong to no book by design', async () => {
+    const { pruneOrphanCovers } = await load()
+    const dir = seedCache()
+    try {
+      pruneOrphanCovers(dir, new Set())
+      expect(existsSync(join(dir, 'cover-12345.jpg'))).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
