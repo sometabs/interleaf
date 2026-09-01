@@ -29,7 +29,7 @@ A book page: the review at the top, quotes and notes below, all edited in place.
 ## Install
 
 There are no prebuilt downloads, you build it yourself. You'll need
-[Node 20 or newer](https://nodejs.org) and Git.
+[Node 22.12 or newer](https://nodejs.org) and Git.
 
 ```bash
 git clone https://github.com/sometabs/interleaf.git

@@ -22,7 +22,7 @@
     "sqlite"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "format": "prettier --write .",
