@@ -1,5 +1,7 @@
 # Interleaf
 
+[![CI](https://github.com/sometabs/interleaf/actions/workflows/ci.yml/badge.svg)](https://github.com/sometabs/interleaf/actions/workflows/ci.yml)
+
 A desktop reading journal. Keep a shelf of the books you've read, rate them, write what you thought,
 collect the passages worth keeping, and get recommendations for what to read next.
 
