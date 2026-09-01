@@ -9,6 +9,9 @@ import * as notes from '../repos/notes'
 // The readable half of a backup, kept apart from the database a restore reads.
 const MARKDOWN_DIR = 'markdown'
 
+// Named for the reason they sit apart: these belong to no book.
+const LOOSE_DIR = 'unlinked-notes'
+
 export function slugify(text: string, fallback = 'untitled'): string {
   const slug = text
     .normalize('NFKD')
@@ -120,7 +123,7 @@ function copyCover(name: string, fromDir: string, toDir: string): void {
 // alongside the database in a backup. Returns the number of files written.
 export function writeVault(db: Database, dir: string, coversDir?: string): number {
   const booksDir = join(dir, MARKDOWN_DIR, 'books')
-  const notesDir = join(dir, MARKDOWN_DIR, 'notes')
+  const notesDir = join(dir, MARKDOWN_DIR, LOOSE_DIR)
   mkdirSync(booksDir, { recursive: true })
   mkdirSync(notesDir, { recursive: true })
 

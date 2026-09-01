@@ -57,7 +57,7 @@ describe('what a vault holds', () => {
 
     expect(writeVault(db, dir)).toBe(2)
     expect(readdirSync(join(dir, 'markdown', 'books'))).toEqual(['dune.md'])
-    expect(readdirSync(join(dir, 'markdown', 'notes'))).toEqual(['on-reading.md'])
+    expect(readdirSync(join(dir, 'markdown', 'unlinked-notes'))).toEqual(['on-reading.md'])
   })
 
   it('keeps the prose in its own folder, apart from the database', () => {
@@ -114,9 +114,9 @@ describe('what a vault holds', () => {
 
     writeVault(db, dir)
 
-    expect(readFileSync(join(dir, 'markdown', 'notes', 'on-reading.md'), 'utf8')).toContain(
-      'created: 2025-11-20'
-    )
+    expect(
+      readFileSync(join(dir, 'markdown', 'unlinked-notes', 'on-reading.md'), 'utf8')
+    ).toContain('created: 2025-11-20')
   })
 
   it('embeds the cover, so a Markdown reader shows the jacket', () => {

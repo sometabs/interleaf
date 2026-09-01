@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 
-import type { NewNote, Note, NotePatch } from '../../shared/api'
+import type { NewNote, Note, NoteKind, NotePatch } from '../../shared/api'
 import { asNoteTag } from '../../shared/noteTags'
 import { toPlainText } from '../../shared/plaintext'
 import { deriveTitle } from '../lib/markdown'
@@ -53,8 +53,16 @@ export function getNote(db: Database, id: number): Note | null {
   return row ? toNote(row) : null
 }
 
+// A quote is a passage from a book, so it cannot exist without one. Notes can.
+function assertQuoteHasBook(kind: NoteKind | undefined, bookId: number | null): void {
+  if (kind === 'highlight' && bookId === null) {
+    throw new Error('A quote has to belong to a book.')
+  }
+}
+
 export function createNote(db: Database, input: NewNote): Note {
   const run = db.transaction((data: NewNote): number => {
+    assertQuoteHasBook(data.kind, data.bookId ?? null)
     const bodyMd = data.bodyMd ?? ''
     const title = data.title?.trim() || deriveTitle(bodyMd)
 

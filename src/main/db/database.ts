@@ -14,6 +14,7 @@ import editions010 from './migrations/010_candidate_editions.sql?raw'
 import dropPreferences011 from './migrations/011_drop_preferences.sql?raw'
 import appSettings012 from './migrations/012_app_settings.sql?raw'
 import dropAppSettings013 from './migrations/013_drop_app_settings.sql?raw'
+import quotesNeedABook014 from './migrations/014_quotes_need_a_book.sql?raw'
 
 // Append only: the index is the version number, so editing a shipped entry
 // breaks every database that has already run it.
@@ -30,7 +31,8 @@ export const MIGRATIONS: string[] = [
   editions010,
   dropPreferences011,
   appSettings012,
-  dropAppSettings013
+  dropAppSettings013,
+  quotesNeedABook014
 ]
 
 /** SQLite has no regex, so migrations that clean up text need this. */

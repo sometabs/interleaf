@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import BookDetail from '../src/renderer/src/components/BookDetail'
 import Notes from '../src/renderer/src/components/Notes'
 import Quotes from '../src/renderer/src/components/Quotes'
+import Toasts from '../src/renderer/src/components/Toasts'
 import Sidebar from '../src/renderer/src/components/Sidebar'
 import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 
@@ -38,15 +39,93 @@ describe('the Quotes screen', () => {
     expect(row.textContent).toContain('There was a wall')
   })
 
-  it('keeps a new quote as a highlight, not a note', async () => {
-    const state = installBridge({ notes: [QUOTE] })
+  it('keeps nothing until a book is chosen', async () => {
+    const state = installBridge({
+      books: [makeBook({ id: 7, title: 'The Dispossessed' })],
+      notes: [QUOTE]
+    })
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'New quote' }))
 
+    expect(await screen.findByLabelText('Book this quote is from')).toBeTruthy()
+    expect(state.created).toHaveLength(0)
+  })
+
+  it('stores it the moment a book is picked', async () => {
+    const state = installBridge({
+      books: [makeBook({ id: 7, title: 'The Dispossessed' })],
+      notes: [QUOTE]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'New quote' }))
+    await user.selectOptions(await screen.findByLabelText('Book this quote is from'), '7')
+
+    await waitFor(() => expect(state.created).toHaveLength(1))
+    expect(state.created[0]).toMatchObject({ kind: 'highlight', bookId: 7 })
+  })
+
+  it('warns rather than asking, when Done cannot finish the quote', async () => {
+    installBridge({ books: [makeBook({ id: 7, title: 'The Dispossessed' })], notes: [QUOTE] })
+    renderApp(
+      <>
+        <Quotes />
+        <Toasts />
+      </>,
+      { kind: 'quotes' }
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'New quote' }))
+    await user.click(screen.getByTestId('quote-done'))
+
+    expect(await screen.findByText(/No book has been selected/)).toBeTruthy()
+    // Still there to finish, rather than thrown away or hidden behind a dialog.
+    expect(screen.getByLabelText('Book this quote is from')).toBeTruthy()
+  })
+
+  it('offers a prompt rather than a way to have no book', async () => {
+    installBridge({ books: [makeBook({ id: 7, title: 'The Dispossessed' })], notes: [QUOTE] })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'New quote' }))
+
+    const picker = await screen.findByLabelText('Book this quote is from')
+    const options = Array.from(picker.querySelectorAll('option'))
+    expect(options.map((o) => o.textContent)).not.toContain('No book')
+    // The prompt cannot be chosen, so there is no way to store one without a book.
+    expect(options[0].hasAttribute('disabled')).toBe(true)
+  })
+
+  it('keeps a new quote as a highlight, not a note', async () => {
+    const state = installBridge({
+      books: [makeBook({ id: 7, title: 'The Dispossessed' })],
+      notes: [QUOTE]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.selectOptions(await screen.findByLabelText('Filter by book'), '7')
+    await user.click(screen.getByRole('button', { name: 'New quote' }))
+
     await waitFor(() => expect(state.created).toHaveLength(1))
     expect(state.created[0]).toMatchObject({ kind: 'highlight' })
+  })
+
+  it('offers no way to detach a quote from its book', async () => {
+    installBridge({ books: [makeBook({ id: 7, title: 'The Dispossessed' })], notes: [QUOTE] })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByTestId('quote-body'))
+
+    const picker = await screen.findByLabelText('Book this quote is from')
+    const options = Array.from(picker.querySelectorAll('option')).map((o) => o.textContent)
+    expect(options).not.toContain('No book')
   })
 
   // The book filter is the only thing on screen naming a book, so a quote

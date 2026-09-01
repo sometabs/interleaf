@@ -74,7 +74,8 @@ of five.
 particular. Each can carry a label, and long ones open as a full page.
 
 **Quotes.** What the book said. They get their own section on each book and their own screen, and
-they show the passage rather than a title you'd have to invent.
+they show the passage rather than a title you'd have to invent. Every quote belongs to a book; a
+thought that belongs to no single book is a note.
 
 **Search.** One box finds any word in any book, review, note or quote, instantly.
 
@@ -120,7 +121,7 @@ asks for one request per second, and Interleaf respects it.
 
 ## Development
 
-774 tests across 52 files, run in two environments. The database, the Open Library client and the
+782 tests across 53 files, run in two environments. The database, the Open Library client and the
 recommender are tested in plain Node. The React components are mounted in jsdom, a simulated
 browser, so those tests click real buttons and type into real editors.
 

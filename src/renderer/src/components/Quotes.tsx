@@ -3,13 +3,11 @@ import { toPlainText } from '@shared/plaintext'
 import { useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
+import { notify } from '../lib/feedback'
 import { useBooks, useCreateNote, useDeleteNote, useNotes, useUpdateNote } from '../lib/queries'
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
 import Empty from './Empty'
 import QuoteCard from './QuoteCard'
-
-/** The filter value standing for "has none of these" rather than "any". */
-const NONE = 'none'
 
 // Still stored as a note of kind `highlight`; only the presentation differs.
 export default function Quotes(): ReactNode {
@@ -23,6 +21,9 @@ export default function Quotes(): ReactNode {
   const [filter, setFilter] = useState('')
   const [bookFilter, setBookFilter] = useState('')
   const [openId, setOpenId] = useState<number | null>(null)
+  // A quote with no book cannot be stored, so one starts here and is written
+  // the moment a book is picked.
+  const [draft, setDraft] = useState<string | null>(null)
 
   const quotes = notes.filter(isQuote)
 
@@ -34,12 +35,7 @@ export default function Quotes(): ReactNode {
   const query = filter.trim().toLowerCase()
 
   const matching = quotes.filter((quote) => {
-    if (
-      bookFilter === NONE
-        ? quote.bookId !== null
-        : bookFilter && quote.bookId !== Number(bookFilter)
-    )
-      return false
+    if (bookFilter && quote.bookId !== Number(bookFilter)) return false
     if (!query) return true
 
     return [toPlainText(quote.bodyMd), bookTitle(quote) ?? '']
@@ -54,13 +50,50 @@ export default function Quotes(): ReactNode {
     // Reuse the one that is open and still blank rather than stacking up empties.
     const open = quotes.find((quote) => quote.id === openId)
     if (open && open.bodyMd.trim() === '') return
+    if (draft !== null) return
 
+    // The filter names a book, so there is nothing left to ask.
+    if (bookFilter) {
+      createNote.mutate(
+        { kind: QUOTE_KIND, bookId: Number(bookFilter) },
+        { onSuccess: (quote) => setOpenId(quote.id) }
+      )
+      return
+    }
+
+    setOpenId(null)
+    setDraft('')
+  }
+
+  function keepDraft(bookId: number): void {
     createNote.mutate(
-      // A quote typed here starts on whichever book the list is narrowed to,
-      // the only thing on screen saying which book is meant.
-      { kind: QUOTE_KIND, bookId: bookFilter && bookFilter !== NONE ? Number(bookFilter) : null },
-      { onSuccess: (quote) => setOpenId(quote.id) }
+      { kind: QUOTE_KIND, bookId, bodyMd: draft ?? '' },
+      {
+        onSuccess: (quote) => {
+          setDraft(null)
+          setOpenId(quote.id)
+        }
+      }
     )
+  }
+
+  // Done cannot finish what was never stored, so it says why. Deleting is a
+  // deliberate throw-away and asks, like deleting a stored quote does.
+  function finishDraft(): void {
+    notify('No book has been selected.')
+  }
+
+  async function discardDraft(): Promise<void> {
+    if ((draft ?? '').trim()) {
+      const ok = await confirm({
+        title: 'Discard this quote?',
+        body: 'No book has been selected.',
+        confirmLabel: 'Discard',
+        destructive: true
+      })
+      if (!ok) return
+    }
+    setDraft(null)
   }
 
   function toggle(quote: Note): void {
@@ -128,7 +161,6 @@ export default function Quotes(): ReactNode {
               onChange={(event) => setBookFilter(event.target.value)}
             >
               <option value="">All books</option>
-              <option value={NONE}>No book</option>
               {books.map((book) => (
                 <option key={book.id} value={book.id}>
                   {book.title}
@@ -151,7 +183,46 @@ export default function Quotes(): ReactNode {
           </div>
         )}
 
-        {quotes.length === 0 ? (
+        {draft !== null && (
+          <div className="mb-2">
+            <QuoteCard
+              quote={{
+                id: -1,
+                bookId: null,
+                kind: QUOTE_KIND,
+                title: '',
+                bodyMd: draft,
+                tag: null,
+                createdAt: 0,
+                updatedAt: 0
+              }}
+              open
+              onToggle={finishDraft}
+              onSave={(text) => setDraft(text)}
+              onDelete={() => void discardDraft()}
+              source={
+                <select
+                  aria-label="Book this quote is from"
+                  value=""
+                  onChange={(event) => keepDraft(Number(event.target.value))}
+                  className="h-7 w-full max-w-56 truncate rounded-control border-none bg-transparent px-1.5 text-[13px] text-ink-muted hover:bg-hover focus:outline-none"
+                >
+                  {/* A prompt, not a choice: picking it is what stores the quote. */}
+                  <option value="" disabled>
+                    Choose a book…
+                  </option>
+                  {books.map((book) => (
+                    <option key={book.id} value={book.id}>
+                      {book.title}
+                    </option>
+                  ))}
+                </select>
+              }
+            />
+          </div>
+        )}
+
+        {quotes.length === 0 && draft === null ? (
           <Empty
             title="No quotes yet"
             action={
@@ -182,12 +253,11 @@ export default function Quotes(): ReactNode {
                       onChange={(event) =>
                         updateNote.mutate({
                           id: quote.id,
-                          patch: { bookId: event.target.value ? Number(event.target.value) : null }
+                          patch: { bookId: Number(event.target.value) }
                         })
                       }
                       className="h-7 w-full max-w-56 truncate rounded-control border-none bg-transparent px-1.5 text-[13px] text-ink-muted hover:bg-hover focus:outline-none"
                     >
-                      <option value="">No book</option>
                       {books.map((book) => (
                         <option key={book.id} value={book.id}>
                           {book.title}
