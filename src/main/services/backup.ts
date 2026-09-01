@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs'
-import { join } from 'path'
+import { basename, dirname, join } from 'path'
 
 import { MIGRATIONS } from '../db/database'
 import { writeVault } from './vault'
@@ -145,6 +145,22 @@ function assertRestorable(file: string): { books: number; notes: number } {
   }
 }
 
+function dropOlderCopies(dbPath: string, keep: string): void {
+  const dir = dirname(dbPath)
+  const prefix = `${basename(dbPath)}.`
+
+  for (const name of readdirSync(dir)) {
+    if (!name.startsWith(prefix) || !name.endsWith('.bak')) continue
+    const full = join(dir, name)
+    if (full === keep) continue
+    try {
+      rmSync(full, { force: true })
+    } catch {
+      // A locked copy is not worth failing a finished restore over.
+    }
+  }
+}
+
 // The caller closes the live connection first: the file is replaced, not edited.
 export function restoreBackup(
   sourceDir: string,
@@ -164,6 +180,9 @@ export function restoreBackup(
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     replaced = `${dbPath}.${stamp}.bak`
     copyFileSync(dbPath, replaced)
+    // Only the newest is an undo. Older ones are copies of libraries that were
+    // themselves already replaced, and they never stop accumulating.
+    dropOlderCopies(dbPath, replaced)
   }
 
   // The sidecars belong to the database being replaced: left behind, SQLite

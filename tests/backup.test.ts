@@ -1,5 +1,13 @@
 import Database from 'better-sqlite3'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -187,6 +195,35 @@ describe('restoring a backup', () => {
 
     expect(result.replaced).not.toBeNull()
     expect(existsSync(result.replaced as string)).toBe(true)
+  })
+
+  it('keeps only the newest copy, not one per restore', () => {
+    const db = seed()
+    const { dir } = exportBackup(db, parent)
+    db.close()
+
+    const first = restoreBackup(dir, live)
+    const second = restoreBackup(dir, live)
+
+    expect(existsSync(second.replaced as string)).toBe(true)
+    expect(existsSync(first.replaced as string)).toBe(false)
+
+    const copies = readdirSync(join(parent, 'library')).filter((n) => n.endsWith('.bak'))
+    expect(copies).toHaveLength(1)
+  })
+
+  it('touches nothing but its own copies', () => {
+    const db = seed()
+    const { dir } = exportBackup(db, parent)
+    db.close()
+
+    // Whatever else lives in the app folder is not ours to delete.
+    const stranger = join(parent, 'library', 'something-else.bak')
+    writeFileSync(stranger, 'NOT OURS')
+
+    restoreBackup(dir, live)
+
+    expect(existsSync(stranger)).toBe(true)
   })
 
   it('refuses a folder with no library in it', () => {
