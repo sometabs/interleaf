@@ -182,7 +182,7 @@ function Segmented<T extends string | null>({
     <div
       role="radiogroup"
       aria-label={label}
-      className="flex w-fit rounded-[8px] border border-hairline-strong bg-surface p-0.5"
+      className="flex w-fit rounded-control border border-hairline-strong bg-surface p-0.5"
     >
       {options.map((option) => {
         const active = option.value === value
@@ -193,7 +193,7 @@ function Segmented<T extends string | null>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`rounded-[6px] px-3 py-1 text-[13px] font-medium transition-colors ${
+            className={`rounded-[2px] px-3 py-1 text-[13px] font-medium transition-colors ${
               active ? 'bg-sunken text-ink' : 'text-ink-muted hover:text-ink'
             }`}
           >
@@ -219,7 +219,7 @@ function GenreChip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
+      className={`rounded-control border px-2.5 py-1 text-[12px] transition-colors ${
         active
           ? 'border-transparent bg-accent font-medium text-white'
           : 'border-hairline-strong bg-surface text-ink-muted hover:text-ink'

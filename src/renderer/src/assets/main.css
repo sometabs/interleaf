@@ -15,16 +15,16 @@
   --color-ink-muted: #61626b;
   --color-ink-faint: #9496a0;
 
-  --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
-  --color-accent-soft: #eef4ff;
+  --color-accent: #2f65da;
+  --color-accent-hover: #2153bf;
+  --color-accent-soft: #eaf1fd;
 
-  --color-danger: #dc2626;
-  --color-danger-soft: #fef2f2;
+  --color-danger: #d7332d;
+  --color-danger-soft: #fdeeed;
   --color-star: #f59e0b;
 
-  --radius-card: 12px;
-  --radius-control: 8px;
+  --radius-card: 3px;
+  --radius-control: 3px;
 
   --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
   --shadow-raised: 0 2px 4px rgb(16 24 40 / 0.04), 0 4px 12px rgb(16 24 40 / 0.08);
@@ -102,7 +102,7 @@
   ::-webkit-scrollbar-thumb {
     background: var(--color-hairline-strong);
     border: 3px solid transparent;
-    border-radius: 8px;
+    border-radius: 3px;
     background-clip: content-box;
   }
 
@@ -179,7 +179,7 @@
   }
 
   .btn-destructive:hover:not(:disabled) {
-    background: #b91c1c;
+    background: #b82823;
   }
 
   .btn-outline {
@@ -254,7 +254,7 @@
     align-items: center;
     gap: 4px;
     padding: 2px 9px;
-    border-radius: 999px;
+    border-radius: var(--radius-control);
     background: var(--color-sunken);
     color: var(--color-ink-muted);
     font-size: 12px;
@@ -334,7 +334,7 @@
     font-family: var(--font-mono);
     font-size: 0.92em;
     background: var(--color-sunken);
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     padding: 0.1em 0.3em;
   }
 

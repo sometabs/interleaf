@@ -30,13 +30,12 @@ export default function Cover({
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const failed = src !== null && failedSrc === src
 
-  const rounding = size === 'sm' ? 'rounded-[5px]' : 'rounded-lg'
   const shadow = size === 'lg' ? 'shadow-raised' : 'shadow-card'
 
   return (
     <div
       data-testid="cover"
-      className={`relative aspect-[2/3] w-full overflow-hidden bg-sunken ${rounding} ${shadow}`}
+      className={`relative aspect-[2/3] w-full overflow-hidden rounded-control bg-sunken ${shadow}`}
       style={{ containerType: 'inline-size' }}
     >
       {src && !failed ? (
@@ -49,12 +48,8 @@ export default function Cover({
           onError={() => setFailedSrc(src)}
         />
       ) : (
-        /*
-          A placeholder rather than a poster: the title and the author on the
-          flat surface colour, which is all there is to say until a real cover
-          arrives. Initials over a gradient were the busiest thing in the grid
-          and told nobody anything: "TD" is not a book.
-        */
+        /* The title and the author, which is all there is to say until a real
+           cover arrives. */
         <div
           aria-hidden="true"
           className="flex h-full w-full flex-col justify-center gap-[3%] border border-hairline bg-surface p-[10%]"

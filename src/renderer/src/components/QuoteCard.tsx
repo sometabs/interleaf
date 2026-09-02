@@ -36,12 +36,8 @@ export default function QuoteCard({
           onClick={onToggle}
           className="flex w-full flex-col gap-2 px-5 py-4 text-left hover:bg-hover"
         >
-          {/* `wrap-anywhere` and `min-w-0`, both needed and for different
-              reasons: a passage pasted without spaces is one unbreakable word,
-              which neither wraps nor lets its flex parent shrink, so it runs
-              out of the card and off the screen. Clamped as well, because a
-              quote can be a page long and a list of them is meant to be
-              skimmed: the whole passage is one click away. */}
+          {/* `wrap-anywhere` and `min-w-0` both needed: a passage pasted without
+              spaces is one word that neither wraps nor lets its parent shrink. */}
           <span
             className={`line-clamp-6 min-w-0 wrap-anywhere border-l-2 border-hairline-strong pl-4 text-[15px] leading-relaxed ${
               text ? 'text-ink' : 'italic text-ink-faint'

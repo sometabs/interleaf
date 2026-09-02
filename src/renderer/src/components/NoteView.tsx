@@ -45,9 +45,7 @@ export default function NoteView({ noteId }: Props): ReactNode {
           ← Back
         </button>
 
-        {/* Which book this note is about. A note written from inside a book
-            arrives already tied to it; this is how a free-floating one gets
-            tied, moved, or set loose again. */}
+        {/* How a note written outside a book gets tied to one, or moved. */}
         <select
           aria-label="Book this note is about"
           title="Book this note is about"

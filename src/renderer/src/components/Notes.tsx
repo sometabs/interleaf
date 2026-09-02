@@ -184,11 +184,8 @@ export default function Notes(): ReactNode {
                     <span className="uppercase tracking-wide">review</span>
                   )}
                   {bookTitle(note) && <span className="truncate">{bookTitle(note)}</span>}
-                  {/* Pushed to the end of its own line, so it lands under the
-                      date and the two make one right-hand column down the list.
-                      `ml-auto` rather than `justify-between`: the row is empty
-                      for an untagged note with no book, and a lone tag still
-                      belongs on the right. */}
+                  {/* `ml-auto` rather than `justify-between`: the row is empty for an
+                      untagged note with no book. */}
                   {note.tag && (
                     <span className="chip ml-auto shrink-0 text-[10px] tracking-wide">
                       {note.tag}

@@ -163,9 +163,8 @@ const api: InterleafApi = {
       throw err
     }
 
-    // Every screen still holds rows from the library that was just replaced, so
-    // the app comes back rather than refreshing. Not in this tick: the reply is
-    // still on its way out, and the caller's promise would never settle.
+    // Not in this tick: the reply is still on its way out, and the caller's
+    // promise would never settle.
     setTimeout(() => {
       app.relaunch()
       // `quit` runs a teardown a window handler can cancel or delay, which lets

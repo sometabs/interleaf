@@ -220,9 +220,8 @@ function NotForMe(): ReactNode {
               className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-2.5"
             >
               <div className="min-w-0">
-                {/* A refusal recorded before the name was kept alongside it has
-                    only its identifier left; showing that is more honest than
-                    showing nothing, since it is still excluding a book. */}
+                {/* A refusal recorded before the name was kept has only its identifier
+                    left, and it is still excluding a book. */}
                 <p className="truncate text-[14px]">
                   {book.title ?? <span className="text-ink-faint">Unnamed ({book.olid})</span>}
                 </p>

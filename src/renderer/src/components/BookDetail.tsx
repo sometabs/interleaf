@@ -179,11 +179,7 @@ export default function BookDetail({ book }: Props): ReactNode {
           ← Library
         </button>
 
-        {/*
-          The book on the left, what was written about it on the right. Stacked,
-          the cover and review push the notes below the fold. The left column is
-          sticky so the book stays in view while writing.
-        */}
+        {/* The left column is sticky, so the book stays in view while writing about it. */}
         <div className="grid items-start gap-x-10 gap-y-8 lg:grid-cols-[248px_1fr]">
           <aside className="lg:sticky lg:top-0 lg:self-start">
             <div className="max-w-[188px] max-lg:mx-auto">
@@ -202,11 +198,8 @@ export default function BookDetail({ book }: Props): ReactNode {
               />
             </h1>
 
-            {/*
-              Shown even when empty, since a field that hides when empty can
-              never be filled, and Open Library cannot always supply an author.
-              An empty string clears the field rather than storing "".
-            */}
+            {/* Shown even when empty: a field that hides when empty can never be
+                filled. */}
             <p className="mt-1 flex text-[14px] text-ink-muted">
               <EditableTitle
                 value={book.author ?? ''}
@@ -240,11 +233,8 @@ export default function BookDetail({ book }: Props): ReactNode {
               />
             </div>
 
-            {/*
-              Typed in, never guessed: most books added to a journal were read
-              some time ago, so a date from the clock is usually wrong and looks
-              exactly like one that was checked.
-            */}
+            {/* Never taken from the clock: most books added to a journal were read some
+                time ago. */}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
               {(
                 [
@@ -301,11 +291,8 @@ export default function BookDetail({ book }: Props): ReactNode {
               />
             </div>
 
-            {/*
-              Open Library descriptions are publisher blurbs that routinely give
-              away the turn, and a journal is read after the book as often as
-              before, so the summary is stored for the recommender, not shown.
-            */}
+            {/* Publisher blurbs give away the turn, so the summary is kept for the
+                recommender and not shown. */}
             <GenrePicker
               chosen={book.genres}
               inferred={metadata ? inferred : null}

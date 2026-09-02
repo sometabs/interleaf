@@ -228,9 +228,7 @@ export default function RecommendationTree({
         </div>
       </div>
 
-      {/* The tree owns its own viewport, capped so a deep one never pushes the
-          page around. `max-h` with `overflow-auto` means a small tree still
-          takes only the room it needs. */}
+      {/* Capped, so a deep tree never pushes the page around. */}
       <div
         ref={scrollerRef}
         data-testid="tree-canvas"
@@ -244,12 +242,8 @@ export default function RecommendationTree({
           dragging ? 'cursor-grabbing select-none' : 'cursor-grab'
         }`}
       >
-        {/* `transform: scale()`, not CSS `zoom`. Zoom re-runs layout at every
-            step and each element rounds separately, so the tree changes shape
-            slightly on every notch, by up to 8px of drift at 1.6×.
-            A transform is pure geometry: exact at any scale, and composited.
-            The cost is that it does not affect layout, so this sizer holds the
-            scaled footprint open and keeps the scrollbars honest. */}
+        {/* A transform does not affect layout, so this sizer holds the scaled
+            footprint open and keeps the scrollbars honest. */}
         <div
           data-testid="tree-sizer"
           className="mx-auto transition-none"
@@ -258,13 +252,8 @@ export default function RecommendationTree({
             height: natural.height ? natural.height * zoom : undefined
           }}
         >
-          {/* `transition-none` is load-bearing, not decoration. Under
-              `prefers-reduced-motion` the stylesheet forces a 0.01ms transition
-              onto every property of every element, so changing the scale starts
-              an animation, and the layout effect that re-anchors the cursor
-              reads the position back before it has finished, corrects against a
-              stale number, and the tree jumps. Refusing the transition outright
-              makes the new scale readable in the same frame it is set. */}
+          {/* `transition-none` because `prefers-reduced-motion` forces a 0.01ms
+              transition on everything, and the re-anchor reads back mid-flight. */}
           <div
             ref={stageRef}
             data-testid="tree-stage"
@@ -279,11 +268,8 @@ export default function RecommendationTree({
           >
             {roots.map((root, index) => (
               <section key={root.olid} className="flex flex-col items-center">
-                {/* No "grown from" line here. A root is ranked against the
-                    whole taste profile, not descended from any one book, and
-                    naming its nearest neighbour said otherwise. `becauseOf`
-                    still explains a card in the grid, where "because you liked"
-                    is what it actually means. */}
+                {/* A root is ranked against the whole taste profile, so it is
+                    descended from no one book. */}
                 <header className="mb-4 text-center">
                   <p className="eyebrow">
                     {index === 0 ? 'Closest to your taste' : 'A separate thread'}
@@ -324,7 +310,7 @@ function ZoomButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex size-6 items-center justify-center rounded-[6px] text-ink-muted transition-colors hover:bg-surface hover:text-ink hover:shadow-card"
+      className="flex size-6 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-surface hover:text-ink hover:shadow-card"
     >
       <svg
         aria-hidden="true"
@@ -537,7 +523,7 @@ function IconButton({
       aria-label={label}
       title={tooltip}
       onClick={onClick}
-      className={`flex size-6 items-center justify-center rounded-[6px] text-ink-faint transition-colors ${className}`}
+      className={`flex size-6 items-center justify-center rounded-control text-ink-faint transition-colors ${className}`}
     >
       <svg
         aria-hidden="true"

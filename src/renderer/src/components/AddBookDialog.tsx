@@ -148,9 +148,7 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
               </p>
             )}
 
-            {/* Separate from the line above: a lookup that never happened is not
-                entitled to say "nothing found". It names Open Library, since a
-                fault stated without an owner reads as a fault in the app. */}
+            {/* A lookup that never happened is not entitled to say "nothing found". */}
             {isError && !isFetching && (
               <p className="px-4 py-6 text-center text-[13px] text-ink-muted">
                 Open Library is unreachable. Add the book by hand, and “Refresh metadata” on its

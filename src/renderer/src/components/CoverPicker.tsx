@@ -33,11 +33,8 @@ export default function CoverPicker({ book }: { book: Book }): ReactNode {
         </div>
       )}
 
-      {/*
-        `pointer-events-none` on the container with `auto` on the buttons: the
-        overlay spans the whole image and would otherwise swallow clicks meant
-        for the cover.
-      */}
+      {/* `pointer-events-none` on the container with `auto` on the buttons, or the
+          overlay swallows clicks meant for the cover. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center gap-1.5 p-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <button
           type="button"

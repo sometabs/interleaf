@@ -75,11 +75,8 @@ export default function Discover(): ReactNode {
       <header className="mb-6 flex items-start justify-between gap-4">
         <h1 className="text-[22px]">Discover</h1>
         <div className="flex shrink-0 items-center gap-2">
-          {/*
-            The one control left, and the reason it survived the others: it is a
-            way of looking rather than a statement of taste. You press it to see
-            the other side of the same shelf, and press it back.
-          */}
+          {/* A way of looking rather than a statement of taste: press it to see
+              the other side of the same shelf. */}
           <div
             role="radiogroup"
             aria-label="Authors"
@@ -92,7 +89,7 @@ export default function Discover(): ReactNode {
                 role="radio"
                 aria-checked={scope === option.value}
                 onClick={() => setScope(option.value)}
-                className={`rounded-[6px] px-2.5 py-1 text-[12px] transition-colors ${
+                className={`rounded-control px-2.5 py-1 text-[12px] transition-colors ${
                   scope === option.value
                     ? 'bg-surface font-medium text-ink shadow-card'
                     : 'text-ink-muted hover:text-ink'
@@ -114,7 +111,7 @@ export default function Discover(): ReactNode {
                 type="button"
                 aria-pressed={layout === option}
                 onClick={() => setLayout(option)}
-                className={`rounded-[6px] px-2.5 py-1 text-[12px] capitalize transition-colors ${
+                className={`rounded-control px-2.5 py-1 text-[12px] capitalize transition-colors ${
                   layout === option
                     ? 'bg-surface font-medium text-ink shadow-card'
                     : 'text-ink-muted hover:text-ink'
