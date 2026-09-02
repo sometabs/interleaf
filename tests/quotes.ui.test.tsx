@@ -194,11 +194,12 @@ describe('the Notes screen', () => {
   })
 
   // Only quotes leave, because they appear elsewhere; a review would be lost.
-  it('still lists reviews', async () => {
-    installBridge({ notes: [QUOTE, REVIEW] })
+  it('leaves reviews to their own screen', async () => {
+    installBridge({ notes: [QUOTE, REVIEW, THOUGHT] })
     renderApp(<Notes />, { kind: 'notes' })
 
-    expect(await screen.findByText('Review')).toBeTruthy()
+    expect(await screen.findByText('On walls')).toBeTruthy()
+    expect(screen.queryByText('Review')).toBeNull()
   })
 
   it('counts what it shows', async () => {
@@ -218,7 +219,7 @@ describe('the sidebar', () => {
     const notes = screen.getByRole('button', { name: /^Notes/ })
 
     await waitFor(() => expect(quotes.textContent).toBe('Quotes1'))
-    expect(notes.textContent).toBe('Notes2')
+    expect(notes.textContent).toBe('Notes1')
   })
 })
 

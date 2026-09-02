@@ -5,12 +5,29 @@ export type View =
   | { kind: 'book'; id: number }
   | { kind: 'note'; id: number }
   | { kind: 'notes' }
+  | { kind: 'reviews' }
+  | { kind: 'review'; id: number }
   | { kind: 'quotes' }
   | { kind: 'discover' }
   | { kind: 'data' }
 
+// Beside the union, so a new screen cannot be added without naming it.
+export const SCREEN_NAMES: Record<View['kind'], string> = {
+  library: 'Library',
+  book: 'Back',
+  note: 'Back',
+  notes: 'Notes',
+  reviews: 'Reviews',
+  review: 'Back',
+  quotes: 'Quotes',
+  discover: 'Discover',
+  data: 'Data'
+}
+
 interface Navigation {
   view: View
+  /** The screen `back` would return to, so a control can name it. */
+  previous: View | null
   navigate: (view: View) => void
   back: () => void
 }
@@ -36,7 +53,12 @@ export function ViewProvider({
   }, [])
 
   const value = useMemo<Navigation>(
-    () => ({ view: history[history.length - 1], navigate, back }),
+    () => ({
+      view: history[history.length - 1],
+      previous: history[history.length - 2] ?? null,
+      navigate,
+      back
+    }),
     [history, navigate, back]
   )
 

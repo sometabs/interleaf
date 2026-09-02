@@ -5,7 +5,6 @@ import { useState, type ReactNode } from 'react'
 
 import { relativeDate } from '../lib/dates'
 import { useBooks, useCreateNote, useNotes } from '../lib/queries'
-import { isNotQuote } from '../lib/quotes'
 import { useView } from '../lib/view'
 import Empty from './Empty'
 
@@ -17,9 +16,8 @@ export default function Notes(): ReactNode {
   const { data: all = [], isPending } = useNotes()
   const { data: books = [] } = useBooks()
 
-  // Quotes are notes too, but they have their own screen. Reviews stay, marked
-  // as such, because nowhere else lists them.
-  const notes = all.filter(isNotQuote)
+  // Reviews and quotes are notes too, and each has its own screen.
+  const notes = all.filter((note) => note.kind === 'thought')
   const createNote = useCreateNote()
   const [filter, setFilter] = useState('')
 
@@ -180,9 +178,6 @@ export default function Notes(): ReactNode {
                 </span>
 
                 <span className="flex items-center gap-2 text-[11px] text-ink-faint">
-                  {note.kind === 'review' && (
-                    <span className="uppercase tracking-wide">review</span>
-                  )}
                   {bookTitle(note) && <span className="truncate">{bookTitle(note)}</span>}
                   {/* `ml-auto` rather than `justify-between`: the row is empty for an
                       untagged note with no book. */}

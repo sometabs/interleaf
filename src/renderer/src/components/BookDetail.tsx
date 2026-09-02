@@ -19,7 +19,7 @@ import { toPlainText } from '@shared/plaintext'
 
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
 import { statusPatch } from '../lib/status'
-import { useView } from '../lib/view'
+import { SCREEN_NAMES, useView } from '../lib/view'
 import CoverPicker from './CoverPicker'
 import QuoteCard from './QuoteCard'
 import EditableNumber from './EditableNumber'
@@ -33,7 +33,7 @@ interface Props {
 }
 
 export default function BookDetail({ book }: Props): ReactNode {
-  const { navigate } = useView()
+  const { navigate, previous: cameFrom, back } = useView()
   const { data: notes = [], isPending } = useNotes(book.id)
   const { data: metadata } = useBookMetadata(book.id)
 
@@ -174,9 +174,9 @@ export default function BookDetail({ book }: Props): ReactNode {
         <button
           type="button"
           className="btn btn-ghost -ml-2 mb-4"
-          onClick={() => navigate({ kind: 'library' })}
+          onClick={() => (cameFrom ? back() : navigate({ kind: 'library' }))}
         >
-          ← Library
+          ← {cameFrom ? SCREEN_NAMES[cameFrom.kind] : 'Library'}
         </button>
 
         {/* The left column is sticky, so the book stays in view while writing about it. */}

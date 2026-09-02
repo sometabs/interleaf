@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { useBooks, useNotes } from '../lib/queries'
-import { isNotQuote, isQuote } from '../lib/quotes'
+import { isQuote } from '../lib/quotes'
 import { useView, type View } from '../lib/view'
 
 interface Props {
@@ -54,10 +54,21 @@ export default function Sidebar({ onAdd, onPalette }: Props): ReactNode {
       )
     },
     {
+      label: 'Reviews',
+      view: { kind: 'reviews' },
+      matches: ['reviews', 'review'],
+      count: notes?.filter((note) => note.kind === 'review').length,
+      icon: (
+        <Icon>
+          <path d="m12 4 2.3 4.8 5.2.7-3.8 3.7.9 5.3-4.6-2.5-4.6 2.5.9-5.3-3.8-3.7 5.2-.7z" />
+        </Icon>
+      )
+    },
+    {
       label: 'Notes',
       view: { kind: 'notes' },
       matches: ['notes', 'note'],
-      count: notes?.filter(isNotQuote).length,
+      count: notes?.filter((note) => note.kind === 'thought').length,
       icon: (
         <Icon>
           <path d="M5 3h9l5 5v13H5zM14 3v5h5M8.5 13h7M8.5 17h4" />
