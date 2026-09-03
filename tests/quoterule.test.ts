@@ -4,9 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { createDatabase, MIGRATIONS } from '../src/main/db/database'
+import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
 import * as notes from '../src/main/repos/notes'
+
+// The schema 014 was written against. Rewinding the version instead would
+// rerun every later migration too, and those are not repeatable.
+const BEFORE_THE_RULE = 13
 
 let dir: string
 
@@ -50,11 +54,10 @@ describe('quotes left over from before the rule', () => {
     const file = join(dir, 'interleaf.db')
 
     // Written by a build that still allowed it, then reopened by this one.
-    const before = createDatabase(file)
+    const before = createDatabase(file, BEFORE_THE_RULE)
     before
       .prepare("INSERT INTO note (book_id, kind, title, body_md) VALUES (NULL, 'highlight', ?, ?)")
       .run('Orphaned', 'A passage from nowhere')
-    before.pragma(`user_version = ${MIGRATIONS.length - 1}`)
     before.close()
 
     const after = createDatabase(file)
@@ -72,12 +75,11 @@ describe('quotes left over from before the rule', () => {
   it('leaves a quote that has a book alone', () => {
     const file = join(dir, 'interleaf.db')
 
-    const before = createDatabase(file)
+    const before = createDatabase(file, BEFORE_THE_RULE)
     const book = books.createBook(before, { title: 'Dune' })
     before
       .prepare("INSERT INTO note (book_id, kind, title, body_md) VALUES (?, 'highlight', ?, ?)")
       .run(book.id, 'Kept', 'The spice must flow')
-    before.pragma(`user_version = ${MIGRATIONS.length - 1}`)
     before.close()
 
     const after = createDatabase(file)

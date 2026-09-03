@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { importSummary } from '../lib/calibre'
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
 import {
@@ -9,18 +10,24 @@ import {
   useDeleteEverything,
   useDismissed,
   useExportBackup,
+  useImportCalibreHighlights,
+  useReadCalibreExport,
   useRestoreBackup,
   useRestoreDismissed
 } from '../lib/queries'
 import { formatDate } from '../lib/dates'
+import { useView } from '../lib/view'
 import Empty from './Empty'
 
 // Counts sit on every button so "Delete all books" reads as "delete these 47".
 // Backup is at the top because it is the only undo any of this has.
 export default function Data(): ReactNode {
+  const { navigate } = useView()
   const { data: counts } = useDataCounts()
   const exportBackup = useExportBackup()
   const restoreBackup = useRestoreBackup()
+  const readExport = useReadCalibreExport()
+  const runImport = useImportCalibreHighlights()
 
   const deleteBooks = useDeleteAllBooks()
   const deleteNotes = useDeleteAllNotes()
@@ -48,6 +55,29 @@ export default function Data(): ReactNode {
     if (!ok) return
     // Success never returns here: the app relaunches onto the restored file.
     await restoreBackup.mutateAsync()
+  }
+
+  // The matching screen is only worth showing when there is something to
+  // match: a file of books linked on an earlier import decides nothing.
+  async function onImportHighlights(): Promise<void> {
+    const plan = await readExport.mutateAsync()
+    if (!plan) return
+
+    if (plan.books.length === 0) {
+      notify('No highlights in that file')
+      return
+    }
+
+    if (plan.books.some((book) => book.bookId === null)) {
+      navigate({ kind: 'import', plan })
+      return
+    }
+
+    const links = plan.books.map((book) => ({
+      calibreId: book.calibreId,
+      bookId: book.bookId as number
+    }))
+    notify(importSummary(await runImport.mutateAsync({ filePath: plan.filePath, links })))
   }
 
   async function onDeleteBooks(): Promise<void> {
@@ -131,6 +161,45 @@ export default function Data(): ReactNode {
               {restoreBackup.isPending ? 'Restoring…' : 'Restore backup'}
             </button>
           </div>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h2 className="text-[14px] font-medium">Import</h2>
+
+          <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[14px]">Highlights from Calibre</p>
+              <p className="mt-0.5 text-[13px] text-ink-muted">
+                The file the Calibre viewer writes when you export your highlights
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline shrink-0"
+              onClick={onImportHighlights}
+              disabled={readExport.isPending || runImport.isPending}
+            >
+              {readExport.isPending || runImport.isPending ? 'Reading…' : 'Choose file'}
+            </button>
+          </div>
+
+          <details className="rounded-card border border-hairline bg-surface px-4 py-3">
+            <summary className="cursor-pointer text-[13px] text-ink-muted marker:text-ink-faint">
+              Where do I get that file?
+            </summary>
+
+            <div className="mt-3 flex flex-col gap-2 text-[13px] text-ink-muted">
+              <p>
+                <span className="text-ink">In Calibre:</span> View → Browse annotations → select the
+                annotations you want → Export all selected → choose the type “Calibre annotation
+                collection”.
+              </p>
+              <p>
+                <span className="text-ink">Here:</span> Choose file, then match each Calibre book to
+                a book in your library. It has to be the type "Calibre annotation collection".
+              </p>
+            </div>
+          </details>
         </section>
 
         <section className="flex flex-col gap-2">

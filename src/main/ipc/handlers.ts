@@ -10,6 +10,7 @@ import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
 import * as searchRepo from '../repos/search'
 import * as backup from '../services/backup'
+import * as calibre from '../services/calibre'
 import { harvestCandidates } from '../services/harvest'
 import { addFromOpenLibrary, enrich } from '../services/library'
 import { coversDir, importCoverFile } from '../services/covers'
@@ -181,6 +182,17 @@ const api: InterleafApi = {
     meta.undismiss(getDb(), olid)
   },
 
+  async readCalibreExport() {
+    const file = await pickFile('Choose a Calibre highlights export', 'Read this file', [
+      { name: 'Calibre annotations', extensions: ['calibre_annotation_collection', 'json'] }
+    ])
+    if (!file) return null
+    return calibre.planImport(getDb(), file)
+  },
+  async importCalibreHighlights(filePath, links) {
+    return calibre.runImport(getDb(), filePath, links)
+  },
+
   async dataCounts() {
     return data.dataCounts(getDb())
   },
@@ -193,6 +205,21 @@ const api: InterleafApi = {
   async deleteEverything() {
     data.deleteEverything(getDb())
   }
+}
+
+async function pickFile(
+  title: string,
+  buttonLabel: string,
+  filters: { name: string; extensions: string[] }[]
+): Promise<string | null> {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const options = { title, buttonLabel, filters, properties: ['openFile' as const] }
+
+  const result = window
+    ? await dialog.showOpenDialog(window, options)
+    : await dialog.showOpenDialog(options)
+
+  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
 }
 
 async function pickDirectory(title: string, buttonLabel: string): Promise<string | null> {

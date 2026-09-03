@@ -11,6 +11,9 @@ import { useEffect, useState } from 'react'
 
 import type {
   Book,
+  CalibreImportPlan,
+  CalibreImportResult,
+  CalibreLink,
   InterleafBridge,
   BookMetadata,
   BookPatch,
@@ -343,6 +346,27 @@ export function useDeleteEverything(): UseMutationResult<void, Error, void> {
 
 export function useExportBackup(): UseMutationResult<BackupResult | null, Error, void> {
   return useMutation({ mutationFn: () => api().exportBackup() })
+}
+
+// Reads the file and reports what it holds; nothing is written until the
+// links are confirmed.
+export function useReadCalibreExport(): UseMutationResult<CalibreImportPlan | null, Error, void> {
+  return useMutation({ mutationFn: () => api().readCalibreExport() })
+}
+
+export function useImportCalibreHighlights(): UseMutationResult<
+  CalibreImportResult,
+  Error,
+  { filePath: string; links: CalibreLink[] }
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ filePath, links }) => api().importCalibreHighlights(filePath, links),
+    onSuccess: () => {
+      invalidateNotes(client)
+      void client.invalidateQueries({ queryKey: keys.dataCounts })
+    }
+  })
 }
 
 // No cache invalidation: a successful restore relaunches the app.

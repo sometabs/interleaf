@@ -15,6 +15,7 @@ import dropPreferences011 from './migrations/011_drop_preferences.sql?raw'
 import appSettings012 from './migrations/012_app_settings.sql?raw'
 import dropAppSettings013 from './migrations/013_drop_app_settings.sql?raw'
 import quotesNeedABook014 from './migrations/014_quotes_need_a_book.sql?raw'
+import calibreImport015 from './migrations/015_calibre_import.sql?raw'
 
 // Append only: the index is the version number, so editing a shipped entry
 // breaks every database that has already run it.
@@ -32,7 +33,8 @@ export const MIGRATIONS: string[] = [
   dropPreferences011,
   appSettings012,
   dropAppSettings013,
-  quotesNeedABook014
+  quotesNeedABook014,
+  calibreImport015
 ]
 
 /** SQLite has no regex, so migrations that clean up text need this. */
@@ -42,8 +44,9 @@ function registerFunctions(db: Database.Database): void {
   )
 }
 
-/** Imports no Electron, so tests can open a `:memory:` database directly. */
-export function createDatabase(filePath: string): Database.Database {
+// Imports no Electron, so tests can open a `:memory:` database directly.
+// Stopping short of the newest version reproduces what an older build left.
+export function createDatabase(filePath: string, upTo = MIGRATIONS.length): Database.Database {
   const db = new Database(filePath)
 
   // WAL reads alongside a write and survives crashes better than the default
@@ -53,11 +56,11 @@ export function createDatabase(filePath: string): Database.Database {
   db.pragma('foreign_keys = ON')
 
   registerFunctions(db)
-  applyMigrations(db)
+  applyMigrations(db, upTo)
   return db
 }
 
-function applyMigrations(db: Database.Database): void {
+function applyMigrations(db: Database.Database, upTo: number): void {
   const current = db.pragma('user_version', { simple: true }) as number
 
   if (current > MIGRATIONS.length) {
@@ -67,7 +70,7 @@ function applyMigrations(db: Database.Database): void {
     )
   }
 
-  for (let version = current; version < MIGRATIONS.length; version++) {
+  for (let version = current; version < upTo; version++) {
     // exec() cannot run inside a prepared transaction, so bracket manually.
     db.exec('BEGIN')
     try {

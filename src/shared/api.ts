@@ -176,6 +176,36 @@ export interface RestoreResult {
   replaced: string | null
 }
 
+// ------------------------------------------------------- Calibre highlights
+
+// One Calibre book in an export. The export names no titles, so an unmatched
+// book is recognised by its passages.
+export interface CalibreBookPlan {
+  calibreId: number
+  // The library book this Calibre id was matched to on an earlier import.
+  bookId: number | null
+  newHighlights: number
+  knownHighlights: number
+  samples: string[]
+}
+
+export interface CalibreImportPlan {
+  filePath: string
+  books: CalibreBookPlan[]
+}
+
+export interface CalibreLink {
+  calibreId: number
+  bookId: number
+}
+
+export interface CalibreImportResult {
+  imported: number
+  skipped: number
+  // How many library books gained highlights.
+  books: number
+}
+
 export interface DismissedBook {
   olid: string
   // Null for a refusal recorded before the name was kept alongside it.
@@ -234,6 +264,11 @@ export interface InterleafApi {
   listDismissed(): Promise<DismissedBook[]>
   restoreDismissed(olid: string): Promise<void>
 
+  // Null when the file picker was cancelled. Reads the export, changes nothing.
+  readCalibreExport(): Promise<CalibreImportPlan | null>
+  // The links are remembered, so a later export of the same books needs none.
+  importCalibreHighlights(filePath: string, links: CalibreLink[]): Promise<CalibreImportResult>
+
   dataCounts(): Promise<DataCounts>
   // Notes not attached to a book survive.
   deleteAllBooks(): Promise<number>
@@ -276,6 +311,8 @@ export const IPC_CHANNELS = [
   'restoreBackup',
   'listDismissed',
   'restoreDismissed',
+  'readCalibreExport',
+  'importCalibreHighlights',
   'dataCounts',
   'deleteAllBooks',
   'deleteAllNotes',

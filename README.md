@@ -83,6 +83,11 @@ thought that belongs to no single book is a note.
 similar books, and ranks them against your taste. Every suggestion tells you which of your books it
 resembles. Nothing is uploaded, and no profile is built about you anywhere.
 
+**Highlights from Calibre.** Export your highlights from the Calibre viewer and read the file
+straight into Interleaf, notes and dates included. Calibre's export names no books, only numbers, so
+you match each one to a book yourself the first time and it is remembered after that. Re-importing
+the same file adds nothing twice. Nothing touches your Calibre library.
+
 **Backups.** One button writes your whole library to a folder you choose: the database, the covers,
 and a Markdown copy of everything you have written. Another button reads it back, replacing what you
 have. Nothing is lost in either direction.
@@ -121,7 +126,7 @@ asks for one request per second, and Interleaf respects it.
 
 ## Development
 
-782 tests across 53 files, run in two environments. The database, the Open Library client and the
+829 tests across 56 files, run in two environments. The database, the Open Library client and the
 recommender are tested in plain Node. The React components are mounted in jsdom, a simulated
 browser, so those tests click real buttons and type into real editors.
 

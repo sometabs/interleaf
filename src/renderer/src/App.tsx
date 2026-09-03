@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 
 import AddBookDialog from './components/AddBookDialog'
 import BookDetail from './components/BookDetail'
+import CalibreImport from './components/CalibreImport'
 import CommandPalette from './components/CommandPalette'
 import ConfirmDialog from './components/ConfirmDialog'
 import Data from './components/Data'
@@ -62,6 +63,7 @@ export default function App(): ReactNode {
         {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} />}
         {view.kind === 'discover' && <Discover />}
         {view.kind === 'data' && <Data />}
+        {view.kind === 'import' && <CalibreImport plan={view.plan} />}
       </main>
 
       <AddBookDialog open={addOpen} onOpenChange={setAddOpen} />
