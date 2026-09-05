@@ -121,6 +121,9 @@ export type RecommendationScope = 'all' | 'same-authors'
 export interface RecommendationQuery {
   limit?: number
   scope?: RecommendationScope
+  // Ranks against this one book instead of the whole shelf. The pool is still
+  // the one harvested for the shelf, so an outlier has little to match.
+  likeBookId?: number
 }
 
 export interface Recommendation {

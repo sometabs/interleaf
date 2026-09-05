@@ -299,22 +299,33 @@ export default function BookDetail({ book }: Props): ReactNode {
               onCommit={(next) => updateBook.mutate({ id: book.id, patch: { genres: next } })}
             />
 
-            <div className="mt-4 flex flex-wrap gap-1 border-t border-hairline pt-3">
-              <button
-                type="button"
-                className="btn btn-ghost -ml-2"
-                onClick={refetchMetadata}
-                disabled={enrichBook.isPending}
-              >
-                {enrichBook.isPending ? 'Refreshing…' : 'Refresh metadata'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-danger"
-                onClick={() => void removeBook()}
-              >
-                Delete
-              </button>
+            {/* The pull-left sits inside the rule, not on it: the row wraps, so
+                every line must start at the same edge as the one above. */}
+            <div className="mt-4 border-t border-hairline pt-3">
+              <div className="-ml-2 flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => navigate({ kind: 'discover', likeBookId: book.id })}
+                >
+                  Find books like this
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={refetchMetadata}
+                  disabled={enrichBook.isPending}
+                >
+                  {enrichBook.isPending ? 'Refreshing…' : 'Refresh metadata'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-danger"
+                  onClick={() => void removeBook()}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </aside>
 

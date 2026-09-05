@@ -470,3 +470,59 @@ describe('filtering by language', () => {
     expect(seen).toContain('ENG')
   })
 })
+
+describe('recommending like one book', () => {
+  const HORROR = ['horror', 'gothic fiction', 'haunted houses', 'ghost stories']
+
+  const shelf = [
+    lib({ bookId: 1, title: 'The Dispossessed', subjects: SCIFI, rating: 5 }),
+    lib({ bookId: 2, title: 'Salt Fat Acid Heat', subjects: COOKING, rating: 5 })
+  ]
+
+  const pool = [
+    cand({ olid: 'SCIFI', title: 'The Left Hand of Darkness', subjects: SCIFI }),
+    cand({ olid: 'FOOD', title: 'Pasta Nights', subjects: COOKING })
+  ]
+
+  it('ranks against the named book rather than the whole shelf', () => {
+    const [top] = recommend(shelf, pool, { likeBookId: 2 })
+    expect(top.olid).toBe('FOOD')
+  })
+
+  it('ignores every other book, however highly it was rated', () => {
+    expect(recommend(shelf, pool, { likeBookId: 2 }).map((r) => r.olid)).toEqual(['FOOD'])
+  })
+
+  it('answers for a book that was rated badly', () => {
+    const disliked = [lib({ bookId: 3, title: 'A Chore', subjects: COOKING, rating: 1 })]
+    expect(recommend(disliked, pool, { likeBookId: 3 }).map((r) => r.olid)).toEqual(['FOOD'])
+  })
+
+  it('answers for a book that was never rated', () => {
+    const unrated = [lib({ bookId: 4, title: 'Unread', subjects: COOKING, rating: null })]
+    expect(recommend(unrated, pool, { likeBookId: 4 }).map((r) => r.olid)).toEqual(['FOOD'])
+  })
+
+  it('returns nothing when the book is no longer on the shelf', () => {
+    expect(recommend(shelf, pool, { likeBookId: 404 })).toEqual([])
+  })
+
+  it('names the book itself as the reason', () => {
+    const [top] = recommend(shelf, pool, { likeBookId: 2 })
+    expect(top.becauseOf).toMatchObject({ bookId: 2, title: 'Salt Fat Acid Heat' })
+  })
+
+  it('finds nothing when the pool holds nothing near that book', () => {
+    const outlier = [lib({ bookId: 9, title: 'The Haunting', subjects: HORROR })]
+    expect(
+      recommend(outlier, [cand({ olid: 'FOOD', title: 'Pasta', subjects: COOKING })], {
+        likeBookId: 9
+      })
+    ).toEqual([])
+  })
+
+  it('applies to the tree as well as the list', () => {
+    const roots = recommendTree(shelf, pool, { likeBookId: 2 })
+    expect(roots.map((node) => node.olid)).toEqual(['FOOD'])
+  })
+})

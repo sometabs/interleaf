@@ -186,3 +186,65 @@ describe('when there is nothing to scope by', () => {
     expect(await screen.findByText(/Nothing more by those authors yet/)).toBeTruthy()
   })
 })
+
+describe('books like one book', () => {
+  const LIKE = [rec({ olid: 'SOL', title: 'Solaris', becauseOf: { bookId: 1, title: 'Ubik' } })]
+
+  function open(): { user: ReturnType<typeof userEvent.setup>; getRecommendations: Spy } {
+    const getRecommendations = vi.fn(async (query?: RecommendationQuery) =>
+      query?.likeBookId === undefined ? ALL : LIKE
+    )
+    installBridge(
+      { books: [makeBook({ id: 1, title: 'Ubik', author: 'Philip K. Dick', rating: 5 })] },
+      { getRecommendations, getRecommendationTree: async () => [] }
+    )
+    renderApp(<Discover />, { kind: 'discover', likeBookId: 1 })
+    return { user: userEvent.setup(), getRecommendations }
+  }
+
+  it('asks about that book alone', async () => {
+    const { getRecommendations } = open()
+
+    expect(await card('Solaris')).toBeTruthy()
+    expect(lastQuery(getRecommendations)).toEqual({ limit: MIN_SHOWN, likeBookId: 1 })
+  })
+
+  it('says which book is being matched', async () => {
+    open()
+    expect(await screen.findByText(/Books like/)).toBeTruthy()
+  })
+
+  // The stored scope answers a question about the shelf, so it must not travel
+  // into a question about one book.
+  it('does not offer the author scope', async () => {
+    open()
+    await card('Solaris')
+    expect(screen.queryByRole('radiogroup', { name: 'Authors' })).toBeNull()
+  })
+
+  it('drops the reason, since the banner already gives it', async () => {
+    open()
+    await card('Solaris')
+    expect(screen.queryByText(/Because you liked/)).toBeNull()
+  })
+
+  it('goes back to the whole shelf', async () => {
+    const { user, getRecommendations } = open()
+    await card('Solaris')
+
+    await user.click(screen.getByRole('button', { name: 'Show my whole shelf' }))
+
+    expect(await card('The Left Hand of Darkness')).toBeTruthy()
+    expect(lastQuery(getRecommendations)).toEqual({ limit: MIN_SHOWN, scope: 'all' })
+  })
+
+  it('says so when nothing in the pool is near that book', async () => {
+    installBridge(
+      { books: [makeBook({ id: 1, title: 'Ubik', rating: 5 })] },
+      { getRecommendations: async () => [], getRecommendationTree: async () => [] }
+    )
+    renderApp(<Discover />, { kind: 'discover', likeBookId: 1 })
+
+    expect(await screen.findByText(/Nothing in the pool resembles Ubik/)).toBeTruthy()
+  })
+})

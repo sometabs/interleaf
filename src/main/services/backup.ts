@@ -9,6 +9,12 @@ const BACKUP_DIR = 'interleaf-backup'
 const DB_NAME = 'interleaf.db'
 const COVERS_DIR = 'covers'
 
+// An AppImage runs from a temporary mount, and the path Electron would relaunch
+// is gone by the time the replacement process reaches it.
+export function relaunchOptions(appImage = process.env.APPIMAGE): { execPath: string } | undefined {
+  return appImage ? { execPath: appImage } : undefined
+}
+
 export interface BackupResult {
   dir: string
   books: number

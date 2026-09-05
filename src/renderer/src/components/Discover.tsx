@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 
 import { useDiscoverScope } from '../lib/discoverFilters'
 import { notify } from '../lib/feedback'
+import { useView } from '../lib/view'
 import {
   useBooks,
   useDismissRecommendation,
@@ -29,12 +30,19 @@ const SCOPES: readonly { value: RecommendationScope; label: string }[] = [
 export default function Discover(): ReactNode {
   const [layout, setLayout] = useState<Layout>('grid')
   const [scope, setScope] = useDiscoverScope()
+  const { view, navigate } = useView()
 
   const { data: books = [] } = useBooks()
 
+  const likeBookId = view.kind === 'discover' ? view.likeBookId : undefined
+  const likeBook = books.find((book) => book.id === likeBookId) ?? null
+
   // From the shelf, not this screen, and passed to the recommender rather than
   // trimming the result: a larger limit widens the MMR pool too.
-  const query = { scope, limit: shownFor(books.length) }
+  const limit = shownFor(books.length)
+  // The remembered scope is a statement about the shelf, so it would silently
+  // narrow a question asked of one book.
+  const query = likeBook ? { likeBookId: likeBook.id, limit } : { scope, limit }
 
   const { data: recommendations = [], isPending } = useRecommendations(query)
   const { data: tree = [] } = useRecommendationTree(query)
@@ -77,28 +85,30 @@ export default function Discover(): ReactNode {
         <div className="flex shrink-0 items-center gap-2">
           {/* A way of looking rather than a statement of taste: press it to see
               the other side of the same shelf. */}
-          <div
-            role="radiogroup"
-            aria-label="Authors"
-            className="inline-flex rounded-control bg-sunken p-0.5"
-          >
-            {SCOPES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={scope === option.value}
-                onClick={() => setScope(option.value)}
-                className={`rounded-control px-2.5 py-1 text-[12px] transition-colors ${
-                  scope === option.value
-                    ? 'bg-surface font-medium text-ink shadow-card'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {!likeBook && (
+            <div
+              role="radiogroup"
+              aria-label="Authors"
+              className="inline-flex rounded-control bg-sunken p-0.5"
+            >
+              {SCOPES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={scope === option.value}
+                  onClick={() => setScope(option.value)}
+                  className={`rounded-control px-2.5 py-1 text-[12px] transition-colors ${
+                    scope === option.value
+                      ? 'bg-surface font-medium text-ink shadow-card'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div
             role="group"
@@ -133,6 +143,21 @@ export default function Discover(): ReactNode {
         </div>
       </header>
 
+      {likeBook && (
+        <section className="mb-6 flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-5 py-3">
+          <p className="min-w-0 text-[13px] text-ink-muted">
+            Books like <span className="font-medium text-ink">{likeBook.title}</span>
+          </p>
+          <button
+            type="button"
+            className="btn btn-ghost text-[12px]"
+            onClick={() => navigate({ kind: 'discover' })}
+          >
+            Show my whole shelf
+          </button>
+        </section>
+      )}
+
       {refresh.isPending && <HarvestProgressPanel progress={progress} />}
 
       {isPending || (recommendations.length === 0 && refresh.isPending) ? (
@@ -140,13 +165,15 @@ export default function Discover(): ReactNode {
       ) : recommendations.length === 0 ? (
         <Empty
           title={
-            scope !== 'same-authors'
-              ? ratedHighly === 0
-                ? 'Rate a book 4 or 5 stars to start'
-                : 'Nothing to suggest yet'
-              : knownAuthors
-                ? 'Nothing more by those authors yet'
-                : 'No authors on your shelf yet'
+            likeBook
+              ? `Nothing in the pool resembles ${likeBook.title}`
+              : scope !== 'same-authors'
+                ? ratedHighly === 0
+                  ? 'Rate a book 4 or 5 stars to start'
+                  : 'Nothing to suggest yet'
+                : knownAuthors
+                  ? 'Nothing more by those authors yet'
+                  : 'No authors on your shelf yet'
           }
         />
       ) : layout === 'tree' ? (
@@ -166,7 +193,7 @@ export default function Discover(): ReactNode {
                 <h3 className="text-[14px] leading-snug">{rec.title}</h3>
                 {rec.author && <p className="text-[12px] text-ink-muted">{rec.author}</p>}
 
-                {rec.becauseOf && (
+                {!likeBook && rec.becauseOf && (
                   <p className="mt-2 text-[12px] text-ink-muted">
                     Because you liked{' '}
                     <span className="font-medium text-ink">{rec.becauseOf.title}</span>

@@ -9,7 +9,9 @@ export type View =
   | { kind: 'reviews' }
   | { kind: 'review'; id: number }
   | { kind: 'quotes' }
-  | { kind: 'discover' }
+  // Set when the screen was opened from one book: Discover then ranks against
+  // that book alone.
+  | { kind: 'discover'; likeBookId?: number }
   | { kind: 'data' }
   // The plan travels with the view: it is read from a file, not from the
   // library, so nothing else can fetch it back.

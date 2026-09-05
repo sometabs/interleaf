@@ -267,6 +267,15 @@ function byLanguage(candidates: CandidateInput[], languages: readonly string[]):
   )
 }
 
+// The rating is overridden because a disliked book weighs negative, and a
+// profile of one such book is emptied rather than pointed at.
+function profileFor(library: ProfileBook[], options: RecommendOptions): ProfileBook[] {
+  if (options.likeBookId === undefined) return library
+
+  const book = library.find((entry) => entry.bookId === options.likeBookId)
+  return book ? [{ ...book, rating: 5 }] : []
+}
+
 // In one place so the list and the tree narrow identically.
 function poolFor(
   library: ProfileBook[],
@@ -385,7 +394,8 @@ export function recommend(
   options: RecommendOptions = {}
 ): Recommendation[] {
   const now = options.now ?? Math.floor(Date.now() / 1000)
-  const scored = scoreCandidates(library, poolFor(library, candidates, options), now)
+  const profile = profileFor(library, options)
+  const scored = scoreCandidates(profile, poolFor(profile, candidates, options), now)
 
   return maximalMarginalRelevance(
     scored,
@@ -404,11 +414,12 @@ export function recommendTree(
 ): RecommendationNode[] {
   const now = options.now ?? Math.floor(Date.now() / 1000)
   const limit = options.limit ?? 24
+  const profile = profileFor(library, options)
 
   // Re-sorted by score after the cap: insertion order is what makes depth
   // mean distance.
   const scored = takeCappedByAuthor(
-    scoreCandidates(library, poolFor(library, candidates, options), now),
+    scoreCandidates(profile, poolFor(profile, candidates, options), now),
     limit,
     capFor(options)
   ).sort((a, b) => b.rec.score - a.rec.score)

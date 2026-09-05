@@ -10,7 +10,7 @@ import { installBridge, makeBook, renderApp } from './helpers/render'
 
 afterEach(() => resetMessages())
 
-const CAMUS = makeBook({ id: 1, title: 'L’Étranger', author: 'Albert Camus' })
+const SHELLEY = makeBook({ id: 1, title: 'Frankenstein', author: 'Mary Shelley' })
 const MEDITATIONS = makeBook({ id: 2, title: 'Meditations', author: 'Marcus Aurelius' })
 
 function plan(overrides: Partial<CalibreImportPlan['books'][number]> = {}): CalibreImportPlan {
@@ -18,11 +18,11 @@ function plan(overrides: Partial<CalibreImportPlan['books'][number]> = {}): Cali
     filePath: 'C:/exports/annotations.json',
     books: [
       {
-        calibreId: 15,
+        calibreId: 42,
         bookId: null,
         newHighlights: 2,
         knownHighlights: 0,
-        samples: ['somme toute, il n’y avait rien de changé.'],
+        samples: ['Nothing is so painful to the human mind as a great and sudden change.'],
         ...overrides
       }
     ]
@@ -35,7 +35,7 @@ function bridge(overrides = {}): Record<string, ReturnType<typeof vi.fn>> {
     importCalibreHighlights: vi.fn(async () => ({ imported: 2, skipped: 0, books: 1 }))
   }
   const merged = { ...spies, ...overrides }
-  installBridge({ books: [CAMUS, MEDITATIONS] }, merged)
+  installBridge({ books: [SHELLEY, MEDITATIONS] }, merged)
   return merged
 }
 
@@ -59,7 +59,7 @@ describe('starting an import from Data', () => {
 
     await waitFor(() =>
       expect(spies.importCalibreHighlights).toHaveBeenCalledWith('C:/exports/annotations.json', [
-        { calibreId: 15, bookId: 1 }
+        { calibreId: 42, bookId: 1 }
       ])
     )
     expect(await screen.findByText('Imported 2 highlights into 1 book')).toBeTruthy()
@@ -109,8 +109,8 @@ describe('the matching screen', () => {
     bridge()
     renderApp(<CalibreImport plan={plan()} />, { kind: 'import', plan: plan() })
 
-    expect(await screen.findByText(/rien de changé/)).toBeTruthy()
-    expect(screen.getByText('Calibre book 15')).toBeTruthy()
+    expect(await screen.findByText(/a great and sudden change/)).toBeTruthy()
+    expect(screen.getByText('Calibre book 42')).toBeTruthy()
     expect(screen.getByText('2 new')).toBeTruthy()
   })
 
@@ -130,14 +130,14 @@ describe('the matching screen', () => {
 
     await screen.findByRole('option', { name: /Meditations/ })
     await user.selectOptions(
-      screen.getByLabelText('Book for Calibre book 15'),
+      screen.getByLabelText('Book for Calibre book 42'),
       MEDITATIONS.id.toString()
     )
     await user.click(screen.getByRole('button', { name: 'Import highlights' }))
 
     await waitFor(() =>
       expect(spies.importCalibreHighlights).toHaveBeenCalledWith('C:/exports/annotations.json', [
-        { calibreId: 15, bookId: 2 }
+        { calibreId: 42, bookId: 2 }
       ])
     )
   })
@@ -148,19 +148,25 @@ describe('the matching screen', () => {
       filePath: 'C:/exports/annotations.json',
       books: [
         ...plan().books,
-        { calibreId: 21, bookId: null, newHighlights: 1, knownHighlights: 0, samples: ['A wall.'] }
+        {
+          calibreId: 21,
+          bookId: null,
+          newHighlights: 1,
+          knownHighlights: 0,
+          samples: ['Very little is needed to make a happy life.']
+        }
       ]
     }
     renderApp(<CalibreImport plan={both} />, { kind: 'import', plan: both })
     const user = userEvent.setup()
 
-    await screen.findAllByRole('option', { name: /Camus/ })
-    await user.selectOptions(screen.getByLabelText('Book for Calibre book 15'), '1')
+    await screen.findAllByRole('option', { name: /Shelley/ })
+    await user.selectOptions(screen.getByLabelText('Book for Calibre book 42'), '1')
     await user.click(screen.getByRole('button', { name: 'Import highlights' }))
 
     await waitFor(() =>
       expect(spies.importCalibreHighlights).toHaveBeenCalledWith('C:/exports/annotations.json', [
-        { calibreId: 15, bookId: 1 }
+        { calibreId: 42, bookId: 1 }
       ])
     )
   })
@@ -171,7 +177,7 @@ describe('the matching screen', () => {
     renderApp(<CalibreImport plan={known} />, { kind: 'import', plan: known })
 
     await screen.findByRole('option', { name: /Meditations/ })
-    const select = screen.getByLabelText('Book for Calibre book 15') as HTMLSelectElement
+    const select = screen.getByLabelText('Book for Calibre book 42') as HTMLSelectElement
     expect(select.value).toBe('2')
     expect(screen.getByText('2 new, 3 already imported')).toBeTruthy()
   })

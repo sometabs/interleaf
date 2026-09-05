@@ -1,8 +1,10 @@
+import type { Recommendation, RecommendationQuery } from '@shared/api'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
+import App from '../src/renderer/src/App'
 import BookDetail from '../src/renderer/src/components/BookDetail'
 import { useBook } from '../src/renderer/src/lib/queries'
 import { installBridge, makeBook, renderApp, type FakeBridge } from './helpers/render'
@@ -115,5 +117,26 @@ describe('editor stability', () => {
     await waitFor(() => expect(screen.getByRole('radiogroup')).toHaveProperty('ariaLabel'))
 
     expect(screen.getByTestId('editor')).toBe(before)
+  })
+})
+
+describe('finding books like this one', () => {
+  it('opens Discover asking about this book', async () => {
+    const user = userEvent.setup()
+    const getRecommendations = vi.fn<(query?: RecommendationQuery) => Promise<Recommendation[]>>(
+      async () => []
+    )
+    installBridge(
+      { books: [makeBook({ id: 1, title: 'Ubik' })] },
+      { getRecommendations, getRecommendationTree: async () => [] }
+    )
+    renderApp(<App />, { kind: 'book', id: 1 })
+
+    await user.click(await screen.findByRole('button', { name: 'Find books like this' }))
+
+    expect(await screen.findByText(/Books like/)).toBeTruthy()
+    await waitFor(() =>
+      expect(getRecommendations.mock.calls.at(-1)?.[0]).toMatchObject({ likeBookId: 1 })
+    )
   })
 })

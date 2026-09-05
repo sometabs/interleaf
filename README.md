@@ -8,7 +8,7 @@ collect the passages worth keeping, and get recommendations for what to read nex
 Everything lives on your machine. The only thing that needs the internet is looking up a book's
 cover and details.
 
-<img src="docs/screenshots/01-library.png" width="700" alt="The library, grouped alphabetically, with covers and ratings">
+<img src="docs/screenshots/01-library.png" width="700" alt="The library, grouped by reading status, with covers and ratings">
 
 **Discover** ranks unread books against your shelf and says which of your books each one resembles.
 
@@ -24,7 +24,7 @@ A book page: the review at the top, quotes and notes below, all edited in place.
 
 `Ctrl + K` searches every book, review, note and quote at once.
 
-<img src="docs/screenshots/05-palette.png" width="700" alt="The command palette searching for the word dark">
+<img src="docs/screenshots/05-palette.png" width="700" alt="The command palette searching for the word world, matching a book and a note">
 
 ## Install
 
@@ -47,9 +47,9 @@ npm run build:win
 
 It lands in `dist/`; run it to install the app normally.
 
-**Platforms.** Windows is the one I build and use, and it's the only one I can vouch for.
-`npm run build:linux` produces an AppImage and a `.deb` and is expected to work. If you try it and
-something breaks, an issue would be genuinely useful.
+**Platforms.** Windows is the one I build and use daily. `npm run build:linux` produces an AppImage
+and a `.deb`, and the AppImage has been run on Debian. If something breaks on Linux, an issue would
+be genuinely useful.
 
 To skip the installer and just run the app from source:
 
@@ -82,6 +82,10 @@ thought that belongs to no single book is a note.
 **Discover.** Recommendations built from your own shelf: it reads what you rated 4 or 5, looks up
 similar books, and ranks them against your taste. Every suggestion tells you which of your books it
 resembles. Nothing is uploaded, and no profile is built about you anywhere.
+
+**Books like this one.** Any book on your shelf has a "Find books like this" button, which asks the
+same question of that book alone instead of your whole taste. It searches what Discover has already
+found, so it is instant, and it comes up empty when the book sits far from everything else you read.
 
 **Highlights from Calibre.** Export your highlights from the Calibre viewer and read the file
 straight into Interleaf, notes and dates included. Calibre's export names no books, only numbers, so
@@ -126,7 +130,7 @@ asks for one request per second, and Interleaf respects it.
 
 ## Development
 
-829 tests across 56 files, run in two environments. The database, the Open Library client and the
+847 tests across 57 files, run in two environments. The database, the Open Library client and the
 recommender are tested in plain Node. The React components are mounted in jsdom, a simulated
 browser, so those tests click real buttons and type into real editors.
 
