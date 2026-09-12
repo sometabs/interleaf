@@ -117,6 +117,9 @@ Editors save roughly a second after you stop typing. There is no save button and
 - **Windows**: `%APPDATA%\Interleaf\`
 - **Linux**: `~/.config/Interleaf/`
 
+Runs from source and preview builds use a separate `Interleaf Dev` directory under the same
+platform-specific application-data folder, so development cannot modify the installed library.
+
 That folder holds `interleaf.db` (everything you've written) and a `covers/` cache. Back up the
 `.db` file and you've backed up the app. Deleting `covers/` is safe because they re-download.
 

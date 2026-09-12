@@ -5,6 +5,7 @@ import { join } from 'path'
 // point a fresh, empty folder at an existing library.
 
 const APP_DIR = 'Interleaf'
+const DEV_APP_DIR = 'Interleaf Dev'
 const DB_FILE = 'interleaf.db'
 
 const LEGACY_APP_DIR = 'bookhook'
@@ -12,7 +13,11 @@ const LEGACY_DB_FILE = 'bookhook.db'
 
 // The whole directory, so the cover cache and Local Storage travel with it. A
 // failed move returns the old path rather than starting empty.
-export function resolveUserDataDir(appDataRoot: string): string {
+export function resolveUserDataDir(appDataRoot: string, isPackaged: boolean): string {
+  // Source and preview runs get a completely separate Electron profile. Return
+  // before the legacy checks so development can never move production data.
+  if (!isPackaged) return join(appDataRoot, DEV_APP_DIR)
+
   const dir = join(appDataRoot, APP_DIR)
   if (existsSync(dir)) return dir
 

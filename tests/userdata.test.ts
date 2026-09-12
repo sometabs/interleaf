@@ -18,8 +18,21 @@ afterEach(() => {
 })
 
 describe('resolveUserDataDir', () => {
+  it('uses a separate directory outside packaged builds', () => {
+    expect(resolveUserDataDir(root, false)).toBe(join(root, 'Interleaf Dev'))
+  })
+
+  it('does not migrate legacy production data in development', () => {
+    const legacy = join(root, 'bookhook')
+    mkdirSync(legacy, { recursive: true })
+    writeFileSync(join(legacy, 'bookhook.db'), 'production data')
+
+    expect(resolveUserDataDir(root, false)).toBe(join(root, 'Interleaf Dev'))
+    expect(readFileSync(join(legacy, 'bookhook.db'), 'utf8')).toBe('production data')
+  })
+
   it('names the current directory on a fresh install', () => {
-    expect(resolveUserDataDir(root)).toBe(join(root, 'Interleaf'))
+    expect(resolveUserDataDir(root, true)).toBe(join(root, 'Interleaf'))
   })
 
   it('moves a directory left behind by the old name', () => {
@@ -28,7 +41,7 @@ describe('resolveUserDataDir', () => {
     writeFileSync(join(legacy, 'covers', 'book-1-2.jpg'), 'jpeg bytes')
     writeFileSync(join(legacy, 'bookhook.db'), 'sqlite bytes')
 
-    const dir = resolveUserDataDir(root)
+    const dir = resolveUserDataDir(root, true)
 
     expect(dir).toBe(join(root, 'Interleaf'))
     expect(existsSync(legacy)).toBe(false)
@@ -46,7 +59,7 @@ describe('resolveUserDataDir', () => {
     mkdirSync(current, { recursive: true })
     writeFileSync(join(current, 'interleaf.db'), 'live')
 
-    expect(resolveUserDataDir(root)).toBe(current)
+    expect(resolveUserDataDir(root, true)).toBe(current)
     expect(readFileSync(join(current, 'interleaf.db'), 'utf8')).toBe('live')
     expect(existsSync(join(legacy, 'bookhook.db'))).toBe(true)
   })

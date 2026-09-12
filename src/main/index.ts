@@ -12,7 +12,7 @@ import { isAppUrl, isExternalLink } from './navigation'
 import { coverForId, coversDir, pruneOrphanCovers, resolveCoverPath } from './services/covers'
 
 // Must run before anything touches disk.
-app.setPath('userData', resolveUserDataDir(app.getPath('appData')))
+app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged))
 
 // The only scheme that can reach the UI with an image, and it serves one directory.
 protocol.registerSchemesAsPrivileged([
