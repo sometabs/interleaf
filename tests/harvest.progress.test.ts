@@ -93,7 +93,7 @@ describe('reporting a harvest as it runs', () => {
 
     const seen = await run()
 
-    expect(seen.map((p) => p.label)).toContain('More books about science fiction')
+    expect(seen.map((p) => p.label)).toContain('More Science Fiction books')
   })
 
   it('never spends a step on an Open Library facet', async () => {
@@ -111,7 +111,7 @@ describe('reporting a harvest as it runs', () => {
     const seen = await run()
     const labels = seen.map((p) => p.label)
 
-    expect(labels).toContain('More books about human nature')
+    expect(labels).toContain('More Nature books')
     expect(labels.join(' ')).not.toContain('award:hugo_award')
     expect(seen[seen.length - 1].total).toBe(2)
   })
@@ -132,7 +132,7 @@ describe('reporting a harvest as it runs', () => {
     // The counter increments only once the request is back, so it reads
     // `done: 0` on either side of the fetch.
     expect(events).toEqual([
-      'report:More books about science fiction',
+      'report:More Science Fiction books',
       'fetch:subject',
       'report:More by Stanisław Lem about science fiction',
       'fetch:author',

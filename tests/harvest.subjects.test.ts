@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
-import { isTopicSubject } from '../src/main/services/harvest'
+import { isTopicSubject, planDiscoveryQueries } from '../src/main/services/harvest'
 import { saveBookMetadata, scorableCandidates } from '../src/main/repos/metadata'
 
 let db: Database
@@ -177,7 +177,7 @@ describe('what a search actually asks for', () => {
       'gender'
     ])
 
-    expect(asked.join(' ')).toContain('subject_key:human_nature')
+    expect(asked.join(' ')).toContain('subject_key:nature')
     expect(asked.join(' ')).toContain('subject_key:gender')
     expect(asked.join(' ')).not.toContain('award')
   })
@@ -187,7 +187,7 @@ describe('what a search actually asks for', () => {
     const wall = Array.from({ length: 12 }, (_, i) => `award:tag=${i}`)
     const asked = await harvestWith([...wall, 'space travel', 'ice age'])
 
-    expect(asked.join(' ')).toContain('subject_key:space_travel')
+    expect(asked.join(' ')).toContain('subject_key:travel')
     expect(asked.join(' ')).toContain('subject_key:ice_age')
     expect(asked.join(' ')).not.toContain('award')
   })
@@ -208,7 +208,7 @@ describe('what a search actually asks for', () => {
     expect(asked.join(' ')).not.toContain('survival_skills')
   })
 
-  it('uses at most four precise subject-pair searches', async () => {
+  it('never reuses a subject across the six genre-balanced searches', async () => {
     const asked = await harvestWith([
       'human nature',
       'gender',
@@ -219,10 +219,31 @@ describe('what a search actually asks for', () => {
       'Adventure'
     ])
 
-    const precise = asked.filter(
-      (query) => query.startsWith('subject_key:') && query.includes(' AND ')
-    )
-    expect(precise).toHaveLength(4)
+    const subjectQueries = asked.filter((query) => query.startsWith('subject_key:'))
+    const subjects = subjectQueries.flatMap((query) => query.match(/subject_key:[a-z0-9_]+/g) ?? [])
+
+    expect(subjectQueries.length).toBeLessThanOrEqual(6)
+    expect(new Set(subjects).size).toBe(subjects.length)
+  })
+
+  it('gives distinct genres a turn instead of letting history take every slot', () => {
+    const plan = planDiscoveryQueries([
+      { title: 'Mystery', author: 'A', subjects: ['History', 'Mystery fiction'] },
+      { title: 'Memoir', author: 'B', subjects: ['History', 'Biography'] },
+      { title: 'Ideas', author: 'C', subjects: ['History', 'Philosophy', 'Ethics'] },
+      { title: 'Trees', author: 'D', subjects: ['History', 'Nature', 'Ecology'] },
+      { title: 'Space', author: 'E', subjects: ['Science fiction', 'Space travel'] },
+      { title: 'Love', author: 'F', subjects: ['Romance', 'Love stories'] }
+    ])
+    const asked = plan.subjects.map((entry) => entry.query)
+    const allSubjects = asked.flatMap((query) => query.match(/subject_key:[a-z0-9_]+/g) ?? [])
+
+    expect(asked).toHaveLength(6)
+    expect(asked.filter((query) => query.includes('subject_key:history'))).toHaveLength(1)
+    expect(asked.some((query) => query.includes('subject_key:philosophy'))).toBe(true)
+    expect(asked.some((query) => query.includes('subject_key:science_fiction'))).toBe(true)
+    expect(asked.some((query) => query.includes('subject_key:nature'))).toBe(true)
+    expect(new Set(allSubjects).size).toBe(allSubjects.length)
   })
 
   it('combines an author with a strong subject instead of fetching every work', async () => {

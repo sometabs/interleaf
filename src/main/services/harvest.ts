@@ -1,6 +1,7 @@
 import type { Database } from 'better-sqlite3'
 
 import type { HarvestProgress, HarvestResult } from '../../shared/api'
+import { classify } from '../../shared/categories'
 import { READING_LANGUAGES } from '../../shared/languages'
 import {
   booksWithMetadata,
@@ -16,12 +17,46 @@ import { fetchCandidates, type OlBook } from './openlibrary'
 const MAX_BACKLOG = 5
 
 export const DISCOVERY_REQUEST_LIMIT = 8
-const MAX_PRECISE_SUBJECT_QUERIES = 4
-const MAX_FALLBACK_SUBJECT_QUERIES = 2
+const MAX_SUBJECT_QUERIES = 6
 const MAX_AUTHOR_SUBJECT_QUERIES = 2
 const PER_SUBJECT_QUERY = 50
 const PER_AUTHOR_QUERY = 30
-const FALLBACK_BELOW_CANDIDATES = 140
+
+// The local taxonomy chooses which interests receive a request. Open Library
+// still filters through subject_key, whose names are not always the same as
+// the labels shown in Interleaf.
+const OPEN_LIBRARY_GENRE_SUBJECT: Readonly<Record<string, string>> = {
+  'True Crime': 'true_crime',
+  'Science Fiction': 'science_fiction',
+  Fantasy: 'fantasy',
+  'Historical Fiction': 'historical_fiction',
+  Mystery: 'mystery',
+  'Thriller & Suspense': 'thrillers',
+  Horror: 'horror',
+  Romance: 'romance',
+  'Young Adult': 'young_adult_fiction',
+  Children: 'juvenile_fiction',
+  Poetry: 'poetry',
+  'Comics & Graphic Novels': 'comic_books_strips_etc',
+  Drama: 'drama',
+  Philosophy: 'philosophy',
+  'Biography & Memoir': 'biography',
+  History: 'history',
+  Psychology: 'psychology',
+  'Religion & Spirituality': 'religion',
+  Politics: 'politics',
+  Business: 'business',
+  Technology: 'technology',
+  Science: 'science',
+  Sports: 'sports',
+  'Health & Fitness': 'health',
+  'Self-Help': 'self_help',
+  Travel: 'travel',
+  'Cookbooks & Food': 'cooking',
+  'Art & Photography': 'art',
+  Nature: 'nature',
+  Education: 'education'
+}
 
 // Where a book sits in a library, not what it is about.
 const CATALOGUE =
@@ -94,8 +129,7 @@ export interface DiscoveryQuery {
 }
 
 export interface DiscoveryPlan {
-  precise: DiscoveryQuery[]
-  fallbacks: DiscoveryQuery[]
+  subjects: DiscoveryQuery[]
   authors: DiscoveryQuery[]
 }
 
@@ -104,6 +138,7 @@ interface Topic {
   label: string
   count: number
   order: number
+  genres: string[]
 }
 
 // Open Library's exact subject keys are lower-case with punctuation and spaces
@@ -130,76 +165,79 @@ function authorClause(author: string): string {
 export function planDiscoveryQueries(books: DiscoveryBook[]): DiscoveryPlan {
   const topics = new Map<string, Topic>()
   const byBook: { book: DiscoveryBook; keys: string[] }[] = []
+  const genreStats = new Map<string, { label: string; count: number; order: number }>()
   let order = 0
+  let genreOrder = 0
 
   for (const book of books) {
     const labels = withoutNearDuplicates(book.subjects.filter(isTopicSubject).slice(0, 12))
     const keys: string[] = []
     const seen = new Set<string>()
+    const bookGenres = new Set<string>()
 
     for (const label of labels) {
-      const key = label.trim().toLowerCase()
-      if (!subjectKey(key) || seen.has(key)) continue
+      const key = subjectKey(label)
+      if (!key || seen.has(key)) continue
       seen.add(key)
       keys.push(key)
+      const genres = classify([label]).genres
+      for (const genre of genres) bookGenres.add(genre)
 
       const existing = topics.get(key)
       if (existing) existing.count += 1
-      else topics.set(key, { key, label: label.trim(), count: 1, order: order++ })
+      else topics.set(key, { key, label: label.trim(), count: 1, order: order++, genres })
+    }
+
+    for (const genre of bookGenres) {
+      const existing = genreStats.get(genre)
+      if (existing) existing.count += 1
+      else genreStats.set(genre, { label: genre, count: 1, order: genreOrder++ })
     }
     byBook.push({ book, keys })
   }
 
   const rankedTopics = [...topics.values()].sort((a, b) => b.count - a.count || a.order - b.order)
+  const rankedGenres = [...genreStats.values()].sort(
+    (a, b) => b.count - a.count || a.order - b.order
+  )
 
-  const pairStats = new Map<
-    string,
-    { first: Topic; second: Topic; support: number; order: number }
-  >()
-  let pairOrder = 0
+  const subjects: DiscoveryQuery[] = []
+  const usedSubjectKeys = new Set<string>()
 
-  for (const { keys } of byBook) {
-    for (let i = 0; i < keys.length; i++) {
-      for (let j = i + 1; j < keys.length; j++) {
-        const ordered = [keys[i], keys[j]].sort()
-        const pairKey = ordered.join('\0')
-        const existing = pairStats.get(pairKey)
-        if (existing) {
-          existing.support += 1
-          continue
-        }
-
-        const first = topics.get(ordered[0])
-        const second = topics.get(ordered[1])
-        if (first && second) {
-          pairStats.set(pairKey, { first, second, support: 1, order: pairOrder++ })
-        }
-      }
-    }
+  function addTopic(topic: Topic): void {
+    subjects.push({
+      query: subjectClause(topic),
+      label: `More books about ${topic.label}`,
+      source: `subject:${topic.key}`,
+      limit: PER_SUBJECT_QUERY
+    })
+    usedSubjectKeys.add(topic.key)
   }
 
-  const precise = [...pairStats.values()]
-    .sort(
-      (a, b) =>
-        b.support - a.support ||
-        Math.min(b.first.count, b.second.count) - Math.min(a.first.count, a.second.count) ||
-        b.first.count + b.second.count - (a.first.count + a.second.count) ||
-        a.order - b.order
-    )
-    .slice(0, MAX_PRECISE_SUBJECT_QUERIES)
-    .map(({ first, second }) => ({
-      query: `${subjectClause(first)} AND ${subjectClause(second)}`,
-      label: `Books about ${first.label} and ${second.label}`,
-      source: `subjects:${first.key}+${second.key}`,
+  // Genres allocate the six discovery slots. The request still goes to Open
+  // Library as a subject filter, but noisy raw metadata cannot make "history"
+  // occupy four differently paired searches anymore.
+  for (const genre of rankedGenres) {
+    if (subjects.length === MAX_SUBJECT_QUERIES) break
+    const key = OPEN_LIBRARY_GENRE_SUBJECT[genre.label] ?? subjectKey(genre.label)
+    if (!key || usedSubjectKeys.has(key)) continue
+    subjects.push({
+      query: `subject_key:${key}`,
+      label: `More ${genre.label} books`,
+      source: `genre:${key}`,
       limit: PER_SUBJECT_QUERY
-    }))
+    })
+    usedSubjectKeys.add(key)
+  }
 
-  const fallbacks = rankedTopics.slice(0, MAX_FALLBACK_SUBJECT_QUERIES).map((topic) => ({
-    query: subjectClause(topic),
-    label: `More books about ${topic.label}`,
-    source: `subject:${topic.key}`,
-    limit: PER_SUBJECT_QUERY
-  }))
+  // A small or unusual shelf may not classify into six genres. Its strongest
+  // unclassified topics fill spare slots; classified topics are already
+  // represented by their canonical genre request above.
+  const fallbackTopics = rankedTopics.filter((topic) => topic.genres.length === 0)
+  for (const topic of fallbackTopics) {
+    if (subjects.length === MAX_SUBJECT_QUERIES) break
+    if (!usedSubjectKeys.has(topic.key)) addTopic(topic)
+  }
 
   const rank = new Map(rankedTopics.map((topic, index) => [topic.key, index]))
   const seenAuthors = new Set<string>()
@@ -226,7 +264,7 @@ export function planDiscoveryQueries(books: DiscoveryBook[]): DiscoveryPlan {
     if (authors.length === MAX_AUTHOR_SUBJECT_QUERIES) break
   }
 
-  return { precise, fallbacks, authors }
+  return { subjects, authors }
 }
 
 // The only step that needs the network; scoring afterwards is offline.
@@ -268,7 +306,7 @@ export async function harvestCandidates(
   }
 
   const plan = planDiscoveryQueries(liked)
-  const maximumPlanned = plan.precise.length + plan.fallbacks.length + plan.authors.length
+  const maximumPlanned = plan.subjects.length + plan.authors.length
   if (maximumPlanned === 0) {
     total = done
     report('Nothing to look for yet')
@@ -298,16 +336,7 @@ export async function harvestCandidates(
     }
   }
 
-  for (const query of plan.precise) await runQuery(query)
-
-  const preciseCandidates = new Set(rows.map((row) => row.olid)).size
-  const fallbacks = preciseCandidates < FALLBACK_BELOW_CANDIDATES ? plan.fallbacks : []
-
-  // The initial estimate reserved both fallbacks. Once their need is known the
-  // total can shrink, but never grow, so the progress bar cannot retreat.
-  total = done + fallbacks.length + plan.authors.length
-
-  for (const query of fallbacks) await runQuery(query)
+  for (const query of plan.subjects) await runQuery(query)
   for (const query of plan.authors) await runQuery(query)
 
   if (attempted > DISCOVERY_REQUEST_LIMIT) {
