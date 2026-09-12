@@ -37,7 +37,12 @@ async function load(): Promise<typeof import('../src/main/services/harvest')> {
 }
 
 async function harvestWith(subjects: string[]): Promise<string[]> {
-  const book = books.createBook(db, { title: 'A book', author: 'Someone', rating: 5 })
+  const book = books.createBook(db, {
+    title: 'A book',
+    author: 'Someone',
+    status: 'read',
+    rating: 5
+  })
   saveBookMetadata(db, book.id, { subjects, description: null })
 
   const harvest = await load()
@@ -45,7 +50,7 @@ async function harvestWith(subjects: string[]): Promise<string[]> {
   await vi.advanceTimersByTimeAsync(120_000)
   await done
 
-  return queries.filter((q) => q.startsWith('subject:')).map((q) => q.replace(/^subject:"|"$/g, ''))
+  return queries
 }
 
 beforeEach(() => {
@@ -98,6 +103,7 @@ describe('telling a topic from a filing card', () => {
     'Long Now Manual for Civilization',
     'Fiction, science fiction, general',
     'Science fiction, American',
+    'Dune (Imaginary place)',
     'Translations into Yiddish',
     'German language',
     'Ciencia-ficción',
@@ -145,6 +151,23 @@ describe('telling a topic from a filing card', () => {
 })
 
 describe('what a search actually asks for', () => {
+  it('does not generate searches from a want-to-read book', async () => {
+    const book = books.createBook(db, {
+      title: 'Maybe someday',
+      author: 'Someone',
+      status: 'want',
+      rating: 5
+    })
+    saveBookMetadata(db, book.id, { subjects: ['science fiction', 'politics'], description: null })
+
+    const harvest = await load()
+    const done = harvest.harvestCandidates(db, ['eng'])
+    await vi.advanceTimersByTimeAsync(30_000)
+    await done
+
+    expect(queries).toEqual([])
+  })
+
   it('spends no request on a facet', async () => {
     const asked = await harvestWith([
       'award:hugo_award=1970',
@@ -154,7 +177,9 @@ describe('what a search actually asks for', () => {
       'gender'
     ])
 
-    expect(asked).toEqual(['human nature', 'gender'])
+    expect(asked.join(' ')).toContain('subject_key:human_nature')
+    expect(asked.join(' ')).toContain('subject_key:gender')
+    expect(asked.join(' ')).not.toContain('award')
   })
 
   // Filing must be dropped before the twelve-subject window, not after.
@@ -162,7 +187,9 @@ describe('what a search actually asks for', () => {
     const wall = Array.from({ length: 12 }, (_, i) => `award:tag=${i}`)
     const asked = await harvestWith([...wall, 'space travel', 'ice age'])
 
-    expect(asked).toEqual(['space travel', 'ice age'])
+    expect(asked.join(' ')).toContain('subject_key:space_travel')
+    expect(asked.join(' ')).toContain('subject_key:ice_age')
+    expect(asked.join(' ')).not.toContain('award')
   })
 
   it('does not ask the same question twice in different words', async () => {
@@ -174,10 +201,14 @@ describe('what a search actually asks for', () => {
       'Murder'
     ])
 
-    expect(asked).toEqual(['science-fiction', 'survival', 'murder'])
+    expect(asked.join(' ')).toContain('subject_key:science_fiction')
+    expect(asked.join(' ')).toContain('subject_key:survival')
+    expect(asked.join(' ')).toContain('subject_key:murder')
+    expect(asked.join(' ')).not.toContain('hard_science_fiction')
+    expect(asked.join(' ')).not.toContain('survival_skills')
   })
 
-  it('still asks for six subjects when it has six to ask about', async () => {
+  it('uses at most four precise subject-pair searches', async () => {
     const asked = await harvestWith([
       'human nature',
       'gender',
@@ -188,38 +219,48 @@ describe('what a search actually asks for', () => {
       'Adventure'
     ])
 
-    expect(asked).toHaveLength(6)
+    const precise = asked.filter(
+      (query) => query.startsWith('subject_key:') && query.includes(' AND ')
+    )
+    expect(precise).toHaveLength(4)
+  })
+
+  it('combines an author with a strong subject instead of fetching every work', async () => {
+    const asked = await harvestWith(['science fiction', 'politics'])
+
+    expect(asked).toContain('author:"Someone" AND subject_key:science_fiction')
+    expect(asked).not.toContain('author:Someone')
   })
 })
 
 describe('how much each request brings back', () => {
   // The request costs a second; the rows it returns are free.
-  it('asks for sixty works per subject rather than twenty-four', async () => {
-    await harvestWith(['human nature'])
+  it('asks for fifty works per subject query', async () => {
+    await harvestWith(['human nature', 'gender'])
 
     const subjectCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
       .map(([input]) => String(input))
-      .filter((url) => url.includes('q=subject'))
+      .filter((url) => (new URL(url).searchParams.get('q') ?? '').startsWith('subject_key:'))
 
-    expect(subjectCalls).toHaveLength(1)
-    expect(new URL(subjectCalls[0]).searchParams.get('limit')).toBe('60')
+    expect(subjectCalls.length).toBeGreaterThan(0)
+    for (const url of subjectCalls) expect(new URL(url).searchParams.get('limit')).toBe('50')
   })
 
-  it('asks for forty works per author', async () => {
+  it('asks for thirty works per targeted author query', async () => {
     await harvestWith(['human nature'])
 
     const authorCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
       .map(([input]) => String(input))
-      .filter((url) => url.includes('author='))
+      .filter((url) => (new URL(url).searchParams.get('q') ?? '').startsWith('author:'))
 
     expect(authorCalls).toHaveLength(1)
-    expect(new URL(authorCalls[0]).searchParams.get('limit')).toBe('40')
+    expect(new URL(authorCalls[0]).searchParams.get('limit')).toBe('30')
   })
 
-  it('makes no more requests than before', async () => {
+  it('never exceeds the eight-request discovery budget', async () => {
     await harvestWith(['human nature', 'gender', 'space travel', 'ice age', 'Murder', 'Dystopia'])
 
-    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(7)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBeLessThanOrEqual(8)
     expect(scorableCandidates(db)).toHaveLength(0)
   })
 })

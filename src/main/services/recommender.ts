@@ -14,6 +14,9 @@ export interface ProfileBook {
   bookId: number
   title: string
   author: string | null
+  // Optional so the pure recommender stays convenient for synthetic callers.
+  // Database-backed profiles always provide it.
+  status?: 'want' | 'reading' | 'read' | 'abandoned'
   rating: number | null
   subjects: string[]
   description: string | null
@@ -270,7 +273,14 @@ function byLanguage(candidates: CandidateInput[], languages: readonly string[]):
 // The rating is overridden because a disliked book weighs negative, and a
 // profile of one such book is emptied rather than pointed at.
 function profileFor(library: ProfileBook[], options: RecommendOptions): ProfileBook[] {
-  if (options.likeBookId === undefined) return library
+  if (options.likeBookId === undefined) {
+    return library.filter((book) => {
+      if (book.rating === null) return false
+      // A low rating is explicit negative evidence even when the book was set
+      // aside. Positive and neutral evidence must come from a finished book.
+      return book.rating <= 2 || book.status === undefined || book.status === 'read'
+    })
+  }
 
   const book = library.find((entry) => entry.bookId === options.likeBookId)
   return book ? [{ ...book, rating: 5 }] : []

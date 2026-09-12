@@ -228,6 +228,24 @@ describe('candidate languages', () => {
 })
 
 describe('the candidate pool cleanup', () => {
+  it('replaces stale candidates after a complete harvest', () => {
+    const row = (olid: string): meta.CandidateRow => ({
+      olid,
+      title: `Book ${olid}`,
+      author: 'Someone',
+      subjects: ['science fiction'],
+      description: null,
+      coverId: null,
+      source: 'subjects:science_fiction+politics',
+      languages: ['eng']
+    })
+
+    meta.upsertCandidates(db, [row('OLD')])
+    meta.replaceCandidates(db, [row('NEW')])
+
+    expect(meta.scorableCandidates(db).map((candidate) => candidate.olid)).toEqual(['NEW'])
+  })
+
   it('empties a pool carried over from before the fix', () => {
     meta.upsertCandidates(db, [
       {

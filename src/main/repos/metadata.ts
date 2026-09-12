@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 
-import type { BookMetadata, BookSubjects } from '../../shared/api'
+import type { Book, BookMetadata, BookSubjects } from '../../shared/api'
 
 export interface CandidateRow {
   olid: string
@@ -67,6 +67,7 @@ export function booksWithMetadata(db: Database): {
   bookId: number
   title: string
   author: string | null
+  status: Book['status']
   rating: number | null
   subjects: string[]
   description: string | null
@@ -79,13 +80,14 @@ export function booksWithMetadata(db: Database): {
         book_id: number
         title: string
         author: string | null
+        status: Book['status']
         rating: number | null
         subjects: string | null
         description: string | null
         finished_at: number | null
       }
     >(
-      `SELECT b.id AS book_id, b.title, b.author, b.rating, b.finished_at,
+      `SELECT b.id AS book_id, b.title, b.author, b.status, b.rating, b.finished_at,
               m.subjects, m.description
        FROM book b
        JOIN book_metadata m ON m.book_id = b.id`
@@ -95,6 +97,7 @@ export function booksWithMetadata(db: Database): {
       bookId: r.book_id,
       title: r.title,
       author: r.author,
+      status: r.status,
       rating: r.rating,
       finishedAt: r.finished_at,
       subjects: parseJsonArray(r.subjects),
@@ -102,8 +105,8 @@ export function booksWithMetadata(db: Database): {
     }))
 }
 
-export function upsertCandidates(db: Database, rows: CandidateRow[]): number {
-  const stmt = db.prepare(
+function candidateUpsert(db: Database): ReturnType<Database['prepare']> {
+  return db.prepare(
     `INSERT INTO book_candidate (olid, title, author, subjects, description, cover_id, source, languages, harvested_at)
      VALUES (@olid, @title, @author, @subjects, @description, @coverId, @source, @languages, unixepoch())
      ON CONFLICT (olid) DO UPDATE SET
@@ -127,25 +130,42 @@ export function upsertCandidates(db: Database, rows: CandidateRow[]): number {
        -- Gap-filling again, but an empty list must be nulled first: a subject
        -- harvest reports no languages, and letting that win would erase what a
        -- search harvest already established.
-       languages = coalesce(nullif(excluded.languages, '[]'), book_candidate.languages)`
+       languages = coalesce(nullif(excluded.languages, '[]'), book_candidate.languages),
+       source = excluded.source,
+       harvested_at = unixepoch()`
   )
+}
 
+function writeCandidates(stmt: ReturnType<Database['prepare']>, items: CandidateRow[]): number {
+  for (const c of items) {
+    stmt.run({
+      olid: c.olid,
+      title: c.title,
+      author: c.author,
+      subjects: JSON.stringify(c.subjects),
+      description: c.description,
+      coverId: c.coverId,
+      source: c.source,
+      languages: JSON.stringify(c.languages)
+    })
+  }
+  return items.length
+}
+
+export function upsertCandidates(db: Database, rows: CandidateRow[]): number {
+  const stmt = candidateUpsert(db)
+  const run = db.transaction((items: CandidateRow[]) => writeCandidates(stmt, items))
+
+  return run(rows)
+}
+
+// A fully successful harvest describes the current taste, so stale candidates
+// from older shelves and broader query strategies should not linger forever.
+export function replaceCandidates(db: Database, rows: CandidateRow[]): number {
+  const stmt = candidateUpsert(db)
   const run = db.transaction((items: CandidateRow[]) => {
-    let n = 0
-    for (const c of items) {
-      stmt.run({
-        olid: c.olid,
-        title: c.title,
-        author: c.author,
-        subjects: JSON.stringify(c.subjects),
-        description: c.description,
-        coverId: c.coverId,
-        source: c.source,
-        languages: JSON.stringify(c.languages)
-      })
-      n++
-    }
-    return n
+    db.prepare('DELETE FROM book_candidate').run()
+    return writeCandidates(stmt, items)
   })
 
   return run(rows)

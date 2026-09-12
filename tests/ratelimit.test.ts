@@ -181,8 +181,8 @@ describe('harvest request budget', () => {
     await vi.advanceTimersByTimeAsync(300_000)
     await done
 
-    // MAX_SUBJECTS (6) + MAX_AUTHORS (4).
-    expect(apiCalls()).toHaveLength(10)
+    // Four subject pairs, two broad fallbacks and two author-topic queries.
+    expect(apiCalls()).toHaveLength(8)
     expect(Math.min(...gaps())).toBeGreaterThanOrEqual(1100)
   })
 

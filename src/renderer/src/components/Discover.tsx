@@ -52,7 +52,9 @@ export default function Discover(): ReactNode {
   const dismiss = useDismissRecommendation()
   const save = useSaveRecommendation()
 
-  const ratedHighly = books.filter((book) => (book.rating ?? 0) >= 4).length
+  const ratedHighly = books.filter(
+    (book) => book.status === 'read' && (book.rating ?? 0) >= 4
+  ).length
   // Scoping to known authors is meaningless when none is recorded, which is
   // common among books added by hand.
   const knownAuthors = books.some((book) => (book.author ?? '').trim() !== '')

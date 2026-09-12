@@ -213,6 +213,40 @@ export async function searchBooks(
   return (data.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
+// A raw, fielded Search API query for Discover. Unlike the older one-subject
+// harvest this keeps Open Library's relevance order and preserves `null`, so a
+// partial outage cannot replace a healthy cached pool with an incomplete one.
+export async function fetchCandidates(
+  query: string,
+  limit = 50,
+  languages: readonly string[] = READING_LANGUAGES
+): Promise<OlBook[] | null> {
+  const q = query.trim()
+  if (!q) return []
+
+  const fields = [
+    'key',
+    'title',
+    'author_name',
+    'author_alternative_name',
+    'first_publish_year',
+    'cover_i',
+    'subject',
+    'language',
+    'editions',
+    'editions.title',
+    'editions.cover_i'
+  ].join(',')
+
+  const url =
+    `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${fields}` +
+    languageFilter(languages)
+  const data = await getJson<{ docs?: SearchDoc[] }>(url)
+  if (data === null) return null
+
+  return (data.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
+}
+
 interface WorkResponse {
   title?: string
   description?: string | { value?: string }

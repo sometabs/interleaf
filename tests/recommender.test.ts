@@ -98,6 +98,27 @@ describe('recommend', () => {
     expect(recommend(library, [cand({ olid: 'C', title: 'X', subjects: COOKING })])).toEqual([])
   })
 
+  it('does not treat a want-to-read book as evidence of taste', () => {
+    const library = [
+      lib({ bookId: 1, title: 'Loved', status: 'read', subjects: SCIFI, rating: 5 }),
+      lib({ bookId: 2, title: 'On the wishlist', status: 'want', subjects: COOKING, rating: 5 })
+    ]
+    const results = recommend(library, [
+      cand({ olid: 'FOOD', title: 'More Cooking', subjects: COOKING }),
+      cand({ olid: 'SCIFI', title: 'More Scifi', subjects: SCIFI })
+    ])
+
+    expect(results.map((book) => book.olid)).toEqual(['SCIFI'])
+  })
+
+  it('does not treat an unrated book as evidence of taste', () => {
+    const library = [lib({ bookId: 1, title: 'Unread', subjects: SCIFI, rating: null })]
+
+    expect(recommend(library, [cand({ olid: 'C', title: 'More Scifi', subjects: SCIFI })])).toEqual(
+      []
+    )
+  })
+
   it('respects the limit', () => {
     const library = [lib({ bookId: 1, title: 'A', subjects: SCIFI, rating: 5 })]
     const candidates = Array.from({ length: 20 }, (_, i) =>
