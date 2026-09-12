@@ -252,6 +252,24 @@ describe('what a search actually asks for', () => {
     expect(asked).toContain('author:"Someone" AND subject_key:science_fiction')
     expect(asked).not.toContain('author:Someone')
   })
+
+  it('spends author slots on genres not already covered when possible', () => {
+    const plan = planDiscoveryQueries([
+      { title: 'Past', author: null, subjects: ['History'] },
+      { title: 'Ideas', author: null, subjects: ['Philosophy'] },
+      { title: 'Life', author: null, subjects: ['Biography'] },
+      { title: 'Trees', author: null, subjects: ['Nature'] },
+      { title: 'Crime', author: null, subjects: ['Mystery'] },
+      { title: 'Space', author: 'Frank Herbert', subjects: ['Science fiction'] },
+      { title: 'Magic', author: 'J. R. R. Tolkien', subjects: ['Fantasy'] },
+      { title: 'Love', author: 'Jane Austen', subjects: ['Romance'] }
+    ])
+
+    expect(plan.authors.map((entry) => entry.query)).toEqual([
+      'author:"J. R. R. Tolkien" AND subject_key:fantasy',
+      'author:"Jane Austen" AND subject_key:romance'
+    ])
+  })
 })
 
 describe('how much each request brings back', () => {

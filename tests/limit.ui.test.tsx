@@ -113,31 +113,4 @@ describe('how many suggestions are shown', () => {
     await waitFor(() => expect(lastQuery(getRecommendationTree).limit).toBe(shownFor(20)))
     expect(cards()).toHaveLength(shownFor(20))
   })
-
-  // A scope change refetches under a new key, so without kept placeholder data
-  // the grid flashes its empty state while the rescore runs.
-  it('never blanks the grid while a new ranking is being scored', async () => {
-    let release: (() => void) | null = null
-    const all = pool(100)
-    const getRecommendations = vi.fn(async (query?: RecommendationQuery) => {
-      if (query?.scope === 'same-authors') await new Promise<void>((r) => (release = r))
-      return all.slice(0, query?.limit ?? 12)
-    })
-    installBridge(
-      { books: [makeBook({ id: 1, author: 'Someone', rating: 5 })] },
-      { getRecommendations, getRecommendationTree: async () => [] }
-    )
-    renderApp(<Discover />)
-    const user = userEvent.setup()
-    await waitFor(() => expect(cards()).toHaveLength(shownFor(1)))
-
-    await user.click(await screen.findByRole('radio', { name: 'My authors' }))
-    await waitFor(() => expect(release).not.toBeNull())
-
-    expect(cards()).toHaveLength(shownFor(1))
-    expect(screen.queryByText(/Nothing more by those authors yet/)).toBeNull()
-
-    release!()
-    await waitFor(() => expect(lastQuery(getRecommendations).scope).toBe('same-authors'))
-  })
 })

@@ -239,29 +239,56 @@ export function planDiscoveryQueries(books: DiscoveryBook[]): DiscoveryPlan {
     if (!usedSubjectKeys.has(topic.key)) addTopic(topic)
   }
 
-  const rank = new Map(rankedTopics.map((topic, index) => [topic.key, index]))
-  const seenAuthors = new Set<string>()
-  const authors: DiscoveryQuery[] = []
+  const authorOptions: {
+    author: string
+    authorKey: string
+    topicLabel: string
+    subjectKey: string
+  }[] = []
+  const optionAuthors = new Set<string>()
+  const topicRank = new Map(rankedTopics.map((topic, index) => [topic.key, index]))
 
   for (const { book, keys } of byBook) {
     const author = book.author?.trim()
     const authorKey = author?.toLowerCase()
-    if (!author || !authorKey || seenAuthors.has(authorKey)) continue
-
-    const topicKey = [...keys].sort(
-      (a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)
+    const genre = classify(book.subjects).genres[0]
+    const strongestTopicKey = [...keys].sort(
+      (a, b) => (topicRank.get(a) ?? Infinity) - (topicRank.get(b) ?? Infinity)
     )[0]
-    const topic = topicKey ? topics.get(topicKey) : undefined
-    if (!topic) continue
+    const strongestTopic = strongestTopicKey ? topics.get(strongestTopicKey) : undefined
+    const key = genre
+      ? (OPEN_LIBRARY_GENRE_SUBJECT[genre] ?? subjectKey(genre))
+      : (strongestTopic?.key ?? '')
+    const topicLabel = genre ?? strongestTopic?.label
+    if (!author || !authorKey || !topicLabel || !key || optionAuthors.has(authorKey)) continue
 
-    seenAuthors.add(authorKey)
+    optionAuthors.add(authorKey)
+    authorOptions.push({ author, authorKey, topicLabel, subjectKey: key })
+  }
+
+  const authors: DiscoveryQuery[] = []
+  const chosenAuthors = new Set<string>()
+
+  function addAuthor(option: (typeof authorOptions)[number]): void {
     authors.push({
-      query: `${authorClause(author)} AND ${subjectClause(topic)}`,
-      label: `More by ${author} about ${topic.label}`,
-      source: `author:${author}|subject:${topic.key}`,
+      query: `${authorClause(option.author)} AND subject_key:${option.subjectKey}`,
+      label: `More by ${option.author} in ${option.topicLabel}`,
+      source: `author:${option.author}|genre:${option.subjectKey}`,
       limit: PER_AUTHOR_QUERY
     })
+    chosenAuthors.add(option.authorKey)
+    usedSubjectKeys.add(option.subjectKey)
+  }
+
+  // Prefer familiar authors whose main genre did not already receive a broad
+  // request. A homogeneous shelf can still use the remaining slots afterward.
+  for (const option of authorOptions) {
     if (authors.length === MAX_AUTHOR_SUBJECT_QUERIES) break
+    if (!usedSubjectKeys.has(option.subjectKey)) addAuthor(option)
+  }
+  for (const option of authorOptions) {
+    if (authors.length === MAX_AUTHOR_SUBJECT_QUERIES) break
+    if (!chosenAuthors.has(option.authorKey)) addAuthor(option)
   }
 
   return { subjects, authors }

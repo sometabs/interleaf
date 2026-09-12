@@ -1,7 +1,6 @@
-import type { HarvestProgress, RecommendationScope } from '@shared/api'
+import type { HarvestProgress } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
-import { useDiscoverScope } from '../lib/discoverFilters'
 import { notify } from '../lib/feedback'
 import { useView } from '../lib/view'
 import {
@@ -21,15 +20,8 @@ import RecommendationTree from './RecommendationTree'
 
 type Layout = 'grid' | 'tree'
 
-/** One question, asked of everybody or of the people already read. */
-const SCOPES: readonly { value: RecommendationScope; label: string }[] = [
-  { value: 'all', label: 'All authors' },
-  { value: 'same-authors', label: 'My authors' }
-]
-
 export default function Discover(): ReactNode {
   const [layout, setLayout] = useState<Layout>('grid')
-  const [scope, setScope] = useDiscoverScope()
   const { view, navigate } = useView()
 
   const { data: books = [] } = useBooks()
@@ -40,9 +32,7 @@ export default function Discover(): ReactNode {
   // From the shelf, not this screen, and passed to the recommender rather than
   // trimming the result: a larger limit widens the MMR pool too.
   const limit = shownFor(books.length)
-  // The remembered scope is a statement about the shelf, so it would silently
-  // narrow a question asked of one book.
-  const query = likeBook ? { likeBookId: likeBook.id, limit } : { scope, limit }
+  const query = likeBook ? { likeBookId: likeBook.id, limit } : { limit }
 
   const { data: recommendations = [], isPending } = useRecommendations(query)
   const { data: tree = [] } = useRecommendationTree(query)
@@ -55,10 +45,6 @@ export default function Discover(): ReactNode {
   const ratedHighly = books.filter(
     (book) => book.status === 'read' && (book.rating ?? 0) >= 4
   ).length
-  // Scoping to known authors is meaningless when none is recorded, which is
-  // common among books added by hand.
-  const knownAuthors = books.some((book) => (book.author ?? '').trim() !== '')
-
   // Which book is being added, not merely that one is: adding fetches metadata
   // and a cover, so only that card should show the work.
   const saving = save.isPending ? save.variables : null
@@ -85,33 +71,6 @@ export default function Discover(): ReactNode {
       <header className="mb-6 flex items-start justify-between gap-4">
         <h1 className="text-[22px]">Discover</h1>
         <div className="flex shrink-0 items-center gap-2">
-          {/* A way of looking rather than a statement of taste: press it to see
-              the other side of the same shelf. */}
-          {!likeBook && (
-            <div
-              role="radiogroup"
-              aria-label="Authors"
-              className="inline-flex rounded-control bg-sunken p-0.5"
-            >
-              {SCOPES.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={scope === option.value}
-                  onClick={() => setScope(option.value)}
-                  className={`rounded-control px-2.5 py-1 text-[12px] transition-colors ${
-                    scope === option.value
-                      ? 'bg-surface font-medium text-ink shadow-card'
-                      : 'text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <div
             role="group"
             aria-label="Layout"
@@ -169,13 +128,9 @@ export default function Discover(): ReactNode {
           title={
             likeBook
               ? `Nothing in the pool resembles ${likeBook.title}`
-              : scope !== 'same-authors'
-                ? ratedHighly === 0
-                  ? 'Rate a book 4 or 5 stars to start'
-                  : 'Nothing to suggest yet'
-                : knownAuthors
-                  ? 'Nothing more by those authors yet'
-                  : 'No authors on your shelf yet'
+              : ratedHighly === 0
+                ? 'Rate a book 4 or 5 stars to start'
+                : 'Nothing to suggest yet'
           }
         />
       ) : layout === 'tree' ? (

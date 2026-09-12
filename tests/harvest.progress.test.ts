@@ -121,7 +121,7 @@ describe('reporting a harvest as it runs', () => {
 
     const seen = await run()
 
-    expect(seen.map((p) => p.label)).toContain('More by Stanisław Lem about science fiction')
+    expect(seen.map((p) => p.label)).toContain('More by Stanisław Lem in Science Fiction')
   })
 
   it('announces a step before spending the second it costs', async () => {
@@ -134,7 +134,7 @@ describe('reporting a harvest as it runs', () => {
     expect(events).toEqual([
       'report:More Science Fiction books',
       'fetch:subject',
-      'report:More by Stanisław Lem about science fiction',
+      'report:More by Stanisław Lem in Science Fiction',
       'fetch:author',
       'report:Sorting what came back'
     ])
