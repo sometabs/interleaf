@@ -1,6 +1,6 @@
-import { BOOK_STATUSES, STATUS_LABELS, type Book, type BookSubjects } from '@shared/api'
+import { BOOK_STATUSES, STATUS_LABELS, type Book } from '@shared/api'
 
-import { classify, fromChosenGenres, type BookCategories, type BookGroup } from '@shared/categories'
+import { fromChosenGenres, type BookCategories, type BookGroup } from '@shared/categories'
 
 // Every grouping returns the same shape, so the grid never learns which one it
 // is drawing.
@@ -110,20 +110,16 @@ function byAuthor(books: Book[]): Shelf[] {
 
 // ------------------------------------------------------------------ category
 
-// Classified once so chips, counts and shelves agree.
-export function categoriesOf(
-  subjects: BookSubjects[],
-  books: readonly Book[] = []
-): Map<number, BookCategories> {
-  const map = new Map(subjects.map((row) => [row.bookId, classify(row.subjects)]))
+// Collected once so chips, counts and shelves agree.
+export function categoriesOf(books: readonly Book[] = []): Map<number, BookCategories> {
+  const map = new Map<number, BookCategories>()
 
-  // A reader's choice outranks anything inferred.
+  // Categories exist only when the reader chose them. Open Library subjects
+  // remain searchable recommendation metadata, not shelf labels.
   for (const book of books) {
     if (book.genres === null) continue
     const chosen = fromChosenGenres(book.genres)
     if (chosen) map.set(book.id, chosen)
-    // An empty choice is "none apply", not "unfiled".
-    else if (book.genres.length === 0) map.delete(book.id)
   }
 
   return map
@@ -132,7 +128,6 @@ export function categoriesOf(
 // Calling a book with no subjects non-fiction would be inventing data.
 const UNFILED = 'Not categorised yet'
 
-// Null means no subjects at all, not no genres.
 function categoriesFor(book: Book, categories: Map<number, BookCategories>): BookCategories | null {
   return categories.get(book.id) ?? null
 }

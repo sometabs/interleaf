@@ -13,8 +13,7 @@ function rec(partial: Partial<Recommendation> & { olid: string; title: string })
     coverId: null,
     score: 0.5,
     becauseOf: null,
-    group: 'Fiction',
-    genres: ['Science Fiction'],
+    subjects: ['Science fiction'],
     ...partial
   }
 }
@@ -78,16 +77,21 @@ describe('author filter removal', () => {
 describe('books like one book', () => {
   const LIKE = [rec({ olid: 'SOL', title: 'Solaris', becauseOf: { bookId: 1, title: 'Ubik' } })]
 
-  function open(): { user: ReturnType<typeof userEvent.setup>; getRecommendations: Spy } {
+  function open(): {
+    user: ReturnType<typeof userEvent.setup>
+    getRecommendations: Spy
+    refreshRecommendations: Spy
+  } {
     const getRecommendations = vi.fn(async (query?: RecommendationQuery) =>
       query?.likeBookId === undefined ? ALL : LIKE
     )
+    const refreshRecommendations = vi.fn(async () => ({ harvested: 3, offline: false }))
     installBridge(
       { books: [makeBook({ id: 1, title: 'Ubik', author: 'Philip K. Dick', rating: 5 })] },
-      { getRecommendations, getRecommendationTree: async () => [] }
+      { getRecommendations, getRecommendationTree: async () => [], refreshRecommendations }
     )
     renderApp(<Discover />, { kind: 'discover', likeBookId: 1 })
-    return { user: userEvent.setup(), getRecommendations }
+    return { user: userEvent.setup(), getRecommendations, refreshRecommendations }
   }
 
   it('asks about that book alone', async () => {
@@ -100,6 +104,17 @@ describe('books like one book', () => {
   it('says which book is being matched', async () => {
     open()
     expect(await screen.findByText(/Books like/)).toBeTruthy()
+    expect(await screen.findByText(/cached results/)).toBeTruthy()
+  })
+
+  it('offers a separate targeted online search', async () => {
+    const { user, refreshRecommendations } = open()
+    await card('Solaris')
+
+    expect(refreshRecommendations).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Search online' }))
+
+    await waitFor(() => expect(refreshRecommendations).toHaveBeenCalledWith({ likeBookId: 1 }))
   })
 
   it('does not restore the removed author scope', async () => {

@@ -1,7 +1,6 @@
 import { BOOK_STATUSES, STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
-import { classify } from '@shared/categories'
 import { confirm } from '../lib/confirm'
 import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
 import { notify } from '../lib/feedback'
@@ -25,7 +24,6 @@ import QuoteCard from './QuoteCard'
 import EditableNumber from './EditableNumber'
 import EditableTitle from './EditableTitle'
 import Editor from './Editor'
-import GenrePicker from './GenrePicker'
 import Rating from './Rating'
 
 interface Props {
@@ -36,10 +34,6 @@ export default function BookDetail({ book }: Props): ReactNode {
   const { navigate, previous: cameFrom, back } = useView()
   const { data: notes = [], isPending } = useNotes(book.id)
   const { data: metadata } = useBookMetadata(book.id)
-
-  // Raw subjects are cataloguing data and never shown; `book.genres` outranks
-  // the guess drawn from them.
-  const inferred = classify(metadata?.subjects ?? [])
 
   const updateBook = useUpdateBook()
   const deleteBook = useDeleteBook()
@@ -291,13 +285,20 @@ export default function BookDetail({ book }: Props): ReactNode {
               />
             </div>
 
-            {/* Publisher blurbs give away the turn, so the summary is kept for the
-                recommender and not shown. */}
-            <GenrePicker
-              chosen={book.genres}
-              inferred={metadata ? inferred : null}
-              onCommit={(next) => updateBook.mutate({ id: book.id, patch: { genres: next } })}
-            />
+            {metadata && metadata.subjects.length > 0 && (
+              <details className="mt-3 text-[11px] text-ink-faint">
+                <summary className="cursor-pointer select-none">
+                  Open Library subjects ({metadata.subjects.length})
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {metadata.subjects.map((subject, index) => (
+                    <span key={`${subject}-${index}`} className="chip">
+                      {subject}
+                    </span>
+                  ))}
+                </div>
+              </details>
+            )}
 
             {/* The pull-left sits inside the rule, not on it: the row wraps, so
                 every line must start at the same edge as the one above. */}

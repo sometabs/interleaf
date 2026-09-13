@@ -427,7 +427,7 @@ function Subtree({
                 {child.similarityToParent !== null && (
                   <span
                     data-testid="tree-edge"
-                    title={[child.group, ...child.genres].join(' · ')}
+                    title={child.subjects.slice(0, 5).join(' · ') || undefined}
                     className="absolute top-0.5 left-1/2 -translate-x-1/2 bg-canvas px-1 text-[10px] tabular-nums text-ink-faint"
                   >
                     {percent(child.similarityToParent)}
@@ -471,9 +471,11 @@ function NodeCard({
       <h3 className="line-clamp-2 text-[12px] leading-snug font-medium">{node.title}</h3>
       {node.author && <p className="w-full truncate text-[11px] text-ink-muted">{node.author}</p>}
 
-      {/* Only the leading genre: a node is 144px wide, and the rest are on the
-          edge tooltip. A chip row here would widen every node in the tree. */}
-      <span className="chip max-w-full truncate text-[10px]">{node.genres[0] ?? node.group}</span>
+      {/* Only the leading subject: a node is 144px wide, and the next few are
+          on the edge tooltip. A chip row here would widen every node. */}
+      {node.subjects[0] && (
+        <span className="chip max-w-full truncate text-[10px]">{node.subjects[0]}</span>
+      )}
 
       <span className="text-[10px] tabular-nums text-ink-faint">{percent(node.score)} match</span>
 

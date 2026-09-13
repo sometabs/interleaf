@@ -134,6 +134,6 @@ describe('recommendTree', () => {
     const roots = recommendTree(library, candidates)
 
     expect(roots[0].becauseOf).toEqual({ bookId: 1, title: 'The Dispossessed' })
-    expect(roots[0].genres.length).toBeGreaterThan(0)
+    expect(roots[0].subjects.length).toBeGreaterThan(0)
   })
 })

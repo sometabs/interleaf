@@ -128,6 +128,54 @@ describe('a search that did happen', () => {
     expect(found?.[0]).toMatchObject({ olid: 'OL27448W', title: 'The Dispossessed' })
   })
 
+  it('collapses duplicate title/author results without changing API order', async () => {
+    respondWith({
+      docs: [
+        {
+          key: '/works/OL38060433W',
+          title: 'Being and Nothingness',
+          author_name: ['Jean-Paul Sartre'],
+          editions: {
+            docs: [
+              {
+                key: '/books/OL55213692M',
+                title: 'Being and Nothingness',
+                language: ['eng']
+              }
+            ]
+          }
+        },
+        {
+          key: '/works/OL1161325W',
+          title: "L'être et le néant",
+          author_name: ['Jean-Paul Sartre'],
+          subject: ['Existentialism', 'Ontology', 'Philosophy'],
+          editions: {
+            docs: [
+              {
+                key: '/books/OL51699762M',
+                title: 'Being and Nothingness',
+                cover_i: 14882069,
+                language: ['eng']
+              }
+            ]
+          }
+        }
+      ]
+    })
+    const searchBooks = await loadSearch()
+
+    const found = await searchBooks('Being and Nothingness')
+    expect(found).toHaveLength(1)
+    expect(found?.[0]).toMatchObject({
+      olid: 'OL38060433W',
+      editionOlid: 'OL55213692M',
+      title: 'Being and Nothingness',
+      coverId: null,
+      subjects: []
+    })
+  })
+
   it('is an empty array for a blank query, which never reaches the network', async () => {
     respondWith({ docs: [] })
     const searchBooks = await loadSearch()

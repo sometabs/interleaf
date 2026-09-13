@@ -54,13 +54,15 @@ export default function Discover(): ReactNode {
   }
 
   function findMore(): void {
-    refresh.mutate(undefined, {
+    refresh.mutate(likeBook ? { likeBookId: likeBook.id } : undefined, {
       onSuccess: (result) => {
         if (result.harvested > 0) return
         notify(
           result.offline
             ? 'Could not reach Open Library, so this is what is cached.'
-            : 'Rate a few books 4 or 5 stars to get recommendations.'
+            : likeBook
+              ? 'No new online matches were found for this book.'
+              : 'Rate a few books 4 or 5 stars to get recommendations.'
         )
       }
     })
@@ -99,7 +101,7 @@ export default function Discover(): ReactNode {
             onClick={findMore}
             disabled={refresh.isPending}
           >
-            {refresh.isPending ? 'Searching…' : 'Search'}
+            {refresh.isPending ? 'Searching…' : likeBook ? 'Search online' : 'Search'}
           </button>
         </div>
       </header>
@@ -108,6 +110,7 @@ export default function Discover(): ReactNode {
         <section className="mb-6 flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-5 py-3">
           <p className="min-w-0 text-[13px] text-ink-muted">
             Books like <span className="font-medium text-ink">{likeBook.title}</span>
+            {!refresh.isPending && <span className="ml-1">· cached results</span>}
           </p>
           <button
             type="button"
@@ -158,12 +161,9 @@ export default function Discover(): ReactNode {
                 )}
 
                 <div className="mt-2 flex flex-wrap gap-1">
-                  <span className="chip bg-accent-soft text-[10px] font-medium text-accent">
-                    {rec.group}
-                  </span>
-                  {rec.genres.map((genre) => (
-                    <span key={genre} className="chip text-[10px]">
-                      {genre}
+                  {rec.subjects.slice(0, 3).map((subject, index) => (
+                    <span key={`${subject}-${index}`} className="chip text-[10px]">
+                      {subject}
                     </span>
                   ))}
                 </div>

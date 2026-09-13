@@ -7,8 +7,8 @@ import type {
   Book,
   InterleafApi,
   InterleafBridge,
-  BookSubjects,
   HarvestProgress,
+  MetadataRefreshProgress,
   Note
 } from '../../src/shared/api'
 import { fail } from '../../src/renderer/src/lib/feedback'
@@ -20,6 +20,7 @@ export function makeBook(overrides: Partial<Book> = {}): Book {
     title: 'The Dispossessed',
     author: 'Ursula K. Le Guin',
     isbn: null,
+    editionOlid: null,
     olid: null,
     coverPath: null,
     pageCount: null,
@@ -57,13 +58,15 @@ export interface FakeBridge {
   created: unknown[]
   deleted: number[]
   emitHarvestProgress: (progress: HarvestProgress) => void
+  emitMetadataRefreshProgress: (progress: MetadataRefreshProgress) => void
 }
 
 export function installBridge(
-  initial: { books?: Book[]; notes?: Note[]; subjects?: BookSubjects[] } = {},
+  initial: { books?: Book[]; notes?: Note[] } = {},
   overrides: Partial<InterleafApi> = {}
 ): FakeBridge {
   const listeners = new Set<(progress: HarvestProgress) => void>()
+  const metadataListeners = new Set<(progress: MetadataRefreshProgress) => void>()
 
   const state: FakeBridge = {
     books: initial.books ?? [],
@@ -72,6 +75,9 @@ export function installBridge(
     deleted: [],
     emitHarvestProgress: (progress) => {
       for (const listener of listeners) listener(progress)
+    },
+    emitMetadataRefreshProgress: (progress) => {
+      for (const listener of metadataListeners) listener(progress)
     }
   }
   let nextId = 90
@@ -81,6 +87,10 @@ export function installBridge(
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
+    onMetadataRefreshProgress: (listener) => {
+      metadataListeners.add(listener)
+      return () => metadataListeners.delete(listener)
+    },
 
     listBooks: async () => state.books.map((book) => ({ ...book })),
     listNotes: async (bookId?: number | null) =>
@@ -89,9 +99,21 @@ export function installBridge(
         .map((note) => ({ ...note })),
     getNote: async (id: number) => state.notes.find((note) => note.id === id) ?? null,
     getBookMetadata: async () => null,
-    listBookSubjects: async () => initial.subjects ?? [],
     search: async () => [],
     getRecommendations: async () => [],
+    refreshAllMetadata: async () => ({
+      refreshed: state.books.length,
+      failures: [],
+      cancelled: false,
+      offline: false
+    }),
+    retryMetadataRefresh: async (bookIds) => ({
+      refreshed: bookIds.length,
+      failures: [],
+      cancelled: false,
+      offline: false
+    }),
+    cancelMetadataRefresh: async () => {},
 
     createBook: async (input) => {
       const book = makeBook({ ...input, id: nextId++ })

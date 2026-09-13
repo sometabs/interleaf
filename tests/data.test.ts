@@ -16,11 +16,15 @@ beforeEach(() => {
 function candidate(olid: string, title: string, author: string | null): meta.CandidateRow {
   return {
     olid,
+    editionOlid: null,
+    isbn: null,
     title,
     author,
     subjects: ['science fiction'],
     description: null,
     coverId: null,
+    pageCount: null,
+    publishedYear: null,
     source: 'subject:x',
     languages: ['eng']
   }

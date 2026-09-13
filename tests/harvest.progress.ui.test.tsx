@@ -16,8 +16,7 @@ const REC: Recommendation = {
   coverId: null,
   score: 0.5,
   becauseOf: null,
-  group: 'Fiction',
-  genres: ['Science Fiction']
+  subjects: ['Science fiction']
 }
 
 // A refresh that never settles, so the pending state can be examined.

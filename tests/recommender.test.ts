@@ -66,7 +66,7 @@ describe('recommend', () => {
     expect(top.becauseOf).toEqual({ bookId: 7, title: 'The Dispossessed' })
   })
 
-  it('reports the candidate genres, never its raw subjects', () => {
+  it('reports the candidate subjects exactly as Open Library returned them', () => {
     const library = [lib({ bookId: 1, title: 'A', subjects: SCIFI, rating: 5 })]
     const [top] = recommend(library, [
       cand({
@@ -76,8 +76,12 @@ describe('recommend', () => {
       })
     ])
 
-    expect(top.group).toBe('Fiction')
-    expect(top.genres).toEqual(['Science Fiction'])
+    expect(top.subjects).toEqual([
+      'genre:science fiction',
+      'franchise:Ekumen',
+      'Anarchism',
+      'Accessible book'
+    ])
   })
 
   it('ignores books rated below 3 when building taste', () => {
@@ -204,6 +208,17 @@ describe('recommend', () => {
   it('does not crash on empty subjects and descriptions', () => {
     const library = [lib({ bookId: 1, title: 'A', rating: 5 })]
     expect(() => recommend(library, [cand({ olid: 'C', title: 'B' })])).not.toThrow()
+  })
+
+  it('does not silently discard Open Library catalogue subjects', () => {
+    const library = [
+      lib({ bookId: 1, title: 'A', subjects: ['Accessible book', 'Large type books'] })
+    ]
+    const candidates = [
+      cand({ olid: 'C', title: 'B', subjects: ['Accessible book', 'Large type books'] })
+    ]
+
+    expect(recommend(library, candidates).map((book) => book.olid)).toEqual(['C'])
   })
 })
 
@@ -449,9 +464,8 @@ describe('filtering by language', () => {
     expect(olids([]).sort()).toEqual(['BOTH', 'ENG', 'JPN', 'NONE'])
   })
 
-  it('falls back to the English lock rather than to no filter at all', () => {
-    // Omitting the option must not disable the filter.
-    expect(olids(undefined).sort()).toEqual(['BOTH', 'ENG'])
+  it('does not exclude original editions by default', () => {
+    expect(olids(undefined).sort()).toEqual(['BOTH', 'ENG', 'JPN', 'NONE'])
   })
 
   it('drops books with no edition in a language you read', () => {

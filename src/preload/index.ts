@@ -5,6 +5,8 @@ import {
   type InterleafApi,
   type InterleafBridge,
   type HarvestProgress,
+  METADATA_REFRESH_PROGRESS_CHANNEL,
+  type MetadataRefreshProgress,
   IPC_CHANNELS
 } from '../shared/api'
 
@@ -31,6 +33,13 @@ const bridge: InterleafBridge = {
     ipcRenderer.on(HARVEST_PROGRESS_CHANNEL, wrapped)
     return () => {
       ipcRenderer.off(HARVEST_PROGRESS_CHANNEL, wrapped)
+    }
+  },
+  onMetadataRefreshProgress(listener: (progress: MetadataRefreshProgress) => void) {
+    const wrapped = (_event: unknown, progress: MetadataRefreshProgress): void => listener(progress)
+    ipcRenderer.on(METADATA_REFRESH_PROGRESS_CHANNEL, wrapped)
+    return () => {
+      ipcRenderer.off(METADATA_REFRESH_PROGRESS_CHANNEL, wrapped)
     }
   }
 }

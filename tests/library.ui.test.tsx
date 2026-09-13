@@ -1,29 +1,40 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import Library from '../src/renderer/src/components/Library'
+import { resetConfirm } from '../src/renderer/src/lib/confirm'
 import { installBridge, makeBook, renderApp } from './helpers/render'
+
+afterEach(resetConfirm)
 
 // The grouping rules themselves are covered in `shelves.test.ts`.
 
-const SOLARIS = makeBook({ id: 1, title: 'Solaris', author: 'Stanisław Lem', status: 'read' })
+const SOLARIS = makeBook({
+  id: 1,
+  title: 'Solaris',
+  author: 'Stanisław Lem',
+  status: 'read',
+  genres: ['Science Fiction']
+})
 const PICNIC = makeBook({
   id: 2,
   title: 'Roadside Picnic',
   author: 'Strugatsky',
-  status: 'reading'
+  status: 'reading',
+  genres: ['Science Fiction', 'Thriller & Suspense']
 })
-const HALL = makeBook({ id: 3, title: 'Wolf Hall', author: 'Hilary Mantel', status: 'want' })
+const HALL = makeBook({
+  id: 3,
+  title: 'Wolf Hall',
+  author: 'Hilary Mantel',
+  status: 'want',
+  genres: ['Historical Fiction']
+})
 
-const SUBJECTS = [
-  { bookId: 1, subjects: ['Science fiction'] },
-  { bookId: 2, subjects: ['Science fiction'] },
-  { bookId: 3, subjects: ['Great Britain', 'History'] }
-]
-
-function show(subjects = SUBJECTS): ReturnType<typeof userEvent.setup> {
-  installBridge({ books: [SOLARIS, PICNIC, HALL], subjects })
+function show(): ReturnType<typeof userEvent.setup> {
+  installBridge({ books: [SOLARIS, PICNIC, HALL] })
   renderApp(<Library onAdd={() => {}} />)
   return userEvent.setup()
 }
@@ -46,7 +57,11 @@ describe('grouping the library', () => {
 
     await user.click(await screen.findByRole('radio', { name: 'Category' }))
 
-    expect(await headings()).toEqual(['Science Fiction · 2', 'History · 1'])
+    expect(await headings()).toEqual([
+      'Science Fiction · 2',
+      'Historical Fiction · 1',
+      'Thriller & Suspense · 1'
+    ])
   })
 
   it('regroups alphabetically on request, ignoring a leading article', async () => {
@@ -90,7 +105,7 @@ describe('filtering inside a grouping', () => {
     await user.click(await screen.findByRole('radio', { name: 'Category' }))
     await user.type(screen.getByLabelText('Filter library'), 'wolf')
 
-    await waitFor(async () => expect(await headings()).toEqual(['History · 1']))
+    await waitFor(async () => expect(await headings()).toEqual(['Historical Fiction · 1']))
     expect(screen.queryByText('Solaris')).toBeNull()
   })
 
@@ -103,75 +118,38 @@ describe('filtering inside a grouping', () => {
   })
 })
 
-describe('a library Open Library has never seen', () => {
-  it('explains the empty category view instead of filing everything blind', async () => {
-    const user = show([])
+describe('a library the reader has not categorised', () => {
+  it('explains the category view instead of filing everything automatically', async () => {
+    installBridge({ books: [makeBook({ id: 10, title: 'Unfiled' })] })
+    renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
 
     await user.click(await screen.findByRole('radio', { name: 'Category' }))
 
-    expect(await screen.findByText(/no subjects yet/)).toBeTruthy()
+    expect(await screen.findByText(/not been categorised yet/)).toBeTruthy()
   })
 
-  it('stays quiet when the books do have subjects', async () => {
+  it('stays quiet when the reader chose categories', async () => {
     const user = show()
 
     await user.click(await screen.findByRole('radio', { name: 'Category' }))
     await screen.findByText('Science Fiction · 2')
 
-    expect(screen.queryByText(/no subjects yet/)).toBeNull()
-  })
-
-  it('tells a failed load apart from an empty one', async () => {
-    // A main process older than the renderer: the channel exists in the preload
-    // but nothing answers it, which must not read as "no subjects".
-    installBridge(
-      { books: [SOLARIS, HALL] },
-      {
-        listBookSubjects: async () => {
-          throw new Error("No handler registered for 'listBookSubjects'")
-        }
-      }
-    )
-    renderApp(<Library onAdd={() => {}} />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-
-    expect(await screen.findByText(/could not be loaded/)).toBeTruthy()
-    expect(screen.queryByText(/no subjects yet/)).toBeNull()
-  })
-
-  it('stays quiet when subjects are known but none of them names a genre', async () => {
-    // Both have subjects but neither names a genre, so both fall back.
-    installBridge({
-      books: [SOLARIS, HALL],
-      subjects: [
-        { bookId: 1, subjects: ['Accessible book'] },
-        { bookId: 3, subjects: ['Tudor England'] }
-      ]
-    })
-    renderApp(<Library onAdd={() => {}} />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-    await screen.findByText('Non-fiction · 2')
-
-    expect(screen.queryByText(/no subjects yet/)).toBeNull()
+    expect(screen.queryByText(/not been categorised yet/)).toBeNull()
   })
 })
 
 describe('filtering by group, then by genre', () => {
-  const MEMOIR = makeBook({ id: 4, title: "Can't Hurt Me", author: 'David Goggins' })
+  const MEMOIR = makeBook({
+    id: 4,
+    title: "Can't Hurt Me",
+    author: 'David Goggins',
+    genres: ['Biography & Memoir', 'Sports']
+  })
   const MIXED = [SOLARIS, PICNIC, HALL, MEMOIR]
-  const MIXED_SUBJECTS = [
-    { bookId: 1, subjects: ['Science fiction'] },
-    { bookId: 2, subjects: ['Science fiction', 'Suspense'] },
-    { bookId: 3, subjects: ['Historical fiction'] },
-    { bookId: 4, subjects: ['Athletes, biography', 'Triathlon'] }
-  ]
 
   async function openCategory(): Promise<ReturnType<typeof userEvent.setup>> {
-    installBridge({ books: MIXED, subjects: MIXED_SUBJECTS })
+    installBridge({ books: MIXED })
     renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
     await user.click(await screen.findByRole('radio', { name: 'Category' }))
@@ -283,5 +261,96 @@ describe('filtering by group, then by genre', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Science Fiction' }))
     expect((await headings()).length).toBeGreaterThan(1)
+  })
+})
+
+describe('refreshing all metadata', () => {
+  it('confirms the permanent action and reports progress', async () => {
+    let finish:
+      | ((value: { refreshed: number; failures: []; cancelled: boolean; offline: boolean }) => void)
+      | null = null
+    const refreshAllMetadata = vi.fn(
+      () =>
+        new Promise<{
+          refreshed: number
+          failures: []
+          cancelled: boolean
+          offline: boolean
+        }>((resolve) => {
+          finish = resolve
+        })
+    )
+    const cancelMetadataRefresh = vi.fn(async () => undefined)
+    const bridge = installBridge(
+      { books: [SOLARIS, PICNIC, HALL] },
+      { refreshAllMetadata, cancelMetadataRefresh }
+    )
+    renderApp(
+      <>
+        <Library onAdd={() => {}} />
+        <ConfirmDialog />
+      </>
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh all metadata' }))
+    expect(await screen.findByText('Refresh metadata for all 3 books?')).toBeTruthy()
+    expect(refreshAllMetadata).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Refresh all' }))
+    await waitFor(() => expect(refreshAllMetadata).toHaveBeenCalledOnce())
+
+    act(() =>
+      bridge.emitMetadataRefreshProgress({ done: 1, total: 3, label: 'Refreshing “Solaris”' })
+    )
+    expect(await screen.findByRole('region', { name: 'Metadata refresh progress' })).toBeTruthy()
+    expect(screen.getByText('1 of 3')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel refresh' }))
+    expect(cancelMetadataRefresh).toHaveBeenCalledOnce()
+
+    act(() => finish?.({ refreshed: 1, failures: [], cancelled: true, offline: false }))
+    expect(await screen.findByText('Refresh stopped after 1 book.')).toBeTruthy()
+  })
+
+  it('lists books Open Library could not match', async () => {
+    const retryMetadataRefresh = vi.fn(async () => ({
+      refreshed: 1,
+      failures: [],
+      cancelled: false,
+      offline: false
+    }))
+    installBridge(
+      { books: [SOLARIS] },
+      {
+        refreshAllMetadata: async () => ({
+          refreshed: 0,
+          failures: [{ bookId: 1, title: 'Solaris', reason: 'No English edition was found.' }],
+          cancelled: false,
+          offline: false
+        }),
+        retryMetadataRefresh
+      }
+    )
+    renderApp(
+      <>
+        <Library onAdd={() => {}} />
+        <ConfirmDialog />
+      </>
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh all metadata' }))
+    await user.click(await screen.findByRole('button', { name: 'Refresh all' }))
+
+    expect(await screen.findByText(/0 books refreshed; 1 could not be matched/)).toBeTruthy()
+    await user.click(screen.getByText('Books needing attention (1)'))
+    expect(document.body.textContent).toContain('No English edition was found.')
+
+    await user.click(screen.getByRole('button', { name: 'Retry failed books' }))
+    await waitFor(() => expect(retryMetadataRefresh).toHaveBeenCalledWith([1]))
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Metadata refresh summary' })).toBeNull()
+    )
   })
 })

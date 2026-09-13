@@ -1,8 +1,16 @@
-import { type Book } from '@shared/api'
+import { type Book, type MetadataRefreshProgress, type MetadataRefreshResult } from '@shared/api'
 import type { BookGroup } from '@shared/categories'
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { useBooks, useBookSubjects } from '../lib/queries'
+import { confirm } from '../lib/confirm'
+import { notify } from '../lib/feedback'
+import {
+  useBooks,
+  useCancelMetadataRefresh,
+  useMetadataRefreshProgress,
+  useRefreshAllMetadata,
+  useRetryMetadataRefresh
+} from '../lib/queries'
 import {
   categoriesOf,
   filterByCategory,
@@ -26,14 +34,20 @@ const GROUPS: readonly BookGroup[] = ['Fiction', 'Non-fiction']
 export default function Library({ onAdd }: Props): ReactNode {
   const { navigate } = useView()
   const { data: books = [], isPending } = useBooks()
-  const { data: subjects = [], error: subjectsError } = useBookSubjects()
+  const refresh = useRefreshAllMetadata()
+  const retryRefresh = useRetryMetadataRefresh()
+  const cancelRefresh = useCancelMetadataRefresh()
+  const refreshing = refresh.isPending || retryRefresh.isPending
+  const progress = useMetadataRefreshProgress(refreshing)
 
   const [filter, setFilter] = useState('')
   const [grouping, setGrouping] = useState<Grouping>('status')
   const [group, setGroup] = useState<BookGroup | null>(null)
   const [genre, setGenre] = useState<string | null>(null)
+  const [refreshResult, setRefreshResult] = useState<MetadataRefreshResult | null>(null)
+  const [stopRequested, setStopRequested] = useState(false)
 
-  const categories = useMemo(() => categoriesOf(subjects, books), [subjects, books])
+  const categories = useMemo(() => categoriesOf(books), [books])
 
   const query = filter.trim().toLowerCase()
   const matching = query
@@ -74,28 +88,76 @@ export default function Library({ onAdd }: Props): ReactNode {
     )
   }
 
-  // Defaulted to [], a failed read looks like an empty one and blames Open
-  // Library for what is actually a broken IPC channel.
-  const categoriesUnavailable = grouping === 'category' && Boolean(subjectsError)
-
-  // Nothing looked up yet, so every shelf would read "Not categorised yet".
-  // Say what to do about it rather than looking broken.
-  const known = new Set(subjects.map((row) => row.bookId))
+  // Category shelves are reader-owned. Explain a wholly unfiled view without
+  // implying that Open Library failed to classify it.
   const unfiled =
     grouping === 'category' &&
-    !categoriesUnavailable &&
     matching.length > 0 &&
-    !matching.some((book) => known.has(book.id))
+    !matching.some((book) => categories.has(book.id))
 
   function chooseGroup(next: BookGroup | null): void {
     setGroup(next)
     setGenre(null) // the genres on offer are about to change
   }
 
+  async function startMetadataRefresh(): Promise<void> {
+    const ok = await confirm({
+      title: `Refresh metadata for all ${books.length} books?`,
+      body: `Open Library will refresh each current book by its stored Work ID, one at a time, using about ${books.length * 2} metadata requests. Your ratings, status, notes, dates and categories will not change.`,
+      confirmLabel: 'Refresh all'
+    })
+    if (!ok) return
+
+    setRefreshResult(null)
+    setStopRequested(false)
+    refresh.mutate(undefined, {
+      onSuccess: finishMetadataRefresh,
+      onSettled: () => setStopRequested(false)
+    })
+  }
+
+  function finishMetadataRefresh(result: MetadataRefreshResult): void {
+    setRefreshResult(result)
+    if (!result.cancelled && !result.offline && result.failures.length === 0) {
+      notify(
+        `Refreshed metadata for ${result.refreshed} ${result.refreshed === 1 ? 'book' : 'books'}.`
+      )
+    }
+  }
+
+  function retryFailures(): void {
+    if (!refreshResult || refreshResult.failures.length === 0) return
+    const ids = refreshResult.failures.map((failure) => failure.bookId)
+    setRefreshResult(null)
+    setStopRequested(false)
+    retryRefresh.mutate(ids, {
+      onSuccess: finishMetadataRefresh,
+      onSettled: () => setStopRequested(false)
+    })
+  }
+
   return (
     <div className="h-full overflow-y-auto px-8 pt-7 pb-16">
       <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="mr-auto text-[22px]">Library</h1>
+
+        {refreshing ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={stopRequested}
+            onClick={() => {
+              setStopRequested(true)
+              cancelRefresh.mutate()
+            }}
+          >
+            {stopRequested ? 'Stopping…' : 'Cancel refresh'}
+          </button>
+        ) : (
+          <button type="button" className="btn" onClick={() => void startMetadataRefresh()}>
+            Refresh all metadata
+          </button>
+        )}
 
         <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
 
@@ -108,7 +170,14 @@ export default function Library({ onAdd }: Props): ReactNode {
         />
       </header>
 
-      {grouping === 'category' && !categoriesUnavailable && (
+      {refreshing && <MetadataProgressPanel progress={progress} />}
+      {!refreshing &&
+        refreshResult &&
+        (refreshResult.cancelled || refreshResult.offline || refreshResult.failures.length > 0) && (
+          <MetadataRefreshSummary result={refreshResult} onRetry={retryFailures} />
+        )}
+
+      {grouping === 'category' && (
         <div className="mb-6 flex flex-col gap-2.5">
           <Segmented
             label="Group"
@@ -140,12 +209,10 @@ export default function Library({ onAdd }: Props): ReactNode {
         </div>
       )}
 
-      {categoriesUnavailable && (
-        <p className="mb-6 text-[13px] text-ink-muted">Categories could not be loaded.</p>
-      )}
-
       {unfiled && (
-        <p className="mb-6 text-[13px] text-ink-muted">These books have no subjects yet.</p>
+        <p className="mb-6 text-[13px] text-ink-muted">
+          These books have not been categorised yet.
+        </p>
       )}
 
       {shown.length === 0 ? (
@@ -162,6 +229,83 @@ export default function Library({ onAdd }: Props): ReactNode {
         ))
       )}
     </div>
+  )
+}
+
+function MetadataProgressPanel({
+  progress
+}: {
+  progress: MetadataRefreshProgress | null
+}): ReactNode {
+  const total = progress?.total ?? 0
+  const done = progress?.done ?? 0
+  const share = total > 0 ? Math.min(done / total, 1) : 0
+
+  return (
+    <section aria-label="Metadata refresh progress" className="card mb-6 px-5 py-4">
+      <div className="mb-2.5 flex items-baseline justify-between gap-4">
+        <p aria-live="polite" className="min-w-0 truncate text-[13px] text-ink">
+          {progress?.label ?? 'Contacting Open Library…'}
+        </p>
+        {total > 0 && (
+          <p className="shrink-0 text-[12px] tabular-nums text-ink-faint">
+            {done} of {total}
+          </p>
+        )}
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total || 1}
+        aria-valuenow={done}
+        className="h-1 overflow-hidden rounded-full bg-sunken"
+      >
+        <div
+          className="h-full rounded-full bg-accent transition-[width] duration-300"
+          style={{ width: `${Math.round(share * 100)}%` }}
+        />
+      </div>
+    </section>
+  )
+}
+
+function MetadataRefreshSummary({
+  result,
+  onRetry
+}: {
+  result: MetadataRefreshResult
+  onRetry: () => void
+}): ReactNode {
+  const refreshedBooks = `${result.refreshed} ${result.refreshed === 1 ? 'book' : 'books'}`
+  return (
+    <section aria-label="Metadata refresh summary" className="card mb-6 px-5 py-4 text-[13px]">
+      <p className="text-ink">
+        {result.cancelled
+          ? `Refresh stopped after ${refreshedBooks}.`
+          : result.offline
+            ? `Refresh paused because Open Library became unreachable. ${refreshedBooks} refreshed.`
+            : `${refreshedBooks} refreshed; ${result.failures.length} could not be matched.`}
+      </p>
+      {result.failures.length > 0 && (
+        <>
+          <details className="mt-2 text-ink-muted">
+            <summary className="cursor-pointer">
+              Books needing attention ({result.failures.length})
+            </summary>
+            <ul className="mt-2 space-y-1 pl-5">
+              {result.failures.map((failure) => (
+                <li key={failure.bookId}>
+                  <span className="font-medium text-ink">{failure.title}</span> — {failure.reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+          <button type="button" className="btn mt-3" onClick={onRetry}>
+            Retry failed books
+          </button>
+        </>
+      )}
+    </section>
   )
 }
 

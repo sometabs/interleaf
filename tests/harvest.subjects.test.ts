@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
 import { isTopicSubject, planDiscoveryQueries } from '../src/main/services/harvest'
-import { saveBookMetadata, scorableCandidates } from '../src/main/repos/metadata'
+import { saveBookMetadata, scorableCandidates, upsertCandidates } from '../src/main/repos/metadata'
 
 let db: Database
 let queries: string[] = []
@@ -13,12 +13,8 @@ function installFetch(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: string | URL) => {
-      const url = new URL(String(input))
-      const q = url.searchParams.get('q')
-      const author = url.searchParams.get('author')
+      const q = new URL(String(input)).searchParams.get('q')
       if (q) queries.push(q)
-      if (author) queries.push(`author:${author}`)
-
       return {
         ok: true,
         status: 200,
@@ -49,7 +45,6 @@ async function harvestWith(subjects: string[]): Promise<string[]> {
   const done = harvest.harvestCandidates(db, ['eng'])
   await vi.advanceTimersByTimeAsync(120_000)
   await done
-
   return queries
 }
 
@@ -65,88 +60,55 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('telling a topic from a filing card', () => {
-  const topics = [
-    'human nature',
-    'gender',
-    'space travel',
-    'Dystopia',
-    'post-apocalyptic fiction',
-    'Fathers and sons',
-    'Home schooling',
-    'Science fiction',
-    'Fictional characters'
-  ]
-  for (const subject of topics) {
-    it(`keeps "${subject}"`, () => {
-      expect(isTopicSubject(subject)).toBe(true)
-    })
-  }
-
-  const filing = [
-    'award:hugo_award=1970',
-    'nyt:paperback-nonfiction=2018-06-03',
-    'Hugo Award Winner',
-    'New York Times bestseller',
-    'Open Library Staff Picks',
-    'Reading Level-Grade 7',
-    'Accessible book',
-    'Protected DAISY',
-    'In library',
-    'OverDrive',
-    'Large type books',
-    'Fiction',
-    'General',
-    'Novels',
-    'FICTION / Science Fiction / Action & Adventure',
-    'BIOGRAPHY & AUTOBIOGRAPHY / Personal Memoirs',
-    'Long Now Manual for Civilization',
-    'Fiction, science fiction, general',
-    'Science fiction, American',
-    'Dune (Imaginary place)',
-    'Translations into Yiddish',
-    'German language',
-    'Ciencia-ficción',
-    'Identité de genre',
-    'ab'
-  ]
-  for (const subject of filing) {
-    it(`refuses "${subject}"`, () => {
-      expect(isTopicSubject(subject)).toBe(false)
-    })
-  }
-
-  // A work is filed under its subjects in every language it was catalogued
-  // in, and each spelling costs a request for the same books.
-  const otherLanguages = [
-    'Ciencia-ficción',
-    'Historia',
-    'Historia universal',
-    'Novela',
-    'Geschichte',
-    'Literatura',
-    'Letteratura',
-    'Histoire',
-    'Amerikanisches Englisch'
-  ]
-  for (const subject of otherLanguages) {
-    it(`refuses "${subject}", which is a subject it already has in English`, () => {
-      expect(isTopicSubject(subject)).toBe(false)
-    })
-  }
-
-  // Short on purpose: "Roman" leads French and German subjects but also
-  // "Roman Britain", and refusing a real subject is the worse error.
-  it('does not refuse an English subject that looks foreign', () => {
-    expect(isTopicSubject('Roman Britain')).toBe(true)
-    expect(isTopicSubject('Romance')).toBe(true)
-    expect(isTopicSubject('History')).toBe(true)
+describe('using Open Library subjects directly', () => {
+  it('accepts catalogue, facet, and non-English subjects instead of classifying them', () => {
+    expect(isTopicSubject('Accessible book')).toBe(true)
+    expect(isTopicSubject('award:hugo_award=1970')).toBe(true)
+    expect(isTopicSubject('Ciencia-ficción')).toBe(true)
+    expect(isTopicSubject('Knowledge, theory of')).toBe(true)
   })
 
-  it('does not refuse a topic that merely starts with a refused word', () => {
-    expect(isTopicSubject('Fictional characters')).toBe(true)
-    expect(isTopicSubject('Literature and society')).toBe(true)
-    expect(isTopicSubject('Generation ships')).toBe(true)
+  it('rejects only an empty or non-searchable value', () => {
+    expect(isTopicSubject('')).toBe(false)
+    expect(isTopicSubject('  = / :  ')).toBe(false)
+  })
+
+  it('queries the returned label rather than translating it to a local genre', () => {
+    const plan = planDiscoveryQueries([
+      { title: 'A', author: null, subjects: ['Fiction, psychological', 'Accessible book'] }
+    ])
+
+    expect(plan.subjects.map((entry) => entry.query)).toEqual([
+      'subject:"Fiction, psychological"',
+      'subject:"Accessible book"'
+    ])
+  })
+
+  it('uses every subject when choosing the six strongest unique queries', () => {
+    const subjects = Array.from({ length: 14 }, (_, index) => `Subject ${index + 1}`)
+    const plan = planDiscoveryQueries([{ title: 'A', author: null, subjects }])
+
+    expect(plan.subjects).toHaveLength(6)
+    expect(plan.subjects.map((entry) => entry.query)).toEqual(
+      subjects.slice(0, 6).map((subject) => `subject:"${subject}"`)
+    )
+  })
+
+  it('ranks a subject shared by more liked books first', () => {
+    const plan = planDiscoveryQueries([
+      { title: 'A', author: null, subjects: ['Anarchism', 'Utopias'] },
+      { title: 'B', author: null, subjects: ['Philosophy', 'Anarchism'] }
+    ])
+
+    expect(plan.subjects[0].query).toBe('subject:"Anarchism"')
+  })
+
+  it('preserves non-ASCII labels in the query', () => {
+    const plan = planDiscoveryQueries([
+      { title: 'A', author: null, subjects: ['Identité de genre'] }
+    ])
+
+    expect(plan.subjects[0].query).toBe('subject:"Identité de genre"')
   })
 })
 
@@ -158,7 +120,7 @@ describe('what a search actually asks for', () => {
       status: 'want',
       rating: 5
     })
-    saveBookMetadata(db, book.id, { subjects: ['science fiction', 'politics'], description: null })
+    saveBookMetadata(db, book.id, { subjects: ['science fiction'], description: null })
 
     const harvest = await load()
     const done = harvest.harvestCandidates(db, ['eng'])
@@ -168,136 +130,92 @@ describe('what a search actually asks for', () => {
     expect(queries).toEqual([])
   })
 
-  it('spends no request on a facet', async () => {
-    const asked = await harvestWith([
-      'award:hugo_award=1970',
-      'award:hugo_award=novel',
-      'Hugo Award Winner',
-      'human nature',
-      'gender'
+  it('targets only the selected book when searching online for similar books', async () => {
+    const philosophy = books.createBook(db, {
+      title: 'Being and Nothingness',
+      author: 'Jean-Paul Sartre',
+      status: 'read',
+      rating: 5
+    })
+    saveBookMetadata(db, philosophy.id, { subjects: ['philosophy'], description: null })
+    const scienceFiction = books.createBook(db, {
+      title: 'Solaris',
+      author: 'Stanisław Lem',
+      status: 'want'
+    })
+    saveBookMetadata(db, scienceFiction.id, {
+      subjects: ['science fiction'],
+      description: null
+    })
+
+    const harvest = await load()
+    const done = harvest.harvestCandidates(db, ['eng'], undefined, scienceFiction.id)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await done
+
+    expect(queries).toEqual([
+      'subject:"science fiction"',
+      'author:"Stanisław Lem" AND subject:"science fiction"'
+    ])
+    expect(queries.some((query) => query.includes('philosophy'))).toBe(false)
+  })
+
+  it('adds a targeted online search without replacing the general cache', async () => {
+    const book = books.createBook(db, { title: 'Solaris', author: 'Stanisław Lem' })
+    saveBookMetadata(db, book.id, { subjects: ['science fiction'], description: null })
+    upsertCandidates(db, [
+      {
+        olid: 'OL1W',
+        editionOlid: 'OL1M',
+        isbn: null,
+        title: 'A cached book',
+        author: 'Someone',
+        subjects: ['philosophy'],
+        description: null,
+        coverId: null,
+        pageCount: null,
+        publishedYear: null,
+        source: 'subject:philosophy',
+        languages: ['eng']
+      }
     ])
 
-    expect(asked.join(' ')).toContain('subject_key:nature')
-    expect(asked.join(' ')).toContain('subject_key:gender')
-    expect(asked.join(' ')).not.toContain('award')
+    const harvest = await load()
+    const done = harvest.harvestCandidates(db, ['eng'], undefined, book.id)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await done
+
+    expect(scorableCandidates(db).map((candidate) => candidate.title)).toContain('A cached book')
   })
 
-  // Filing must be dropped before the twelve-subject window, not after.
-  it('reaches past a wall of filing to the topics behind it', async () => {
-    const wall = Array.from({ length: 12 }, (_, i) => `award:tag=${i}`)
-    const asked = await harvestWith([...wall, 'space travel', 'ice age'])
-
-    expect(asked.join(' ')).toContain('subject_key:travel')
-    expect(asked.join(' ')).toContain('subject_key:ice_age')
-    expect(asked.join(' ')).not.toContain('award')
-  })
-
-  it('does not ask the same question twice in different words', async () => {
-    const asked = await harvestWith([
-      'science-fiction',
-      'hard science-fiction',
-      'Survival',
-      'Survival skills',
-      'Murder'
-    ])
-
-    expect(asked.join(' ')).toContain('subject_key:science_fiction')
-    expect(asked.join(' ')).toContain('subject_key:survival')
-    expect(asked.join(' ')).toContain('subject_key:murder')
-    expect(asked.join(' ')).not.toContain('hard_science_fiction')
-    expect(asked.join(' ')).not.toContain('survival_skills')
-  })
-
-  it('never reuses a subject across the six genre-balanced searches', async () => {
-    const asked = await harvestWith([
-      'human nature',
-      'gender',
-      'space travel',
-      'ice age',
-      'Murder',
-      'Dystopia',
-      'Adventure'
-    ])
-
-    const subjectQueries = asked.filter((query) => query.startsWith('subject_key:'))
-    const subjects = subjectQueries.flatMap((query) => query.match(/subject_key:[a-z0-9_]+/g) ?? [])
-
-    expect(subjectQueries.length).toBeLessThanOrEqual(6)
-    expect(new Set(subjects).size).toBe(subjects.length)
-  })
-
-  it('gives distinct genres a turn instead of letting history take every slot', () => {
-    const plan = planDiscoveryQueries([
-      { title: 'Mystery', author: 'A', subjects: ['History', 'Mystery fiction'] },
-      { title: 'Memoir', author: 'B', subjects: ['History', 'Biography'] },
-      { title: 'Ideas', author: 'C', subjects: ['History', 'Philosophy', 'Ethics'] },
-      { title: 'Trees', author: 'D', subjects: ['History', 'Nature', 'Ecology'] },
-      { title: 'Space', author: 'E', subjects: ['Science fiction', 'Space travel'] },
-      { title: 'Love', author: 'F', subjects: ['Romance', 'Love stories'] }
-    ])
-    const asked = plan.subjects.map((entry) => entry.query)
-    const allSubjects = asked.flatMap((query) => query.match(/subject_key:[a-z0-9_]+/g) ?? [])
-
-    expect(asked).toHaveLength(6)
-    expect(asked.filter((query) => query.includes('subject_key:history'))).toHaveLength(1)
-    expect(asked.some((query) => query.includes('subject_key:philosophy'))).toBe(true)
-    expect(asked.some((query) => query.includes('subject_key:science_fiction'))).toBe(true)
-    expect(asked.some((query) => query.includes('subject_key:nature'))).toBe(true)
-    expect(new Set(allSubjects).size).toBe(allSubjects.length)
-  })
-
-  it('combines an author with a strong subject instead of fetching every work', async () => {
+  it('combines an author with the strongest direct subject', async () => {
     const asked = await harvestWith(['science fiction', 'politics'])
 
-    expect(asked).toContain('author:"Someone" AND subject_key:science_fiction')
-    expect(asked).not.toContain('author:Someone')
+    expect(asked).toContain('author:"Someone" AND subject:"science fiction"')
   })
 
-  it('spends author slots on genres not already covered when possible', () => {
-    const plan = planDiscoveryQueries([
-      { title: 'Past', author: null, subjects: ['History'] },
-      { title: 'Ideas', author: null, subjects: ['Philosophy'] },
-      { title: 'Life', author: null, subjects: ['Biography'] },
-      { title: 'Trees', author: null, subjects: ['Nature'] },
-      { title: 'Crime', author: null, subjects: ['Mystery'] },
-      { title: 'Space', author: 'Frank Herbert', subjects: ['Science fiction'] },
-      { title: 'Magic', author: 'J. R. R. Tolkien', subjects: ['Fantasy'] },
-      { title: 'Love', author: 'Jane Austen', subjects: ['Romance'] }
-    ])
-
-    expect(plan.authors.map((entry) => entry.query)).toEqual([
-      'author:"J. R. R. Tolkien" AND subject_key:fantasy',
-      'author:"Jane Austen" AND subject_key:romance'
-    ])
-  })
-})
-
-describe('how much each request brings back', () => {
-  // The request costs a second; the rows it returns are free.
-  it('asks for fifty works per subject query', async () => {
+  it('asks for fifty works per subject query and thirty per author query', async () => {
     await harvestWith(['human nature', 'gender'])
-
-    const subjectCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
-      .map(([input]) => String(input))
-      .filter((url) => (new URL(url).searchParams.get('q') ?? '').startsWith('subject_key:'))
+    const urls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([input]) =>
+      String(input)
+    )
+    const subjectCalls = urls.filter((url) => {
+      const q = new URL(url).searchParams.get('q') ?? ''
+      return q.startsWith('subject:')
+    })
+    const authorCalls = urls.filter((url) => {
+      const q = new URL(url).searchParams.get('q') ?? ''
+      return q.startsWith('author:')
+    })
 
     expect(subjectCalls.length).toBeGreaterThan(0)
     for (const url of subjectCalls) expect(new URL(url).searchParams.get('limit')).toBe('50')
-  })
-
-  it('asks for thirty works per targeted author query', async () => {
-    await harvestWith(['human nature'])
-
-    const authorCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
-      .map(([input]) => String(input))
-      .filter((url) => (new URL(url).searchParams.get('q') ?? '').startsWith('author:'))
-
     expect(authorCalls).toHaveLength(1)
     expect(new URL(authorCalls[0]).searchParams.get('limit')).toBe('30')
   })
 
   it('never exceeds the eight-request discovery budget', async () => {
-    await harvestWith(['human nature', 'gender', 'space travel', 'ice age', 'Murder', 'Dystopia'])
+    await harvestWith(['one', 'two', 'three', 'four', 'five', 'six', 'seven'])
 
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBeLessThanOrEqual(8)
     expect(scorableCandidates(db)).toHaveLength(0)

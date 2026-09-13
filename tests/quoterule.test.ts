@@ -76,10 +76,12 @@ describe('quotes left over from before the rule', () => {
     const file = join(dir, 'interleaf.db')
 
     const before = createDatabase(file, BEFORE_THE_RULE)
-    const book = books.createBook(before, { title: 'Dune' })
+    const bookId = Number(
+      before.prepare("INSERT INTO book (title) VALUES ('Dune')").run().lastInsertRowid
+    )
     before
       .prepare("INSERT INTO note (book_id, kind, title, body_md) VALUES (?, 'highlight', ?, ?)")
-      .run(book.id, 'Kept', 'The spice must flow')
+      .run(bookId, 'Kept', 'The spice must flow')
     before.close()
 
     const after = createDatabase(file)

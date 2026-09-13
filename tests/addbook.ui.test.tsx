@@ -142,7 +142,7 @@ describe('Open Library search', () => {
 
     await user.type(screen.getByLabelText('Search for a book'), 'qwertyuiop not a book{Enter}')
 
-    expect(await screen.findByText(/has nothing for that/i)).toBeTruthy()
+    expect(await screen.findByText(/No English editions found/i)).toBeTruthy()
     expect(screen.queryByText(/Open Library is unreachable/i)).toBeNull()
   })
 

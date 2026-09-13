@@ -5,8 +5,6 @@ import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
 import { getBookMetadata, saveBookMetadata } from '../src/main/repos/metadata'
 
-// The gate is the olid: absent means nobody has confirmed what the book is,
-// and Open Library answers any string with its closest match.
 let db: Database
 let searched: string[] = []
 
@@ -87,7 +85,7 @@ describe('a book added by hand', () => {
     expect(searched.some((url) => url.includes('Qwerty'))).toBe(false)
   })
 
-  it('still enriches a book that came from Open Library', async () => {
+  it('does not turn recommendation search into a metadata refresh', async () => {
     const book = books.createBook(db, {
       title: 'Solaris',
       olid: 'OL123W',
@@ -97,7 +95,8 @@ describe('a book added by hand', () => {
 
     await refresh()
 
-    expect(getBookMetadata(db, book.id)?.subjects).toEqual(['science fiction'])
+    expect(getBookMetadata(db, book.id)).toBeNull()
+    expect(searched).toEqual([])
   })
 
   it('counts once its metadata has been fetched deliberately', async () => {

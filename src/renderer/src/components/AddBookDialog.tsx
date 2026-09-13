@@ -132,7 +132,7 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
                       {adding === book.olid
                         ? 'Adding…'
                         : `${book.author ?? 'Unknown author'}${
-                            book.firstPublishYear ? ` · ${book.firstPublishYear}` : ''
+                            book.publishedYear ? ` · ${book.publishedYear}` : ''
                           }`}
                     </span>
                   </span>
@@ -144,7 +144,7 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
 
             {isSuccess && results.length === 0 && !isFetching && (
               <p className="px-4 py-6 text-center text-[13px] text-ink-muted">
-                Open Library has nothing for that.
+                No English editions found.
               </p>
             )}
 

@@ -38,6 +38,23 @@ describe('migrations', () => {
     expect(tableExists(old, 'note')).toBe(true)
   })
 
+  it('adds edition identity without changing shelf books', () => {
+    const old = createDatabase(':memory:', 15)
+    old.prepare("INSERT INTO book (title) VALUES ('Being and Nothingness')").run()
+    old.prepare("INSERT INTO book_candidate (olid, title) VALUES ('OL1W', 'A candidate')").run()
+
+    old.exec(MIGRATIONS[15])
+
+    const book = old.prepare('SELECT title, edition_olid FROM book').get() as {
+      title: string
+      edition_olid: string | null
+    }
+    expect(book).toEqual({ title: 'Being and Nothingness', edition_olid: null })
+    expect(old.prepare('SELECT count(*) AS n FROM book_candidate').get() as { n: number }).toEqual({
+      n: 0
+    })
+  })
+
   it('is idempotent when re-applied to an already-migrated database', () => {
     const before = db.pragma('user_version', { simple: true })
     expect(() => createDatabase(':memory:')).not.toThrow()
@@ -187,11 +204,15 @@ describe('candidate languages', () => {
   function harvested(olid: string, languages: string[], source: string): meta.CandidateRow {
     return {
       olid,
+      editionOlid: null,
+      isbn: null,
       title: `Book ${olid}`,
       author: 'Someone',
       subjects: ['science fiction'],
       description: null,
       coverId: null,
+      pageCount: null,
+      publishedYear: null,
       source,
       languages
     }
@@ -203,6 +224,25 @@ describe('candidate languages', () => {
     expect(meta.scorableCandidates(db)[0].languages).toEqual(['eng', 'fre'])
   })
 
+  it('keeps the selected edition details together', () => {
+    const row = harvested('OL1W', ['eng'], 'author:Someone')
+    row.editionOlid = 'OL10M'
+    row.isbn = '9780000000001'
+    row.pageCount = 320
+    row.publishedYear = 1999
+    row.coverId = 77
+
+    meta.upsertCandidates(db, [row])
+
+    expect(meta.scorableCandidates(db)[0]).toMatchObject({
+      editionOlid: 'OL10M',
+      isbn: '9780000000001',
+      pageCount: 320,
+      publishedYear: 1999,
+      coverId: 77
+    })
+  })
+
   it('reads a row migrated from before the column existed as unknown', () => {
     meta.upsertCandidates(db, [harvested('OL1W', [], 'subject:x')])
     db.prepare('UPDATE book_candidate SET languages = NULL').run()
@@ -211,12 +251,11 @@ describe('candidate languages', () => {
     expect(meta.scorableCandidates(db)[0].languages).toEqual([])
   })
 
-  it('does not let a subject harvest erase what a search harvest established', () => {
-    // /subjects/ never reports language, so an empty list must not overwrite.
+  it('stores the latest language list exactly, including an empty one', () => {
     meta.upsertCandidates(db, [harvested('OL1W', ['jpn'], 'author:Someone')])
     meta.upsertCandidates(db, [harvested('OL1W', [], 'subject:science fiction')])
 
-    expect(meta.scorableCandidates(db)[0].languages).toEqual(['jpn'])
+    expect(meta.scorableCandidates(db)[0].languages).toEqual([])
   })
 
   it('still updates languages when a later harvest actually knows some', () => {
@@ -227,15 +266,166 @@ describe('candidate languages', () => {
   })
 })
 
+describe('metadata refreshes', () => {
+  it('stores an empty Open Library refresh instead of overruling it', () => {
+    const book = books.createBook(db, { title: 'Beyond Good and Evil' })
+    meta.saveBookMetadata(db, book.id, {
+      subjects: ['Philosophy', 'Ethics'],
+      description: 'A critique of traditional morality.'
+    })
+
+    meta.saveBookMetadata(db, book.id, { subjects: [], description: null })
+
+    expect(meta.getBookMetadata(db, book.id)).toMatchObject({
+      subjects: [],
+      description: null
+    })
+  })
+
+  it('stores an empty candidate subject list instead of overruling it', () => {
+    const row = (subjects: string[]): meta.CandidateRow => ({
+      olid: 'OL1W',
+      editionOlid: null,
+      isbn: null,
+      title: 'A book',
+      author: 'Someone',
+      subjects,
+      description: null,
+      coverId: null,
+      pageCount: null,
+      publishedYear: null,
+      source: 'genre:philosophy',
+      languages: ['eng']
+    })
+
+    meta.upsertCandidates(db, [row(['Philosophy', 'Ethics'])])
+    meta.upsertCandidates(db, [row([])])
+
+    expect(meta.scorableCandidates(db)[0].subjects).toEqual([])
+  })
+})
+
+describe('duplicate candidates', () => {
+  function candidate(olid: string, author = 'Jane Austen'): meta.CandidateRow {
+    return {
+      olid,
+      editionOlid: null,
+      isbn: null,
+      title: 'Pride and Prejudice',
+      author,
+      subjects: ['Romance'],
+      description: null,
+      coverId: null,
+      pageCount: null,
+      publishedYear: null,
+      source: 'genre:romance',
+      languages: ['eng']
+    }
+  }
+
+  it('shows one copy of the same title and author', () => {
+    meta.upsertCandidates(db, [candidate('OL1W'), candidate('OL2W')])
+
+    expect(meta.scorableCandidates(db)).toHaveLength(1)
+  })
+
+  it('keeps the first duplicate instead of reranking by metadata richness', () => {
+    const first = candidate('OL1W')
+    const later = candidate('OL2W')
+    later.description = 'A richer description.'
+    later.subjects = ['Romance', 'England', 'Courtship']
+    later.coverId = 99
+
+    meta.upsertCandidates(db, [first, later])
+
+    expect(meta.scorableCandidates(db)[0].olid).toBe('OL1W')
+  })
+
+  it('does not collapse different authors who used the same title', () => {
+    meta.upsertCandidates(db, [candidate('OL1W'), candidate('OL2W', 'Another Writer')])
+
+    expect(meta.scorableCandidates(db)).toHaveLength(2)
+  })
+
+  it('keeps a dismissed duplicate from returning under another work id', () => {
+    meta.upsertCandidates(db, [candidate('OL1W')])
+    meta.recordFeedback(db, 'OL1W', 'dismissed')
+    meta.upsertCandidates(db, [candidate('OL2W')])
+
+    expect(meta.scorableCandidates(db)).toEqual([])
+  })
+
+  it('keeps a dismissed title variant from returning under another work id', () => {
+    const short = candidate('OL1W', 'Albert Camus')
+    short.title = 'The Myth of Sisyphus'
+    meta.upsertCandidates(db, [short])
+    meta.recordFeedback(db, 'OL1W', 'dismissed')
+
+    const collection = candidate('OL2W', 'Albert Camus')
+    collection.title = 'The Myth of Sisyphus and Other Essays'
+    meta.upsertCandidates(db, [collection])
+
+    expect(meta.scorableCandidates(db)).toEqual([])
+  })
+
+  it('hides a separately catalogued shorter title already contained in the library', () => {
+    books.createBook(db, {
+      title: 'The Myth of Sisyphus and Other Essays',
+      author: 'Albert Camus',
+      olid: 'OL1230690W'
+    })
+    const duplicate = candidate('OL1230601W', 'Albert Camus')
+    duplicate.title = 'The Myth of Sisyphus'
+    meta.upsertCandidates(db, [duplicate])
+
+    expect(meta.scorableCandidates(db)).toEqual([])
+  })
+
+  it('does not hide a one-word series title inside a sequel', () => {
+    books.createBook(db, { title: 'Dune', author: 'Frank Herbert', olid: 'OL1W' })
+    const sequel = candidate('OL2W', 'Frank Herbert')
+    sequel.title = 'Dune Messiah'
+    meta.upsertCandidates(db, [sequel])
+
+    expect(meta.scorableCandidates(db).map((book) => book.title)).toEqual(['Dune Messiah'])
+  })
+
+  it('does not collapse similar titles written by different authors', () => {
+    books.createBook(db, {
+      title: 'The Myth of Sisyphus and Other Essays',
+      author: 'Albert Camus'
+    })
+    const otherAuthor = candidate('OL2W', 'Another Writer')
+    otherAuthor.title = 'The Myth of Sisyphus'
+    meta.upsertCandidates(db, [otherAuthor])
+
+    expect(meta.scorableCandidates(db)).toHaveLength(1)
+  })
+
+  it('collapses title variants inside the candidate pool', () => {
+    const short = candidate('OL1W', 'Albert Camus')
+    short.title = 'The Myth of Sisyphus'
+    const collection = candidate('OL2W', 'Albert Camus')
+    collection.title = 'The Myth of Sisyphus and Other Essays'
+    meta.upsertCandidates(db, [short, collection])
+
+    expect(meta.scorableCandidates(db).map((book) => book.olid)).toEqual(['OL1W'])
+  })
+})
+
 describe('the candidate pool cleanup', () => {
   it('replaces stale candidates after a complete harvest', () => {
     const row = (olid: string): meta.CandidateRow => ({
       olid,
+      editionOlid: null,
+      isbn: null,
       title: `Book ${olid}`,
       author: 'Someone',
       subjects: ['science fiction'],
       description: null,
       coverId: null,
+      pageCount: null,
+      publishedYear: null,
       source: 'subjects:science_fiction+politics',
       languages: ['eng']
     })
@@ -250,11 +440,15 @@ describe('the candidate pool cleanup', () => {
     meta.upsertCandidates(db, [
       {
         olid: 'OL846513W',
+        editionOlid: null,
+        isbn: null,
         title: 'Os Maias',
         author: 'Eça de Queiroz',
         subjects: [],
         description: null,
         coverId: 104218,
+        pageCount: null,
+        publishedYear: null,
         source: 'subject:portuguese fiction',
         languages: ['eng']
       }
@@ -291,11 +485,15 @@ describe('a candidate harvested again', () => {
   function harvested(title: string, coverId: number | null): meta.CandidateRow {
     return {
       olid: 'OL1W',
+      editionOlid: null,
+      isbn: null,
       title,
       author: 'Fyodor Dostoyevsky',
       subjects: ['russian literature'],
       description: null,
       coverId,
+      pageCount: null,
+      publishedYear: null,
       source: 'author:Fyodor Dostoyevsky',
       languages: ['eng']
     }
@@ -329,11 +527,11 @@ describe('a candidate harvested again', () => {
     expect(meta.scorableCandidates(db)[0].coverId).toBeNull()
   })
 
-  it('keeps a cover a later harvest simply did not carry', () => {
+  it('stores a missing cover from the latest Open Library result', () => {
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', 1)])
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', null)])
 
-    expect(meta.scorableCandidates(db)[0].coverId).toBe(1)
+    expect(meta.scorableCandidates(db)[0].coverId).toBeNull()
   })
 })
 

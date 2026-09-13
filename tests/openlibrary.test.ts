@@ -33,6 +33,27 @@ describe('toOlBook', () => {
     expect(toOlBook(searchDoc)?.languages).toEqual(['eng', 'fre', 'ger'])
   })
 
+  it('keeps a first sentence as candidate text', () => {
+    expect(
+      toOlBook({
+        key: '/works/OL1W',
+        title: 'A book',
+        first_sentence: ['A philosopher questions inherited morality.']
+      })?.description
+    ).toBe('A philosopher questions inherited morality.')
+  })
+
+  it('keeps every subject exactly as Open Library returned it', () => {
+    const filing = Array.from({ length: 45 }, (_, index) => `award:prize=${index}`)
+    const book = toOlBook({
+      key: '/works/OL1W',
+      title: 'A book',
+      subject: [...filing, 'Philosophy', 'Ethics']
+    })
+
+    expect(book?.subjects).toEqual([...filing, 'Philosophy', 'Ethics'])
+  })
+
   it('reports no languages when the response carries none', () => {
     expect(toOlBook({ key: '/works/OL1W', title: 'Bare' })?.languages).toEqual([])
   })
@@ -90,8 +111,8 @@ describe('the author a search result is credited to', () => {
   })
 })
 
-// Containment, not language detection: detection fails on over half of
-// translated titles.
+// Edition language is explicit. The API filters works to English, then this
+// mapper keeps the selected edition's fields together.
 describe('choosing between the work and edition titles', () => {
   function titleOf(work: string, edition?: string): string | undefined {
     return toOlBook({
@@ -112,6 +133,42 @@ describe('choosing between the work and edition titles', () => {
     ).toBe('By the River Piedra I Sat Down and Wept')
   })
 
+  it('falls back to Open Library’s default edition when none is readable', () => {
+    const book = toOlBook({
+      key: '/works/OL1W',
+      title: 'A work title',
+      cover_i: 10,
+      editions: { docs: [{ title: 'Un titre français', cover_i: 20, language: ['fre'] }] }
+    })
+
+    expect(book).toMatchObject({ title: 'Un titre français', coverId: 20 })
+  })
+
+  it('prefers a readable edition even when it is not listed first', () => {
+    const book = toOlBook({
+      key: '/works/OL1W',
+      title: 'Un titre français',
+      editions: {
+        docs: [
+          { title: 'Un titre français', cover_i: 10, language: ['fre'] },
+          { title: 'An English title', cover_i: 20, language: ['eng'] }
+        ]
+      }
+    })
+
+    expect(book).toMatchObject({ title: 'An English title', coverId: 20 })
+  })
+
+  it('takes a nested edition explicitly marked as English', () => {
+    const book = toOlBook({
+      key: '/works/OL1W',
+      title: 'Un titre français',
+      editions: { docs: [{ title: 'An English title', cover_i: 20, language: ['eng'] }] }
+    })
+
+    expect(book).toMatchObject({ title: 'An English title', coverId: 20 })
+  })
+
   it('takes the edition for a foreign title that no character test would catch', () => {
     // Plain ASCII, which is why language detection was rejected.
     expect(titleOf('Il nome della rosa', 'The name of the rose')).toBe('The name of the rose')
@@ -121,17 +178,17 @@ describe('choosing between the work and edition titles', () => {
     )
   })
 
-  it('keeps the work title when the edition only adds furniture', () => {
+  it('keeps the selected edition title even when it adds series information', () => {
     expect(titleOf('Children of Dune', 'Children of Dune (Dune Chronicles, Book 3)')).toBe(
-      'Children of Dune'
+      'Children of Dune (Dune Chronicles, Book 3)'
     )
-    expect(titleOf('Fyodor Dostoevsky', 'Fyodor Dostoevsky.')).toBe('Fyodor Dostoevsky')
+    expect(titleOf('Fyodor Dostoevsky', 'Fyodor Dostoevsky.')).toBe('Fyodor Dostoevsky.')
   })
 
-  it('ignores case and punctuation when comparing', () => {
+  it('uses the selected edition’s exact capitalization', () => {
     expect(
       titleOf('Great Short Works of Fyodor Dostoevsky', 'Great short works of Fyodor Dostoevsky')
-    ).toBe('Great Short Works of Fyodor Dostoevsky')
+    ).toBe('Great short works of Fyodor Dostoevsky')
   })
 
   it('needs every word, not merely an overlap', () => {
@@ -149,15 +206,37 @@ describe('choosing between the work and edition titles', () => {
     expect(titleOf('...', 'The Waste Land')).toBe('The Waste Land')
   })
 
-  it('still reports the work id, never the edition', () => {
+  it('reports the work and selected edition ids separately', () => {
     const book = toOlBook({
       key: '/works/OL796473W',
       title: 'Преступление и наказание',
-      editions: { docs: [{ title: 'Crime and punishment' }] }
+      editions: { docs: [{ key: '/books/OL123M', title: 'Crime and punishment' }] }
     })
 
     expect(book?.olid).toBe('OL796473W')
+    expect(book?.editionOlid).toBe('OL123M')
     expect(book?.title).toBe('Crime and punishment')
+  })
+
+  it('takes year and page count from the selected edition', () => {
+    const book = toOlBook({
+      key: '/works/OL1W',
+      title: 'A work',
+      first_publish_year: 1942,
+      number_of_pages_median: 999,
+      editions: {
+        docs: [
+          {
+            title: 'An English edition',
+            language: ['eng'],
+            publish_date: 'May 1991',
+            number_of_pages: 224
+          }
+        ]
+      }
+    })
+
+    expect(book).toMatchObject({ publishedYear: 1991, pageCount: 224 })
   })
 })
 
@@ -189,14 +268,14 @@ describe('the cover that goes with the title', () => {
       ).toBe('9781419160226')
     })
 
-    it('keeps the work’s ISBN when it keeps the work’s title', () => {
+    it('uses the selected edition’s ISBN even when its title is similar', () => {
       expect(
         isbnOf({
           title: 'Children of Dune',
           isbn: ['0441104029'],
           editions: { docs: [{ title: 'Children of Dune (Dune Chronicles, Book 3)', isbn: ['X'] }] }
         })
-      ).toBe('0441104029')
+      ).toBe('X')
     })
 
     it('reports none rather than a different printing’s', () => {
@@ -220,14 +299,14 @@ describe('the cover that goes with the title', () => {
     ).toEqual({ title: 'The Dream Of A Ridiculous Man', coverId: 763393 })
   })
 
-  it('keeps the work’s cover when it keeps the work’s title', () => {
+  it('uses the selected edition’s cover with its title', () => {
     expect(
       shown({
         title: 'Children of Dune',
         cover_i: 111,
         editions: { docs: [{ title: 'Children of Dune (Dune Chronicles, Book 3)', cover_i: 222 }] }
       })
-    ).toEqual({ title: 'Children of Dune', coverId: 111 })
+    ).toEqual({ title: 'Children of Dune (Dune Chronicles, Book 3)', coverId: 222 })
   })
 
   it('keeps the work’s cover when no edition came back at all', () => {

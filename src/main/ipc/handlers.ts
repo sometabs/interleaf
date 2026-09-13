@@ -1,7 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
 
-import { HARVEST_PROGRESS_CHANNEL, type InterleafApi, IPC_CHANNELS } from '../../shared/api'
+import {
+  HARVEST_PROGRESS_CHANNEL,
+  type InterleafApi,
+  IPC_CHANNELS,
+  METADATA_REFRESH_PROGRESS_CHANNEL,
+  type MetadataRefreshProgress,
+  type MetadataRefreshResult
+} from '../../shared/api'
 import { READING_LANGUAGES } from '../../shared/languages'
 import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
 import * as books from '../repos/books'
@@ -12,10 +19,41 @@ import * as searchRepo from '../repos/search'
 import * as backup from '../services/backup'
 import * as calibre from '../services/calibre'
 import { harvestCandidates } from '../services/harvest'
-import { addFromOpenLibrary, enrich } from '../services/library'
+import {
+  addFromOpenLibrary,
+  refreshAllBookMetadata,
+  refreshOneBookMetadata,
+  retryBookMetadata
+} from '../services/library'
 import { coversDir, importCoverFile } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
+
+let metadataRefreshActive = false
+let metadataRefreshCancelled = false
+
+function sendMetadataProgress(progress: MetadataRefreshProgress): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(METADATA_REFRESH_PROGRESS_CHANNEL, progress)
+    }
+  }
+}
+
+async function runMetadataRefresh(bookIds?: number[]): Promise<MetadataRefreshResult> {
+  if (metadataRefreshActive) throw new Error('A metadata refresh is already running.')
+  metadataRefreshActive = true
+  metadataRefreshCancelled = false
+
+  try {
+    const cancelled = (): boolean => metadataRefreshCancelled
+    return bookIds === undefined
+      ? await refreshAllBookMetadata(getDb(), sendMetadataProgress, cancelled)
+      : await retryBookMetadata(getDb(), bookIds, sendMetadataProgress, cancelled)
+  } finally {
+    metadataRefreshActive = false
+  }
+}
 
 // Typed as `InterleafApi` so drift from the contract is a compile error.
 const api: InterleafApi = {
@@ -63,19 +101,31 @@ const api: InterleafApi = {
     }
     return found.map((b) => ({
       olid: b.olid,
+      editionOlid: b.editionOlid,
       title: b.title,
       author: b.author,
-      firstPublishYear: b.firstPublishYear,
+      publishedYear: b.publishedYear,
       coverId: b.coverId,
       isbn: b.isbn,
-      pageCount: b.pageCount
+      pageCount: b.pageCount,
+      subjects: b.subjects,
+      description: b.description
     }))
   },
   async addBookFromOpenLibrary(book) {
     return addFromOpenLibrary(getDb(), book)
   },
   async enrichBook(bookId) {
-    return enrich(getDb(), bookId)
+    return refreshOneBookMetadata(getDb(), bookId)
+  },
+  async refreshAllMetadata() {
+    return runMetadataRefresh()
+  },
+  async retryMetadataRefresh(bookIds) {
+    return runMetadataRefresh(Array.isArray(bookIds) ? bookIds : [])
+  },
+  async cancelMetadataRefresh() {
+    if (metadataRefreshActive) metadataRefreshCancelled = true
   },
   async chooseCover(bookId) {
     const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -104,18 +154,20 @@ const api: InterleafApi = {
   async getBookMetadata(bookId) {
     return meta.getBookMetadata(getDb(), bookId)
   },
-  async listBookSubjects() {
-    return meta.listBookSubjects(getDb())
-  },
 
-  async refreshRecommendations() {
-    return harvestCandidates(getDb(), READING_LANGUAGES, (progress) => {
-      // Every window, not the caller's: the generic handler loop below does not
-      // thread the event through, and the app opens exactly one window.
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) window.webContents.send(HARVEST_PROGRESS_CHANNEL, progress)
-      }
-    })
+  async refreshRecommendations(query) {
+    return harvestCandidates(
+      getDb(),
+      READING_LANGUAGES,
+      (progress) => {
+        // Every window, not the caller's: the generic handler loop below does not
+        // thread the event through, and the app opens exactly one window.
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) window.webContents.send(HARVEST_PROGRESS_CHANNEL, progress)
+        }
+      },
+      query?.likeBookId
+    )
   },
   async getRecommendations(query) {
     return suggest(getDb(), query)
@@ -135,12 +187,15 @@ const api: InterleafApi = {
     const candidate = meta.getCandidate(db, olid)
     return addFromOpenLibrary(db, {
       olid,
+      editionOlid: candidate?.editionOlid ?? null,
       title: candidate?.title ?? olid,
       author: candidate?.author ?? null,
-      firstPublishYear: null,
+      publishedYear: candidate?.publishedYear ?? null,
       coverId: candidate?.coverId ?? null,
-      isbn: null,
-      pageCount: null
+      isbn: candidate?.isbn ?? null,
+      pageCount: candidate?.pageCount ?? null,
+      subjects: candidate?.subjects ?? [],
+      description: candidate?.description ?? null
     })
   },
 

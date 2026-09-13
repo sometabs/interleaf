@@ -93,10 +93,10 @@ describe('reporting a harvest as it runs', () => {
 
     const seen = await run()
 
-    expect(seen.map((p) => p.label)).toContain('More Science Fiction books')
+    expect(seen.map((p) => p.label)).toContain('More books about science fiction')
   })
 
-  it('never spends a step on an Open Library facet', async () => {
+  it('reports every Open Library subject it uses directly', async () => {
     const book = books.createBook(db, {
       title: 'A book',
       author: 'Someone',
@@ -111,9 +111,9 @@ describe('reporting a harvest as it runs', () => {
     const seen = await run()
     const labels = seen.map((p) => p.label)
 
-    expect(labels).toContain('More Nature books')
-    expect(labels.join(' ')).not.toContain('award:hugo_award')
-    expect(seen[seen.length - 1].total).toBe(2)
+    expect(labels).toContain('More books about human nature')
+    expect(labels).toContain('More books about award:hugo_award=1970')
+    expect(seen[seen.length - 1].total).toBe(3)
   })
 
   it('names the author it is looking up', async () => {
@@ -121,7 +121,7 @@ describe('reporting a harvest as it runs', () => {
 
     const seen = await run()
 
-    expect(seen.map((p) => p.label)).toContain('More by Stanisław Lem in Science Fiction')
+    expect(seen.map((p) => p.label)).toContain('More by Stanisław Lem in science fiction')
   })
 
   it('announces a step before spending the second it costs', async () => {
@@ -132,9 +132,9 @@ describe('reporting a harvest as it runs', () => {
     // The counter increments only once the request is back, so it reads
     // `done: 0` on either side of the fetch.
     expect(events).toEqual([
-      'report:More Science Fiction books',
+      'report:More books about science fiction',
       'fetch:subject',
-      'report:More by Stanisław Lem in Science Fiction',
+      'report:More by Stanisław Lem in science fiction',
       'fetch:author',
       'report:Sorting what came back'
     ])

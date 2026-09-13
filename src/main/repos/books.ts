@@ -8,6 +8,7 @@ interface BookRow {
   title: string
   author: string | null
   isbn: string | null
+  edition_olid: string | null
   olid: string | null
   cover_path: string | null
   page_count: number | null
@@ -41,6 +42,7 @@ function toBook(row: BookRow): Book {
     title: row.title,
     author: row.author,
     isbn: row.isbn,
+    editionOlid: row.edition_olid,
     olid: row.olid,
     coverPath: row.cover_path,
     pageCount: row.page_count,
@@ -60,6 +62,7 @@ const BOOK_COLUMNS: Record<keyof BookPatch, string> = {
   title: 'title',
   author: 'author',
   isbn: 'isbn',
+  editionOlid: 'edition_olid',
   olid: 'olid',
   coverPath: 'cover_path',
   pageCount: 'page_count',
@@ -83,13 +86,16 @@ export function getBook(db: Database, id: number): Book | null {
 export function createBook(db: Database, input: NewBook): Book {
   const info = db
     .prepare(
-      `INSERT INTO book (title, author, isbn, olid, page_count, published_year, status, rating)
-       VALUES (@title, @author, @isbn, @olid, @pageCount, @publishedYear, @status, @rating)`
+      `INSERT INTO book
+         (title, author, isbn, edition_olid, olid, page_count, published_year, status, rating)
+       VALUES
+         (@title, @author, @isbn, @editionOlid, @olid, @pageCount, @publishedYear, @status, @rating)`
     )
     .run({
       title: input.title,
       author: input.author ?? null,
       isbn: input.isbn ?? null,
+      editionOlid: input.editionOlid ?? null,
       olid: input.olid ?? null,
       pageCount: input.pageCount ?? null,
       publishedYear: input.publishedYear ?? null,

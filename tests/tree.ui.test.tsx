@@ -20,8 +20,7 @@ function node(
     coverId: null,
     score,
     becauseOf: { bookId: 1, title: 'The Dispossessed' },
-    group: 'Fiction' as const,
-    genres: ['Science Fiction'],
+    subjects: ['Science fiction'],
     similarityToParent,
     depth,
     children

@@ -19,7 +19,7 @@ const OL_BOOK = {
   olid: 'OL1W',
   title: 'Dune',
   author: 'Frank Herbert',
-  firstPublishYear: 1965,
+  publishedYear: 1965,
   coverId: null,
   isbn: null,
   pageCount: null,
@@ -33,12 +33,22 @@ const REC = {
   author: 'Stanisław Lem',
   coverId: null,
   score: 0.8,
-  group: 'Fiction' as const,
-  genres: ['Science fiction'],
+  subjects: ['Science fiction'],
   becauseOf: null
 }
 
 describe('adding from the search dialog', () => {
+  it('explains that an empty search means no English edition was found', async () => {
+    const user = userEvent.setup()
+    installBridge({}, { searchOpenLibrary: async () => [] })
+    renderApp(<AddBookDialog open onOpenChange={() => {}} />)
+
+    await user.type(screen.getByLabelText('Search for a book'), 'untranslated book')
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => expect(screen.getByText('No English editions found.')).toBeDefined())
+  })
+
   it('marks the row it is working on, and only that row', async () => {
     const user = userEvent.setup()
     const slow = deferred<ReturnType<typeof makeBook>>()
@@ -185,8 +195,7 @@ describe('adding from the recommendation tree', () => {
     author: 'Stanisław Lem',
     coverId: null,
     score: 0.8,
-    group: 'Fiction' as const,
-    genres: ['Science fiction'],
+    subjects: ['Science fiction'],
     becauseOf: null,
     similarityToParent: null,
     depth: 0,

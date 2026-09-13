@@ -54,13 +54,15 @@ describe('upgrading a library that predates the import', () => {
   it('keeps the quotes already in it and imports alongside them', () => {
     const file = join(dir, 'interleaf.db')
     const before = createDatabase(file, 14)
-    const book = books.createBook(before, { title: 'Frankenstein' })
-    notes.createNote(before, { bookId: book.id, kind: 'highlight', bodyMd: 'Typed by hand' })
+    const bookId = Number(
+      before.prepare("INSERT INTO book (title) VALUES ('Frankenstein')").run().lastInsertRowid
+    )
+    notes.createNote(before, { bookId, kind: 'highlight', bodyMd: 'Typed by hand' })
     before.close()
 
     const after = createDatabase(file)
     try {
-      runImport(after, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+      runImport(after, exportFile([annotation()]), [{ calibreId: 42, bookId }])
       expect(notes.listNotes(after).map((note) => note.bodyMd)).toContain('Typed by hand')
       expect(notes.listNotes(after)).toHaveLength(2)
     } finally {

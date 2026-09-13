@@ -130,7 +130,7 @@ describe('storing what came back', () => {
   })
 })
 
-describe('spending the request on books you can read', () => {
+describe('filtering to readable editions', () => {
   it('no longer calls the subjects endpoint at all', async () => {
     const { harvest } = await load()
     const book = books.createBook(db, {
@@ -150,7 +150,7 @@ describe('spending the request on books you can read', () => {
     expect(urls.some((url) => url.includes('q=subject'))).toBe(true)
   })
 
-  it('asks Open Library to filter, rather than fetching and discarding', async () => {
+  it('filters every harvest request to English at Open Library', async () => {
     const { harvest } = await load()
     const book = books.createBook(db, {
       title: 'Solaris',
@@ -166,10 +166,13 @@ describe('spending the request on books you can read', () => {
 
     const searches = urls.filter((url) => url.includes('/search.json'))
     expect(searches.length).toBeGreaterThan(0)
-    for (const url of searches) expect(url).toContain('language=eng')
+    for (const url of searches) {
+      expect(new URL(url).searchParams.get('language')).toBe('eng')
+      expect(new URL(url).searchParams.get('lang')).toBe('en')
+    }
   })
 
-  it('locks a caller that passes nothing to English', async () => {
+  it('defaults to requiring an English edition', async () => {
     const { ol } = await load()
 
     // The default, so a call site that forgets cannot widen the search.
@@ -177,12 +180,13 @@ describe('spending the request on books you can read', () => {
     await vi.advanceTimersByTimeAsync(5000)
     await done
 
-    expect(urls[0]).toContain('language=eng')
+    expect(new URL(urls[0]).searchParams.get('language')).toBe('eng')
+    expect(new URL(urls[0]).searchParams.get('lang')).toBe('en')
   })
 })
 
-describe('the English lock', () => {
-  it('is the default on every endpoint, called directly', async () => {
+describe('the English requirement', () => {
+  it('is the filter and display language on every endpoint, called directly', async () => {
     const { ol } = await load()
 
     const author = ol.fetchByAuthor('Le Guin')
@@ -194,7 +198,10 @@ describe('the English lock', () => {
     await subject
 
     expect(urls).toHaveLength(2)
-    for (const url of urls) expect(url).toContain('language=eng')
+    for (const url of urls) {
+      expect(new URL(url).searchParams.get('language')).toBe('eng')
+      expect(new URL(url).searchParams.get('lang')).toBe('en')
+    }
   })
 
   it('asks for the nested editions, which is where an English title comes from', async () => {
@@ -219,13 +226,18 @@ describe('the English lock', () => {
       const fields = new URL(url).searchParams.get('fields') ?? ''
       expect(fields.split(',')).toContain('editions')
       // Naming a sub-field narrows the block to exactly those named.
+      expect(fields.split(',')).toContain('editions.key')
       expect(fields.split(',')).toContain('editions.title')
       expect(fields.split(',')).toContain('editions.cover_i')
+      expect(fields.split(',')).toContain('editions.isbn')
+      expect(fields.split(',')).toContain('editions.language')
+      expect(fields.split(',')).toContain('editions.number_of_pages')
+      expect(fields.split(',')).toContain('editions.publish_date')
+      expect(new URL(url).searchParams.get('lang')).toBe('en')
     }
   })
 
-  // Search only: a candidate row keeps no ISBN, so the harvests do not ask.
-  it('asks the search for the edition’s ISBN, and only the search', async () => {
+  it('asks every search for the selected edition’s ISBN', async () => {
     const { ol } = await load()
 
     const search = ol.searchBooks('dostoevsky')
@@ -240,9 +252,8 @@ describe('the English lock', () => {
       (new URL(url).searchParams.get('fields') ?? '').split(',')
     )
 
-    // Otherwise the stored ISBN is an arbitrary one of every printing.
     expect(searchFields).toContain('editions.isbn')
-    expect(subjectFields).not.toContain('editions.isbn')
+    expect(subjectFields).toContain('editions.isbn')
   })
 
   it('asks for the alternate author names, which is where an English one comes from', async () => {
@@ -284,6 +295,9 @@ describe('the English lock', () => {
 
     const searches = urls.filter((url) => url.includes('/search.json'))
     expect(searches.length).toBeGreaterThan(1)
-    for (const url of searches) expect(url).toContain('language=eng')
+    for (const url of searches) {
+      expect(new URL(url).searchParams.get('language')).toBe('eng')
+      expect(new URL(url).searchParams.get('lang')).toBe('en')
+    }
   })
 })

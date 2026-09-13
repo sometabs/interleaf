@@ -7,8 +7,6 @@ import type {
   RecommendationQuery,
   RecommendationScope
 } from '../../shared/api'
-import { classify } from '../../shared/categories'
-import { READING_LANGUAGES } from '../../shared/languages'
 
 export interface ProfileBook {
   bookId: number
@@ -151,10 +149,14 @@ const SUBJECT_WEIGHT = 3
 
 function termsOf(subjects: string[], description: string | null): string[] {
   const terms: string[] = []
-  for (const subject of subjects.slice(0, 40)) {
+
+  // Every Open Library subject participates exactly as returned. TF-IDF makes
+  // ubiquitous catalogue terms weak without rewriting or dropping metadata.
+  for (const subject of subjects) {
     const tokens = tokenize(subject)
     for (let i = 0; i < SUBJECT_WEIGHT; i++) terms.push(...tokens)
   }
+
   if (description) terms.push(...tokenize(description).slice(0, 250))
   return terms
 }
@@ -230,7 +232,8 @@ function tasteWeight(book: ProfileBook, now: number): number {
 }
 
 export interface RecommendOptions extends RecommendationQuery {
-  // Kept out of `RecommendationQuery` so nothing across IPC can widen it.
+  // Optional for pure callers. The app's candidate harvest already filters to
+  // English at Open Library, so scoring does not need to repeat that filter.
   languages?: readonly string[]
   // 0 = maximum diversity, 1 = pure relevance.
   diversity?: number
@@ -292,10 +295,7 @@ function poolFor(
   candidates: CandidateInput[],
   options: RecommendOptions
 ): CandidateInput[] {
-  return byLanguage(
-    inScope(library, candidates, options.scope ?? 'all'),
-    options.languages ?? READING_LANGUAGES
-  )
+  return byLanguage(inScope(library, candidates, options.scope ?? 'all'), options.languages ?? [])
 }
 
 function capFor(options: RecommendOptions): number {
@@ -390,7 +390,7 @@ function scoreCandidates(
             bestIdx >= 0
               ? { bookId: library[bestIdx].bookId, title: library[bestIdx].title }
               : null,
-          ...classify(candidate.subjects)
+          subjects: [...candidate.subjects]
         } satisfies Recommendation
       }
     })

@@ -18,8 +18,7 @@ function pool(size: number): Recommendation[] {
     coverId: null,
     score: 1 - i / 1000,
     becauseOf: null,
-    group: 'Fiction' as const,
-    genres: ['Science Fiction']
+    subjects: ['Science fiction']
   }))
 }
 

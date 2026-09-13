@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Book, BookStatus, BookSubjects } from '../src/shared/api'
+import type { Book, BookStatus } from '../src/shared/api'
 import {
   categoriesOf,
   filterByCategory,
@@ -18,6 +18,7 @@ function book(title: string, status: BookStatus = 'want'): Book {
     title,
     author: null,
     isbn: null,
+    editionOlid: null,
     olid: null,
     coverPath: null,
     pageCount: null,
@@ -32,12 +33,8 @@ function book(title: string, status: BookStatus = 'want'): Book {
   }
 }
 
-function subjectsOf(...rows: [Book, string[]][]): BookSubjects[] {
-  return rows.map(([b, subjects]) => ({ bookId: b.id, subjects }))
-}
-
 function cats(...rows: [Book, string[]][]): ReturnType<typeof categoriesOf> {
-  return categoriesOf(subjectsOf(...rows))
+  return categoriesOf(rows.map(([b, genres]) => ({ ...b, genres })))
 }
 
 function labels(shelves: { label: string }[]): string[] {
@@ -146,31 +143,18 @@ describe('grouping by category', () => {
     const shelves = groupBooks(
       [a, b, c],
       'category',
-      cats([a, ['Science fiction']], [b, ['Science fiction']], [c, ['Historical fiction']])
+      cats([a, ['Science Fiction']], [b, ['Science Fiction']], [c, ['Historical Fiction']])
     )
 
     expect(labels(shelves)).toEqual(['Science Fiction', 'Historical Fiction'])
   })
 
-  it('never shows a raw subject as a heading', () => {
+  it('does not turn raw Open Library subjects into headings', () => {
     const a = book('All Systems Red')
-    const shelves = groupBooks(
-      [a],
-      'category',
-      cats([
-        a,
-        [
-          'franchise:The Murderbot Diaries',
-          'series:The Murderbot Diaries',
-          'form:novella',
-          'genre:science fiction',
-          'Human-computer interaction',
-          'Life on other planets'
-        ]
-      ])
-    )
+    const categories = categoriesOf([a])
+    const shelves = groupBooks([a], 'category', categories)
 
-    expect(labels(shelves)).toEqual(['Science Fiction'])
+    expect(labels(shelves)).toEqual(['Not categorised yet'])
   })
 
   it('stands a book on every shelf its genres name', () => {
@@ -179,7 +163,7 @@ describe('grouping by category', () => {
     const shelves = groupBooks(
       [a, b],
       'category',
-      cats([a, ['Science fiction', 'Suspense']], [b, ['Historical fiction']])
+      cats([a, ['Science Fiction', 'Thriller & Suspense']], [b, ['Historical Fiction']])
     )
 
     expect(labels(shelves)).toEqual([
@@ -191,33 +175,26 @@ describe('grouping by category', () => {
     expect(shelves[2].books.map((x) => x.title)).toEqual(['The Kaiju Preservation Society'])
   })
 
-  it('falls back to the group, not to Other, when no genre is known', () => {
+  it('leaves an unchosen book unfiled even when Open Library has subjects', () => {
     const a = book('Solaris')
     const b = book('Some Technical Manual')
-    const shelves = groupBooks(
-      [a, b],
-      'category',
-      cats([a, ['Science fiction']], [b, ['Acquisition programs']])
-    )
+    const categories = categoriesOf([a, b])
+    const shelves = groupBooks([a, b], 'category', categories)
 
-    expect(labels(shelves)).toEqual(['Science Fiction', 'Non-fiction'])
+    expect(labels(shelves)).toEqual(['Not categorised yet'])
   })
 
-  it('sorts the group catch-alls after real genres, however big they are', () => {
+  it('sorts the unfiled shelf after chosen genres', () => {
     const named = book('Solaris')
     const plain = [book('X'), book('Y'), book('Z')]
-    const shelves = groupBooks(
-      [named, ...plain],
-      'category',
-      cats([named, ['Science fiction']], ...plain.map((b) => [b, ['Widgets']] as [Book, string[]]))
-    )
+    const categories = categoriesOf([{ ...named, genres: ['Science Fiction'] }, ...plain])
+    const shelves = groupBooks([named, ...plain], 'category', categories)
 
-    expect(labels(shelves)).toEqual(['Science Fiction', 'Non-fiction'])
+    expect(labels(shelves)).toEqual(['Science Fiction', 'Not categorised yet'])
     expect(shelves[1].books).toHaveLength(3)
   })
 
   it('says a book has not been filed rather than guessing at its group', () => {
-    // No subjects means never asked, which is not the same as non-fiction.
     const a = book('Solaris')
 
     expect(labels(groupBooks([a], 'category', cats()))).toEqual(['Not categorised yet'])
@@ -230,9 +207,9 @@ describe('filtering by group, then by genre', () => {
   const memoir = book("Can't Hurt Me")
   const all = [novel, thriller, memoir]
   const categories = cats(
-    [novel, ['Science fiction']],
-    [thriller, ['Science fiction', 'Suspense']],
-    [memoir, ['Athletes, biography', 'Triathlon']]
+    [novel, ['Science Fiction']],
+    [thriller, ['Science Fiction', 'Thriller & Suspense']],
+    [memoir, ['Biography & Memoir', 'Sports']]
   )
 
   it('narrows to one half of the shop', () => {
@@ -286,38 +263,37 @@ describe('filtering by group, then by genre', () => {
 // Asserted on `categoriesOf` rather than the picker that feeds it: the override
 // is what makes a hand-typed or misfiled book filable.
 describe('genres chosen by the reader', () => {
-  it('replaces the ones inferred from subjects', () => {
+  it('uses the reader choice and ignores unrelated subjects', () => {
     const b = { ...book('Dune'), genres: ['Psychology'] }
-    const categories = categoriesOf(subjectsOf([b, ['Science fiction']]), [b])
+    const categories = categoriesOf([b])
 
     expect(categories.get(b.id)).toEqual({ group: 'Non-fiction', genres: ['Psychology'] })
   })
 
   it('files a book Open Library has never heard of', () => {
     const b = { ...book('Unfu*k Yourself'), genres: ['Self-Help'] }
-    const categories = categoriesOf([], [b])
+    const categories = categoriesOf([b])
 
     expect(categories.get(b.id)?.genres).toEqual(['Self-Help'])
   })
 
-  it('leaves the inference alone when nothing has been chosen', () => {
+  it('does not invent a genre when nothing has been chosen', () => {
     const b = book('Dune')
-    const categories = categoriesOf(subjectsOf([b, ['Science fiction']]), [b])
+    const categories = categoriesOf([b])
 
-    expect(categories.get(b.id)?.genres).toEqual(['Science Fiction'])
+    expect(categories.has(b.id)).toBe(false)
   })
 
-  // An empty choice is "no genre", not "not looked at".
   it('unfiles a book whose genres were cleared', () => {
     const b = { ...book('Dune'), genres: [] }
-    const categories = categoriesOf(subjectsOf([b, ['Science fiction']]), [b])
+    const categories = categoriesOf([b])
 
     expect(categories.has(b.id)).toBe(false)
   })
 
   it('carries the choice into the filters and the shelves', () => {
     const b = { ...book('Dune'), genres: ['Psychology'] }
-    const categories = categoriesOf(subjectsOf([b, ['Science fiction']]), [b])
+    const categories = categoriesOf([b])
 
     expect(labels(groupBooks([b], 'category', categories))).toEqual(['Psychology'])
     expect(filterByCategory([b], categories, 'Fiction', null)).toEqual([])

@@ -17,12 +17,13 @@ import type {
   InterleafBridge,
   BookMetadata,
   BookPatch,
-  BookSubjects,
   DataCounts,
   DismissedBook,
   BackupResult,
   HarvestProgress,
   HarvestResult,
+  MetadataRefreshProgress,
+  MetadataRefreshResult,
   RestoreResult,
   NewBook,
   NewNote,
@@ -32,6 +33,7 @@ import type {
   Recommendation,
   RecommendationNode,
   RecommendationQuery,
+  RecommendationRefreshQuery,
   SearchHit
 } from '@shared/api'
 
@@ -45,7 +47,6 @@ const keys = {
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
   metadata: (bookId: number) => ['metadata', bookId] as const,
-  bookSubjects: ['book-subjects'] as const,
   recommendations: ['recommendations'] as const,
   recommendationsFor: (query: RecommendationQuery) => ['recommendations', query] as const,
   recommendationTree: ['recommendation-tree'] as const,
@@ -98,10 +99,6 @@ export function useNote(id: number): UseQueryResult<Note | null> {
 
 export function useBookMetadata(bookId: number): UseQueryResult<BookMetadata | null> {
   return useQuery({ queryKey: keys.metadata(bookId), queryFn: () => api().getBookMetadata(bookId) })
-}
-
-export function useBookSubjects(): UseQueryResult<BookSubjects[]> {
-  return useQuery({ queryKey: keys.bookSubjects, queryFn: () => api().listBookSubjects() })
 }
 
 export function useSearch(query: string): UseQueryResult<SearchHit[]> {
@@ -198,9 +195,54 @@ export function useEnrichBook(): UseMutationResult<Book | null, Error, number> {
     onSuccess: (_book, bookId) => {
       invalidateBooks(client)
       void client.invalidateQueries({ queryKey: keys.metadata(bookId) })
-      void client.invalidateQueries({ queryKey: keys.bookSubjects })
     }
   })
+}
+
+export function useRefreshAllMetadata(): UseMutationResult<MetadataRefreshResult, Error, void> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api().refreshAllMetadata(),
+    onSuccess: () => {
+      invalidateBooks(client)
+      void client.invalidateQueries({ queryKey: ['metadata'] })
+      invalidateRecommendations(client)
+    }
+  })
+}
+
+export function useRetryMetadataRefresh(): UseMutationResult<
+  MetadataRefreshResult,
+  Error,
+  number[]
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (bookIds: number[]) => api().retryMetadataRefresh(bookIds),
+    onSuccess: () => {
+      invalidateBooks(client)
+      void client.invalidateQueries({ queryKey: ['metadata'] })
+      invalidateRecommendations(client)
+    }
+  })
+}
+
+export function useCancelMetadataRefresh(): UseMutationResult<void, Error, void> {
+  return useMutation({ mutationFn: () => api().cancelMetadataRefresh() })
+}
+
+export function useMetadataRefreshProgress(active: boolean): MetadataRefreshProgress | null {
+  const [progress, setProgress] = useState<MetadataRefreshProgress | null>(null)
+  const [wasActive, setWasActive] = useState(active)
+
+  useEffect(() => api().onMetadataRefreshProgress(setProgress), [])
+
+  if (active !== wasActive) {
+    setWasActive(active)
+    setProgress(null)
+  }
+
+  return active ? progress : null
 }
 
 // Opens a file dialog, so it stays pending while the reader browses.
@@ -248,10 +290,14 @@ export function useDeleteNote(): UseMutationResult<void, Error, number> {
   })
 }
 
-export function useRefreshRecommendations(): UseMutationResult<HarvestResult, Error, void> {
+export function useRefreshRecommendations(): UseMutationResult<
+  HarvestResult,
+  Error,
+  RecommendationRefreshQuery | undefined
+> {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: () => api().refreshRecommendations(),
+    mutationFn: (query) => api().refreshRecommendations(query),
     onSuccess: () => invalidateRecommendations(client)
   })
 }

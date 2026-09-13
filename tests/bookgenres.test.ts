@@ -25,7 +25,7 @@ describe('storing chosen genres', () => {
     expect(books.getBook(db, book.id)?.genres).toEqual(['Science Fiction', 'Fantasy'])
   })
 
-  // Null leaves the inference in charge; an empty list silences it.
+  // The repository preserves the distinction even though both mean unfiled.
   it('keeps an empty choice distinct from no choice', () => {
     const book = books.createBook(db, { title: 'Dune' })
 

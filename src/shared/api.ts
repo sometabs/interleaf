@@ -1,8 +1,6 @@
 // The IPC surface. Main and preload both import it, so a signature change is a
 // compile error rather than a runtime mismatch.
 
-import type { BookGroup } from './categories'
-
 export type BookStatus = 'want' | 'reading' | 'read' | 'abandoned'
 export type NoteKind = 'review' | 'thought' | 'highlight'
 
@@ -20,6 +18,8 @@ export interface Book {
   title: string
   author: string | null
   isbn: string | null
+  // The Open Library edition whose title, cover and ISBN were selected.
+  editionOlid: string | null
   olid: string | null
   coverPath: string | null
   pageCount: number | null
@@ -28,8 +28,7 @@ export interface Book {
   rating: number | null
   startedAt: number | null
   finishedAt: number | null
-  // Null leaves the inference from Open Library's subjects in charge; an empty
-  // array is a choice that it should not apply.
+  // Reader-chosen filing labels. Null means no choice has been made.
   genres: string[] | null
   createdAt: number
   updatedAt: number
@@ -39,6 +38,7 @@ export interface NewBook {
   title: string
   author?: string | null
   isbn?: string | null
+  editionOlid?: string | null
   olid?: string | null
   pageCount?: number | null
   publishedYear?: number | null
@@ -94,24 +94,25 @@ export interface SearchHit {
 }
 
 export interface OlBookDto {
+  // `olid` is the work; this optional id pins the displayed edition.
   olid: string
+  editionOlid?: string | null
   title: string
   author: string | null
-  firstPublishYear: number | null
+  publishedYear: number | null
   coverId: number | null
   isbn: string | null
   pageCount: number | null
+  // Search metadata is already in hand. Keeping it avoids replacing a rich
+  // search result with a sparse work record when the book is saved.
+  subjects?: string[]
+  description?: string | null
 }
 
 export interface BookMetadata {
   subjects: string[]
   description: string | null
   fetchedAt: number
-}
-
-export interface BookSubjects {
-  bookId: number
-  subjects: string[]
 }
 
 // `all` resembles the shelf as a whole; `same-authors` narrows it to writers
@@ -126,6 +127,11 @@ export interface RecommendationQuery {
   likeBookId?: number
 }
 
+export interface RecommendationRefreshQuery {
+  // When set, Open Library is searched for this book rather than the shelf profile.
+  likeBookId?: number
+}
+
 export interface Recommendation {
   olid: string
   title: string
@@ -135,8 +141,9 @@ export interface Recommendation {
   score: number
   // The library book this most resembles.
   becauseOf: { bookId: number; title: string } | null
-  group: BookGroup
-  genres: string[]
+  // Preserved Open Library subjects. The renderer may show a compact subset,
+  // but the recommendation carries the original list.
+  subjects: string[]
 }
 
 // Depth is distance: each level hangs off whichever nearer book it resembles.
@@ -159,9 +166,29 @@ export interface HarvestProgress {
   label: string
 }
 
+export interface MetadataRefreshProgress {
+  done: number
+  total: number
+  label: string
+}
+
+export interface MetadataRefreshFailure {
+  bookId: number
+  title: string
+  reason: string
+}
+
+export interface MetadataRefreshResult {
+  refreshed: number
+  failures: MetadataRefreshFailure[]
+  cancelled: boolean
+  offline: boolean
+}
+
 // The one channel that pushes rather than answers, so it is not part of
 // `InterleafApi`.
 export const HARVEST_PROGRESS_CHANNEL = 'harvest:progress'
+export const METADATA_REFRESH_PROGRESS_CHANNEL = 'metadata-refresh:progress'
 
 export interface BackupResult {
   dir: string
@@ -245,15 +272,14 @@ export interface InterleafApi {
   // Takes the whole result: an OLID alone cannot be looked up.
   addBookFromOpenLibrary(book: OlBookDto): Promise<Book>
   enrichBook(bookId: number): Promise<Book | null>
+  refreshAllMetadata(): Promise<MetadataRefreshResult>
+  retryMetadataRefresh(bookIds: number[]): Promise<MetadataRefreshResult>
+  cancelMetadataRefresh(): Promise<void>
   // Null when the picker was cancelled.
   chooseCover(bookId: number): Promise<Book | null>
   removeCover(bookId: number): Promise<Book | null>
   getBookMetadata(bookId: number): Promise<BookMetadata | null>
-  // One call: grouping by category needs the whole shelf, not a round trip
-  // per cover on screen.
-  listBookSubjects(): Promise<BookSubjects[]>
-
-  refreshRecommendations(): Promise<HarvestResult>
+  refreshRecommendations(query?: RecommendationRefreshQuery): Promise<HarvestResult>
   getRecommendations(query?: RecommendationQuery): Promise<Recommendation[]>
   // Returns the roots.
   getRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
@@ -284,6 +310,7 @@ export interface InterleafApi {
 export interface InterleafBridge extends InterleafApi {
   // Returns the unsubscribe function.
   onHarvestProgress(listener: (progress: HarvestProgress) => void): () => void
+  onMetadataRefreshProgress(listener: (progress: MetadataRefreshProgress) => void): () => void
 }
 
 // Derived from the interface so the two cannot drift.
@@ -301,10 +328,12 @@ export const IPC_CHANNELS = [
   'searchOpenLibrary',
   'addBookFromOpenLibrary',
   'enrichBook',
+  'refreshAllMetadata',
+  'retryMetadataRefresh',
+  'cancelMetadataRefresh',
   'chooseCover',
   'removeCover',
   'getBookMetadata',
-  'listBookSubjects',
   'refreshRecommendations',
   'getRecommendations',
   'getRecommendationTree',
