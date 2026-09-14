@@ -1,13 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
+import { join } from 'path'
 
 import {
   HARVEST_PROGRESS_CHANNEL,
   type InterleafApi,
   IPC_CHANNELS,
   METADATA_REFRESH_PROGRESS_CHANNEL,
+  SEMANTIC_PROGRESS_CHANNEL,
   type MetadataRefreshProgress,
-  type MetadataRefreshResult
+  type MetadataRefreshResult,
+  type SemanticProgress
 } from '../../shared/api'
 import { READING_LANGUAGES } from '../../shared/languages'
 import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
@@ -28,6 +31,10 @@ import {
 import { coversDir, importCoverFile } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
+import {
+  suggestSemanticRecommendations,
+  suggestSemanticRecommendationTree
+} from '../services/semantic'
 
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
@@ -38,6 +45,16 @@ function sendMetadataProgress(progress: MetadataRefreshProgress): void {
       window.webContents.send(METADATA_REFRESH_PROGRESS_CHANNEL, progress)
     }
   }
+}
+
+function sendSemanticProgress(progress: SemanticProgress): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(SEMANTIC_PROGRESS_CHANNEL, progress)
+  }
+}
+
+function semanticModelsDir(): string {
+  return join(app.getPath('userData'), 'semantic-models')
 }
 
 async function runMetadataRefresh(bookIds?: number[]): Promise<MetadataRefreshResult> {
@@ -172,8 +189,19 @@ const api: InterleafApi = {
   async getRecommendations(query) {
     return suggest(getDb(), query)
   },
+  async getSemanticRecommendations(query) {
+    return suggestSemanticRecommendations(getDb(), query, semanticModelsDir(), sendSemanticProgress)
+  },
   async getRecommendationTree(query) {
     return suggestTree(getDb(), query)
+  },
+  async getSemanticRecommendationTree(query) {
+    return suggestSemanticRecommendationTree(
+      getDb(),
+      query,
+      semanticModelsDir(),
+      sendSemanticProgress
+    )
   },
   async dismissRecommendation(olid) {
     meta.recordFeedback(getDb(), olid, 'dismissed')

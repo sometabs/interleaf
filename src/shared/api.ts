@@ -154,6 +154,13 @@ export interface RecommendationNode extends Recommendation {
   children: RecommendationNode[]
 }
 
+export interface SemanticProgress {
+  phase: 'model' | 'embedding' | 'ranking'
+  done: number
+  total: number
+  label: string
+}
+
 export interface HarvestResult {
   harvested: number
   offline: boolean
@@ -189,6 +196,7 @@ export interface MetadataRefreshResult {
 // `InterleafApi`.
 export const HARVEST_PROGRESS_CHANNEL = 'harvest:progress'
 export const METADATA_REFRESH_PROGRESS_CHANNEL = 'metadata-refresh:progress'
+export const SEMANTIC_PROGRESS_CHANNEL = 'semantic:progress'
 
 export interface BackupResult {
   dir: string
@@ -281,8 +289,10 @@ export interface InterleafApi {
   getBookMetadata(bookId: number): Promise<BookMetadata | null>
   refreshRecommendations(query?: RecommendationRefreshQuery): Promise<HarvestResult>
   getRecommendations(query?: RecommendationQuery): Promise<Recommendation[]>
+  getSemanticRecommendations(query?: RecommendationQuery): Promise<Recommendation[]>
   // Returns the roots.
   getRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
+  getSemanticRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
   dismissRecommendation(olid: string): Promise<void>
   saveRecommendation(olid: string): Promise<Book>
 
@@ -311,6 +321,7 @@ export interface InterleafBridge extends InterleafApi {
   // Returns the unsubscribe function.
   onHarvestProgress(listener: (progress: HarvestProgress) => void): () => void
   onMetadataRefreshProgress(listener: (progress: MetadataRefreshProgress) => void): () => void
+  onSemanticProgress(listener: (progress: SemanticProgress) => void): () => void
 }
 
 // Derived from the interface so the two cannot drift.
@@ -336,7 +347,9 @@ export const IPC_CHANNELS = [
   'getBookMetadata',
   'refreshRecommendations',
   'getRecommendations',
+  'getSemanticRecommendations',
   'getRecommendationTree',
+  'getSemanticRecommendationTree',
   'dismissRecommendation',
   'saveRecommendation',
   'exportBackup',

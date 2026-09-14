@@ -214,7 +214,7 @@ function cosine(a: Vector, b: Vector): number {
 }
 
 // A low rating pushes away, not merely less towards.
-function tasteWeight(book: ProfileBook, now: number): number {
+export function tasteWeight(book: ProfileBook, now: number): number {
   const base =
     book.rating === null
       ? 0.5
@@ -306,6 +306,34 @@ function capFor(options: RecommendOptions): number {
 // MMR cannot do this: at lambda 0.7 a perfect duplicate still beats a book with
 // 3.5x less relevance, and a series tag acts as an author fingerprint.
 const DEFAULT_MAX_PER_AUTHOR = 2
+
+export interface RecommendationRun {
+  profile: ProfileBook[]
+  candidates: CandidateInput[]
+  now: number
+  limit: number
+  diversity: number
+  maxPerAuthor: number
+}
+
+// Both ranking methods must start from exactly the same evidence and pool.
+// Keeping this here prevents semantic scoring from quietly changing shelf,
+// language, author or single-book behavior while it is being compared.
+export function prepareRecommendationRun(
+  library: ProfileBook[],
+  candidates: CandidateInput[],
+  options: RecommendOptions = {}
+): RecommendationRun {
+  const profile = profileFor(library, options)
+  return {
+    profile,
+    candidates: poolFor(profile, candidates, options),
+    now: options.now ?? Math.floor(Date.now() / 1000),
+    limit: options.limit ?? 12,
+    diversity: options.diversity ?? 0.7,
+    maxPerAuthor: capFor(options)
+  }
+}
 
 // Open Library spells the same author inconsistently across editions.
 function authorKey(author: string | null): string | null {
@@ -403,16 +431,10 @@ export function recommend(
   candidates: CandidateInput[],
   options: RecommendOptions = {}
 ): Recommendation[] {
-  const now = options.now ?? Math.floor(Date.now() / 1000)
-  const profile = profileFor(library, options)
-  const scored = scoreCandidates(profile, poolFor(profile, candidates, options), now)
+  const run = prepareRecommendationRun(library, candidates, options)
+  const scored = scoreCandidates(run.profile, run.candidates, run.now)
 
-  return maximalMarginalRelevance(
-    scored,
-    options.limit ?? 12,
-    options.diversity ?? 0.7,
-    capFor(options)
-  )
+  return maximalMarginalRelevance(scored, run.limit, run.diversity, run.maxPerAuthor)
 }
 
 // Inserted best-first so a parent is always nearer to the profile than its
@@ -422,16 +444,17 @@ export function recommendTree(
   candidates: CandidateInput[],
   options: RecommendOptions = {}
 ): RecommendationNode[] {
-  const now = options.now ?? Math.floor(Date.now() / 1000)
-  const limit = options.limit ?? 24
-  const profile = profileFor(library, options)
+  const run = prepareRecommendationRun(library, candidates, {
+    ...options,
+    limit: options.limit ?? 24
+  })
 
   // Re-sorted by score after the cap: insertion order is what makes depth
   // mean distance.
   const scored = takeCappedByAuthor(
-    scoreCandidates(profile, poolFor(profile, candidates, options), now),
-    limit,
-    capFor(options)
+    scoreCandidates(run.profile, run.candidates, run.now),
+    run.limit,
+    run.maxPerAuthor
   ).sort((a, b) => b.rec.score - a.rec.score)
 
   const roots: RecommendationNode[] = []

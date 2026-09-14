@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import Discover from '../src/renderer/src/components/Discover'
+import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import { MIN_SHOWN, shownFor } from '../src/renderer/src/lib/shown'
 import { installBridge, makeBook, renderApp } from './helpers/render'
 
@@ -71,6 +72,54 @@ describe('author filter removal', () => {
 
     expect(screen.queryByRole('radiogroup', { name: 'Authors' })).toBeNull()
     expect(screen.queryByRole('radio', { name: 'My authors' })).toBeNull()
+  })
+})
+
+describe('ranking mode', () => {
+  it('starts with cached Standard results and switches locally to Semantic', async () => {
+    const semanticResult = rec({ olid: 'SEM', title: 'A Contextual Match', score: 0.81 })
+    const getSemanticRecommendations = vi.fn(async () => [semanticResult])
+    const getSemanticRecommendationTree = vi.fn(async () => [
+      { ...semanticResult, similarityToParent: null, depth: 0, children: [] }
+    ])
+    installBridge(
+      { books: [makeBook({ id: 1, status: 'read', rating: 5 })] },
+      {
+        getRecommendations: async () => ALL,
+        getSemanticRecommendations,
+        getSemanticRecommendationTree,
+        getRecommendationTree: async () => []
+      }
+    )
+    renderApp(
+      <>
+        <Discover />
+        <ConfirmDialog />
+      </>
+    )
+    const user = userEvent.setup()
+
+    expect(await card('The Left Hand of Darkness')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Standard' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    expect(getSemanticRecommendations).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    expect(screen.getByText('Enable Advanced recommendations?')).toBeTruthy()
+    expect(getSemanticRecommendations).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Enable Advanced' }))
+
+    expect(await card('A Contextual Match')).toBeTruthy()
+    expect(getSemanticRecommendations).toHaveBeenCalledWith({ limit: MIN_SHOWN })
+    expect(screen.getByText(/advanced ranking/)).toBeTruthy()
+    expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBe('true')
+
+    await user.click(screen.getByRole('button', { name: 'tree' }))
+    await waitFor(() =>
+      expect(getSemanticRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
+    )
   })
 })
 

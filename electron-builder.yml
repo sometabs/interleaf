@@ -3,6 +3,8 @@ productName: Interleaf
 directories:
   buildResources: build
 files:
+  # Alternate output folders must never be folded back into the application.
+  - '!dist*/**'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -25,6 +27,8 @@ asarUnpack:
   - resources/**
   # Native bindings cannot be loaded from inside an asar archive.
   - '**/*.node'
+  # The semantic runtime loads its shared library beside the native binding.
+  - node_modules/onnxruntime-node/bin/**
 win:
   executableName: interleaf
 nsis:

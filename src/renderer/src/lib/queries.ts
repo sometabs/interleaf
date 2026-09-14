@@ -34,6 +34,7 @@ import type {
   RecommendationNode,
   RecommendationQuery,
   RecommendationRefreshQuery,
+  SemanticProgress,
   SearchHit
 } from '@shared/api'
 
@@ -49,6 +50,12 @@ const keys = {
   metadata: (bookId: number) => ['metadata', bookId] as const,
   recommendations: ['recommendations'] as const,
   recommendationsFor: (query: RecommendationQuery) => ['recommendations', query] as const,
+  semanticRecommendations: ['semantic-recommendations'] as const,
+  semanticRecommendationsFor: (query: RecommendationQuery) =>
+    ['semantic-recommendations', query] as const,
+  semanticRecommendationTrees: ['semantic-recommendation-trees'] as const,
+  semanticRecommendationTreeFor: (query: RecommendationQuery) =>
+    ['semantic-recommendation-trees', query] as const,
   recommendationTree: ['recommendation-tree'] as const,
   recommendationTreeFor: (query: RecommendationQuery) => ['recommendation-tree', query] as const,
   dismissed: ['dismissed'] as const,
@@ -70,6 +77,8 @@ function invalidateBooks(client: QueryClient): void {
 // The list and the tree are one scoring; they go stale together.
 function invalidateRecommendations(client: QueryClient): void {
   void client.invalidateQueries({ queryKey: keys.recommendations })
+  void client.invalidateQueries({ queryKey: keys.semanticRecommendations })
+  void client.invalidateQueries({ queryKey: keys.semanticRecommendationTrees })
   void client.invalidateQueries({ queryKey: keys.recommendationTree })
 }
 
@@ -135,13 +144,53 @@ export function useRecommendations(
 }
 
 export function useRecommendationTree(
-  query: RecommendationQuery = {}
+  query: RecommendationQuery = {},
+  enabled = true
 ): UseQueryResult<RecommendationNode[]> {
   return useQuery({
     queryKey: keys.recommendationTreeFor(query),
     queryFn: () => api().getRecommendationTree(query),
+    enabled,
     placeholderData: (previous) => previous
   })
+}
+
+export function useSemanticRecommendations(
+  query: RecommendationQuery = {},
+  enabled = true
+): UseQueryResult<Recommendation[]> {
+  return useQuery({
+    queryKey: keys.semanticRecommendationsFor(query),
+    queryFn: () => api().getSemanticRecommendations(query),
+    enabled,
+    retry: false
+  })
+}
+
+export function useSemanticRecommendationTree(
+  query: RecommendationQuery = {},
+  enabled = true
+): UseQueryResult<RecommendationNode[]> {
+  return useQuery({
+    queryKey: keys.semanticRecommendationTreeFor(query),
+    queryFn: () => api().getSemanticRecommendationTree(query),
+    enabled,
+    retry: false
+  })
+}
+
+export function useSemanticProgress(active: boolean): SemanticProgress | null {
+  const [progress, setProgress] = useState<SemanticProgress | null>(null)
+  const [wasActive, setWasActive] = useState(active)
+
+  useEffect(() => api().onSemanticProgress(setProgress), [])
+
+  if (active !== wasActive) {
+    setWasActive(active)
+    setProgress(null)
+  }
+
+  return active ? progress : null
 }
 
 // ---------------------------------------------------------------- writes

@@ -44,15 +44,15 @@ function show(recommendations: Recommendation[] = [REC]): {
 }
 
 async function startSearch(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(await screen.findByRole('button', { name: 'Search' }))
+  await user.click(await screen.findByRole('button', { name: 'Search online' }))
   await screen.findByRole('region', { name: 'Search progress' })
 }
 
 describe('the button that starts a search', () => {
-  it('is called Search', async () => {
+  it('makes the network action explicit', async () => {
     show()
 
-    expect(await screen.findByRole('button', { name: 'Search' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Search online' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Find more' })).toBeNull()
   })
 })
@@ -61,7 +61,7 @@ describe('waiting for a search', () => {
   it('says nothing until one is running', async () => {
     show()
 
-    await screen.findByRole('button', { name: 'Search' })
+    await screen.findByRole('button', { name: 'Search online' })
     expect(screen.queryByRole('region', { name: 'Search progress' })).toBeNull()
   })
 
@@ -133,7 +133,7 @@ describe('waiting for a search', () => {
 
   it('replaces the invitation to search rather than sitting under it', async () => {
     const { user } = show([])
-    await user.click(await screen.findByRole('button', { name: 'Search' }))
+    await user.click(await screen.findByRole('button', { name: 'Search online' }))
 
     await screen.findByRole('region', { name: 'Search progress' })
     expect(screen.queryByText(/Press “Search”/)).toBeNull()

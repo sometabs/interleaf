@@ -1,6 +1,6 @@
 {
   "name": "interleaf",
-  "version": "1.8.0",
+  "version": "1.8.2",
   "description": "Offline book journal with tagged notes, reviews, and recommendations",
   "main": "./out/main/index.js",
   "author": "sometabs",
@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "@huggingface/transformers": "^4.2.0",
     "better-sqlite3": "^13.0.1"
   },
   "devDependencies": {
