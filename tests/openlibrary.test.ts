@@ -111,8 +111,8 @@ describe('the author a search result is credited to', () => {
   })
 })
 
-// Edition language is explicit. The API filters works to English, then this
-// mapper keeps the selected edition's fields together.
+// Open Library chooses the first nested edition. The mapper keeps that
+// edition's fields together without applying its own language preference.
 describe('choosing between the work and edition titles', () => {
   function titleOf(work: string, edition?: string): string | undefined {
     return toOlBook({
@@ -133,7 +133,7 @@ describe('choosing between the work and edition titles', () => {
     ).toBe('By the River Piedra I Sat Down and Wept')
   })
 
-  it('falls back to Open Library’s default edition when none is readable', () => {
+  it('takes Open Library’s default edition regardless of language', () => {
     const book = toOlBook({
       key: '/works/OL1W',
       title: 'A work title',
@@ -144,7 +144,7 @@ describe('choosing between the work and edition titles', () => {
     expect(book).toMatchObject({ title: 'Un titre français', coverId: 20 })
   })
 
-  it('prefers a readable edition even when it is not listed first', () => {
+  it('does not replace Open Library’s first edition with a later English one', () => {
     const book = toOlBook({
       key: '/works/OL1W',
       title: 'Un titre français',
@@ -156,10 +156,10 @@ describe('choosing between the work and edition titles', () => {
       }
     })
 
-    expect(book).toMatchObject({ title: 'An English title', coverId: 20 })
+    expect(book).toMatchObject({ title: 'Un titre français', coverId: 10 })
   })
 
-  it('takes a nested edition explicitly marked as English', () => {
+  it('takes the first nested edition when it happens to be English', () => {
     const book = toOlBook({
       key: '/works/OL1W',
       title: 'Un titre français',

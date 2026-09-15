@@ -130,7 +130,7 @@ describe('storing what came back', () => {
   })
 })
 
-describe('filtering to readable editions', () => {
+describe('accepting Open Library editions', () => {
   it('no longer calls the subjects endpoint at all', async () => {
     const { harvest } = await load()
     const book = books.createBook(db, {
@@ -141,7 +141,7 @@ describe('filtering to readable editions', () => {
     })
     saveBookMetadata(db, book.id, { subjects: ['science fiction'], description: null })
 
-    const done = harvest.harvestCandidates(db, ['eng'])
+    const done = harvest.harvestCandidates(db)
     await vi.advanceTimersByTimeAsync(60_000)
     await done
 
@@ -150,7 +150,7 @@ describe('filtering to readable editions', () => {
     expect(urls.some((url) => url.includes('q=subject'))).toBe(true)
   })
 
-  it('filters every harvest request to English at Open Library', async () => {
+  it('does not add a language filter to harvest requests', async () => {
     const { harvest } = await load()
     const book = books.createBook(db, {
       title: 'Solaris',
@@ -160,33 +160,32 @@ describe('filtering to readable editions', () => {
     })
     saveBookMetadata(db, book.id, { subjects: ['science fiction'], description: null })
 
-    const done = harvest.harvestCandidates(db, ['eng'])
+    const done = harvest.harvestCandidates(db)
     await vi.advanceTimersByTimeAsync(60_000)
     await done
 
     const searches = urls.filter((url) => url.includes('/search.json'))
     expect(searches.length).toBeGreaterThan(0)
     for (const url of searches) {
-      expect(new URL(url).searchParams.get('language')).toBe('eng')
-      expect(new URL(url).searchParams.get('lang')).toBe('en')
+      expect(new URL(url).searchParams.has('language')).toBe(false)
+      expect(new URL(url).searchParams.has('lang')).toBe(false)
     }
   })
 
-  it('defaults to requiring an English edition', async () => {
+  it('does not constrain an ordinary search by language', async () => {
     const { ol } = await load()
 
-    // The default, so a call site that forgets cannot widen the search.
     const done = ol.searchBooks('dune')
     await vi.advanceTimersByTimeAsync(5000)
     await done
 
-    expect(new URL(urls[0]).searchParams.get('language')).toBe('eng')
-    expect(new URL(urls[0]).searchParams.get('lang')).toBe('en')
+    expect(new URL(urls[0]).searchParams.has('language')).toBe(false)
+    expect(new URL(urls[0]).searchParams.has('lang')).toBe(false)
   })
 })
 
-describe('the English requirement', () => {
-  it('is the filter and display language on every endpoint, called directly', async () => {
+describe('using Open Library’s selected edition', () => {
+  it('does not constrain direct author or subject searches by language', async () => {
     const { ol } = await load()
 
     const author = ol.fetchByAuthor('Le Guin')
@@ -199,12 +198,12 @@ describe('the English requirement', () => {
 
     expect(urls).toHaveLength(2)
     for (const url of urls) {
-      expect(new URL(url).searchParams.get('language')).toBe('eng')
-      expect(new URL(url).searchParams.get('lang')).toBe('en')
+      expect(new URL(url).searchParams.has('language')).toBe(false)
+      expect(new URL(url).searchParams.has('lang')).toBe(false)
     }
   })
 
-  it('asks for the nested editions, which is where an English title comes from', async () => {
+  it('asks for the nested edition Open Library selected', async () => {
     const { ol } = await load()
 
     const search = ol.searchBooks('dune')
@@ -233,7 +232,6 @@ describe('the English requirement', () => {
       expect(fields.split(',')).toContain('editions.language')
       expect(fields.split(',')).toContain('editions.number_of_pages')
       expect(fields.split(',')).toContain('editions.publish_date')
-      expect(new URL(url).searchParams.get('lang')).toBe('en')
     }
   })
 
@@ -256,7 +254,7 @@ describe('the English requirement', () => {
     expect(subjectFields).toContain('editions.isbn')
   })
 
-  it('asks for the alternate author names, which is where an English one comes from', async () => {
+  it('asks for alternate author names so a Latin-script one can be selected', async () => {
     const { ol } = await load()
 
     const search = ol.searchBooks('dostoevsky')
@@ -279,7 +277,7 @@ describe('the English requirement', () => {
     }
   })
 
-  it('reaches the author harvest too, not just search', async () => {
+  it('leaves language unconstrained throughout a harvest', async () => {
     const { harvest } = await load()
     const book = books.createBook(db, {
       title: 'Solaris',
@@ -296,8 +294,8 @@ describe('the English requirement', () => {
     const searches = urls.filter((url) => url.includes('/search.json'))
     expect(searches.length).toBeGreaterThan(1)
     for (const url of searches) {
-      expect(new URL(url).searchParams.get('language')).toBe('eng')
-      expect(new URL(url).searchParams.get('lang')).toBe('en')
+      expect(new URL(url).searchParams.has('language')).toBe(false)
+      expect(new URL(url).searchParams.has('lang')).toBe(false)
     }
   })
 })

@@ -61,11 +61,11 @@ function likedBook(): void {
   saveBookMetadata(db, book.id, { subjects: ['science fiction'], description: null })
 }
 
-async function run(languages?: readonly string[]): Promise<HarvestProgress[]> {
+async function run(): Promise<HarvestProgress[]> {
   const harvest = await load()
   const seen: HarvestProgress[] = []
 
-  const done = harvest.harvestCandidates(db, languages ?? ['eng'], (progress) => {
+  const done = harvest.harvestCandidates(db, (progress) => {
     seen.push(progress)
     events.push(`report:${progress.label}`)
   })
@@ -188,7 +188,7 @@ describe('reporting a harvest as it runs', () => {
     likedBook()
     const harvest = await load()
 
-    const done = harvest.harvestCandidates(db, ['eng'])
+    const done = harvest.harvestCandidates(db)
     await vi.advanceTimersByTimeAsync(60_000)
 
     await expect(done).resolves.toMatchObject({ offline: false })

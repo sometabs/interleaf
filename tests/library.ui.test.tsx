@@ -325,7 +325,13 @@ describe('refreshing all metadata', () => {
       {
         refreshAllMetadata: async () => ({
           refreshed: 0,
-          failures: [{ bookId: 1, title: 'Solaris', reason: 'No English edition was found.' }],
+          failures: [
+            {
+              bookId: 1,
+              title: 'Solaris',
+              reason: 'Open Library returned no result for this book.'
+            }
+          ],
           cancelled: false,
           offline: false
         }),
@@ -345,7 +351,7 @@ describe('refreshing all metadata', () => {
 
     expect(await screen.findByText(/0 books refreshed; 1 could not be matched/)).toBeTruthy()
     await user.click(screen.getByText('Books needing attention (1)'))
-    expect(document.body.textContent).toContain('No English edition was found.')
+    expect(document.body.textContent).toContain('Open Library returned no result for this book.')
 
     await user.click(screen.getByRole('button', { name: 'Retry failed books' }))
     await waitFor(() => expect(retryMetadataRefresh).toHaveBeenCalledWith([1]))

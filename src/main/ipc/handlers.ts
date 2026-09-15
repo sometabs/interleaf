@@ -12,7 +12,6 @@ import {
   type MetadataRefreshResult,
   type SemanticProgress
 } from '../../shared/api'
-import { READING_LANGUAGES } from '../../shared/languages'
 import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
 import * as books from '../repos/books'
 import * as data from '../repos/data'
@@ -175,7 +174,6 @@ const api: InterleafApi = {
   async refreshRecommendations(query) {
     return harvestCandidates(
       getDb(),
-      READING_LANGUAGES,
       (progress) => {
         // Every window, not the caller's: the generic handler loop below does not
         // thread the event through, and the app opens exactly one window.

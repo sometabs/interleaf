@@ -42,7 +42,7 @@ async function harvestWith(subjects: string[]): Promise<string[]> {
   saveBookMetadata(db, book.id, { subjects, description: null })
 
   const harvest = await load()
-  const done = harvest.harvestCandidates(db, ['eng'])
+  const done = harvest.harvestCandidates(db)
   await vi.advanceTimersByTimeAsync(120_000)
   await done
   return queries
@@ -123,7 +123,7 @@ describe('what a search actually asks for', () => {
     saveBookMetadata(db, book.id, { subjects: ['science fiction'], description: null })
 
     const harvest = await load()
-    const done = harvest.harvestCandidates(db, ['eng'])
+    const done = harvest.harvestCandidates(db)
     await vi.advanceTimersByTimeAsync(30_000)
     await done
 
@@ -149,7 +149,7 @@ describe('what a search actually asks for', () => {
     })
 
     const harvest = await load()
-    const done = harvest.harvestCandidates(db, ['eng'], undefined, scienceFiction.id)
+    const done = harvest.harvestCandidates(db, undefined, scienceFiction.id)
     await vi.advanceTimersByTimeAsync(30_000)
     await done
 
@@ -181,7 +181,7 @@ describe('what a search actually asks for', () => {
     ])
 
     const harvest = await load()
-    const done = harvest.harvestCandidates(db, ['eng'], undefined, book.id)
+    const done = harvest.harvestCandidates(db, undefined, book.id)
     await vi.advanceTimersByTimeAsync(30_000)
     await done
 

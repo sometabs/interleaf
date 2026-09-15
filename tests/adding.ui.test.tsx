@@ -38,7 +38,7 @@ const REC = {
 }
 
 describe('adding from the search dialog', () => {
-  it('explains that an empty search means no English edition was found', async () => {
+  it('explains that an empty search found no books', async () => {
     const user = userEvent.setup()
     installBridge({}, { searchOpenLibrary: async () => [] })
     renderApp(<AddBookDialog open onOpenChange={() => {}} />)
@@ -46,7 +46,7 @@ describe('adding from the search dialog', () => {
     await user.type(screen.getByLabelText('Search for a book'), 'untranslated book')
     await user.click(screen.getByRole('button', { name: 'Search' }))
 
-    await waitFor(() => expect(screen.getByText('No English editions found.')).toBeDefined())
+    await waitFor(() => expect(screen.getByText('No books found.')).toBeDefined())
   })
 
   it('marks the row it is working on, and only that row', async () => {

@@ -1,7 +1,6 @@
 import type { Database } from 'better-sqlite3'
 
 import type { HarvestProgress, HarvestResult } from '../../shared/api'
-import { READING_LANGUAGES } from '../../shared/languages'
 import {
   booksWithMetadata,
   replaceCandidates,
@@ -170,7 +169,6 @@ export function planDiscoveryQueries(books: DiscoveryBook[]): DiscoveryPlan {
 // The only step that needs the network; scoring afterwards is offline.
 export async function harvestCandidates(
   db: Database,
-  languages: readonly string[] = READING_LANGUAGES,
   onProgress?: (progress: HarvestProgress) => void,
   likeBookId?: number
 ): Promise<HarvestResult> {
@@ -210,7 +208,7 @@ export async function harvestCandidates(
   async function runQuery(query: DiscoveryQuery): Promise<void> {
     report(query.label)
     attempted += 1
-    const found = await fetchCandidates(query.query, query.limit, languages)
+    const found = await fetchCandidates(query.query, query.limit)
     done += 1
     if (found === null) {
       failed += 1

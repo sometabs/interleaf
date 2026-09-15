@@ -260,7 +260,7 @@ describe('refreshing the whole library', () => {
     expect(queries).toEqual(['key:/works/OL27482W'])
   })
 
-  it('uses the English edition and Latin author returned for that exact work', async () => {
+  it('uses Open Library’s selected edition and its Latin author for that exact work', async () => {
     const fetchMock = vi.fn(async (input: string | URL) => {
       const url = String(input)
       if (url.includes('/works/')) return response({ subjects: ['Fiction'] })
@@ -401,7 +401,7 @@ describe('refreshing the whole library', () => {
     const result = await pending
 
     expect(result.refreshed).toBe(0)
-    expect(result.failures[0]?.reason).toBe('No English edition was found.')
+    expect(result.failures[0]?.reason).toBe('Open Library returned no result for this book.')
     expect(books.getBook(db, original.id)?.olid).toBe('OL999W')
   })
 

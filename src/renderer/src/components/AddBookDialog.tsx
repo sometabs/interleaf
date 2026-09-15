@@ -143,9 +143,7 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
             })}
 
             {isSuccess && results.length === 0 && !isFetching && (
-              <p className="px-4 py-6 text-center text-[13px] text-ink-muted">
-                No English editions found.
-              </p>
+              <p className="px-4 py-6 text-center text-[13px] text-ink-muted">No books found.</p>
             )}
 
             {/* A lookup that never happened is not entitled to say "nothing found". */}

@@ -232,9 +232,6 @@ export function tasteWeight(book: ProfileBook, now: number): number {
 }
 
 export interface RecommendOptions extends RecommendationQuery {
-  // Optional for pure callers. The app's candidate harvest already filters to
-  // English at Open Library, so scoring does not need to repeat that filter.
-  languages?: readonly string[]
   // 0 = maximum diversity, 1 = pure relevance.
   diversity?: number
   // 0 or below disables the cap.
@@ -262,17 +259,6 @@ function inScope(
   })
 }
 
-// A candidate recording no language is dropped, or "English and French" would
-// mean "and anything unlabelled".
-function byLanguage(candidates: CandidateInput[], languages: readonly string[]): CandidateInput[] {
-  if (languages.length === 0) return candidates
-
-  const readable = new Set(languages)
-  return candidates.filter((candidate) =>
-    candidate.languages.some((code) => readable.has(code.toLowerCase()))
-  )
-}
-
 // The rating is overridden because a disliked book weighs negative, and a
 // profile of one such book is emptied rather than pointed at.
 function profileFor(library: ProfileBook[], options: RecommendOptions): ProfileBook[] {
@@ -295,7 +281,7 @@ function poolFor(
   candidates: CandidateInput[],
   options: RecommendOptions
 ): CandidateInput[] {
-  return byLanguage(inScope(library, candidates, options.scope ?? 'all'), options.languages ?? [])
+  return inScope(library, candidates, options.scope ?? 'all')
 }
 
 function capFor(options: RecommendOptions): number {

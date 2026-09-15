@@ -169,7 +169,9 @@ async function refreshKnownBook(db: Database, book: Book): Promise<RefreshOneRes
 
   const matches = await searchWorkByOlid(book.olid)
   if (matches === null) return { kind: 'offline' }
-  if (matches.length === 0) return { kind: 'failed', reason: 'No English edition was found.' }
+  if (matches.length === 0) {
+    return { kind: 'failed', reason: 'Open Library returned no result for this book.' }
+  }
   const selected = matches[0]
 
   const work = await fetchWork(selected.olid)

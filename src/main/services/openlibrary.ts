@@ -1,6 +1,5 @@
 // Nothing here throws on a network problem: offline is a normal state.
 
-import { READING_LANGUAGES } from '../../shared/languages'
 import { createThrottle } from '../lib/throttle'
 import { latinAuthorName } from './authorNames'
 
@@ -154,10 +153,10 @@ function yearOf(value: string | string[] | undefined): number | null {
   return null
 }
 
-// Prefer the explicitly requested edition language. Search calls filter to
-// that language at the API, while this chooses the matching edition returned
-// inside the work. Once selected, its title, jacket and ISBN stay together.
-function display(doc: SearchDoc, languages: readonly string[]): Display {
+// Open Library orders the nested editions by relevance and returns its chosen
+// edition first. Keep that edition's title, jacket and identifiers together
+// instead of second-guessing the catalogue's language metadata.
+function display(doc: SearchDoc): Display {
   const work = {
     title: (doc.title ?? '').trim(),
     coverId: doc.cover_i ?? null,
@@ -168,12 +167,7 @@ function display(doc: SearchDoc, languages: readonly string[]): Display {
     languages: [...(doc.language ?? [])]
   }
 
-  const readable = new Set(languages.map((language) => language.toLowerCase()))
-  const editions = doc.editions?.docs ?? []
-  const edition =
-    editions.find((candidate) =>
-      candidate.language?.some((language) => readable.has(language.toLowerCase()))
-    ) ?? editions[0]
+  const edition = doc.editions?.docs?.[0]
   if (!edition) return work
 
   return {
@@ -193,14 +187,11 @@ function displayAuthor(doc: SearchDoc): string | null {
   return latinAuthorName(names[0], doc.author_alternative_name ?? [], names.slice(1))
 }
 
-export function toOlBook(
-  doc: SearchDoc,
-  languages: readonly string[] = READING_LANGUAGES
-): OlBook | null {
+export function toOlBook(doc: SearchDoc): OlBook | null {
   const olid = toOlid(doc.key)
   if (!olid || !doc.title) return null
 
-  const shown = display(doc, languages)
+  const shown = display(doc)
 
   return {
     // Always the work id: `/works/{editionId}.json` answers 200 with the
@@ -217,17 +208,6 @@ export function toOlBook(
     description: firstSentence(doc),
     languages: shown.languages
   }
-}
-
-// `language=eng` is the catalogue filter; `lang=en` asks Open Library to pick
-// the English edition inside each matching work. The app currently supplies
-// only `eng`, but keeping the conversion here avoids mixing both code systems.
-function editionLanguage(codes: readonly string[]): string {
-  const catalogueCode = codes[0]?.toLowerCase()
-  if (!catalogueCode) return ''
-
-  const displayCode = catalogueCode === 'eng' ? 'en' : catalogueCode
-  return `&language=${encodeURIComponent(catalogueCode)}&lang=${encodeURIComponent(displayCode)}`
 }
 
 const SEARCH_FIELDS = [
@@ -282,23 +262,15 @@ function firstDuplicateOnly(items: OlBook[]): OlBook[] {
 
 // `null` when the request failed, `[]` when Open Library answered with nothing:
 // collapsing them shows a timeout as "no such book".
-export async function searchBooks(
-  query: string,
-  limit = 12,
-  languages: readonly string[] = READING_LANGUAGES
-): Promise<OlBook[] | null> {
+export async function searchBooks(query: string, limit = 12): Promise<OlBook[] | null> {
   const q = query.trim()
   if (!q) return []
 
-  const url =
-    `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${SEARCH_FIELDS}` +
-    editionLanguage(languages)
+  const url = `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${SEARCH_FIELDS}`
   const data = await getJson<{ docs?: SearchDoc[] }>(url)
   if (data === null) return null
 
-  return firstDuplicateOnly(
-    (data.docs ?? []).map((doc) => toOlBook(doc, languages)).filter((b): b is OlBook => b !== null)
-  )
+  return firstDuplicateOnly((data.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null))
 }
 
 function searchPhrase(value: string): string {
@@ -308,8 +280,7 @@ function searchPhrase(value: string): string {
 export async function searchBookByTitleAuthor(
   title: string,
   author: string | null,
-  limit = 12,
-  languages: readonly string[] = READING_LANGUAGES
+  limit = 12
 ): Promise<OlBook[] | null> {
   const cleanTitle = searchPhrase(title)
   if (!cleanTitle) return []
@@ -317,14 +288,14 @@ export async function searchBookByTitleAuthor(
   const query = cleanAuthor
     ? `title:"${cleanTitle}" author:"${cleanAuthor}"`
     : `title:"${cleanTitle}"`
-  const exact = await searchBooks(query, limit, languages)
+  const exact = await searchBooks(query, limit)
   if (exact === null || exact.length > 0 || !cleanAuthor) return exact
 
   // Open Library's author phrase parser treats punctuation and spacing as
   // significant: "J. R. R. Tolkien" can miss a record filed as
   // "J.R.R. Tolkien". Retry by title, then keep only the same normalized
   // author so the fallback cannot turn a book into a different author's work.
-  const byTitle = await searchBooks(`title:"${cleanTitle}"`, Math.max(limit, 12), languages)
+  const byTitle = await searchBooks(`title:"${cleanTitle}"`, Math.max(limit, 12))
   if (byTitle === null) return null
 
   const wantedAuthor = personIdentity(author)
@@ -332,37 +303,26 @@ export async function searchBookByTitleAuthor(
 }
 
 // A saved book is already identified. Querying the Search API by its exact
-// work key lets Open Library select the current English edition without
+// work key lets Open Library select its current best edition without
 // re-identifying the book from mutable title and author text.
-export function searchWorkByOlid(
-  olid: string,
-  languages: readonly string[] = READING_LANGUAGES
-): Promise<OlBook[] | null> {
+export function searchWorkByOlid(olid: string): Promise<OlBook[] | null> {
   const id = olid.trim().toUpperCase()
   if (!/^OL\d+W$/.test(id)) return Promise.resolve([])
-  return searchBooks(`key:/works/${id}`, 1, languages)
+  return searchBooks(`key:/works/${id}`, 1)
 }
 
 // A raw, fielded Search API query for Discover. Unlike the older one-subject
 // harvest this keeps Open Library's relevance order and preserves `null`, so a
 // partial outage cannot replace a healthy cached pool with an incomplete one.
-export async function fetchCandidates(
-  query: string,
-  limit = 50,
-  languages: readonly string[] = READING_LANGUAGES
-): Promise<OlBook[] | null> {
+export async function fetchCandidates(query: string, limit = 50): Promise<OlBook[] | null> {
   const q = query.trim()
   if (!q) return []
 
-  const url =
-    `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${SEARCH_FIELDS}` +
-    editionLanguage(languages)
+  const url = `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${SEARCH_FIELDS}`
   const data = await getJson<{ docs?: SearchDoc[] }>(url)
   if (data === null) return null
 
-  return (data.docs ?? [])
-    .map((doc) => toOlBook(doc, languages))
-    .filter((b): b is OlBook => b !== null)
+  return (data.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
 interface WorkResponse {
@@ -391,42 +351,28 @@ export async function fetchWork(olid: string): Promise<OlWorkDetail | null> {
 
 // Via search rather than /subjects/{slug}.json, which reports no language and
 // accepts no language filter. `sort=editions` replaces its curated ordering.
-export async function fetchSubject(
-  subject: string,
-  limit = 24,
-  languages: readonly string[] = READING_LANGUAGES
-): Promise<OlBook[]> {
+export async function fetchSubject(subject: string, limit = 24): Promise<OlBook[]> {
   const s = subject.trim()
   if (!s) return []
 
   const q = `subject:"${s.replace(/"/g, '')}"`
   const url =
     `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}` +
-    `&sort=editions&fields=${SEARCH_FIELDS}${editionLanguage(languages)}`
+    `&sort=editions&fields=${SEARCH_FIELDS}`
 
   const data = await getJson<{ docs?: SearchDoc[] }>(url)
 
-  return (data?.docs ?? [])
-    .map((doc) => toOlBook(doc, languages))
-    .filter((b): b is OlBook => b !== null)
+  return (data?.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
-export async function fetchByAuthor(
-  author: string,
-  limit = 16,
-  languages: readonly string[] = READING_LANGUAGES
-): Promise<OlBook[]> {
+export async function fetchByAuthor(author: string, limit = 16): Promise<OlBook[]> {
   const a = author.trim()
   if (!a) return []
 
-  const url =
-    `${BASE}/search.json?author=${encodeURIComponent(a)}&limit=${limit}&fields=${SEARCH_FIELDS}` +
-    editionLanguage(languages)
+  const url = `${BASE}/search.json?author=${encodeURIComponent(a)}&limit=${limit}&fields=${SEARCH_FIELDS}`
   const data = await getJson<{ docs?: SearchDoc[] }>(url)
 
-  return (data?.docs ?? [])
-    .map((doc) => toOlBook(doc, languages))
-    .filter((b): b is OlBook => b !== null)
+  return (data?.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
 function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {

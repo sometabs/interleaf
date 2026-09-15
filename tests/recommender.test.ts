@@ -19,8 +19,6 @@ function lib(partial: Partial<ProfileBook> & { bookId: number; title: string }):
 }
 
 function cand(partial: Partial<CandidateInput> & { olid: string; title: string }): CandidateInput {
-  // The pool is filtered to English editions, so a fixture with no language
-  // would be dropped before it is ever scored.
   return {
     author: null,
     subjects: [],
@@ -444,65 +442,6 @@ describe('scoping to authors already read', () => {
     walk(roots)
 
     expect(seen.sort()).toEqual(['CYB', 'FIA', 'HMV'])
-  })
-})
-
-describe('filtering by language', () => {
-  const shelf = [lib({ bookId: 1, title: 'The Dispossessed', subjects: SCIFI })]
-  const pool = [
-    cand({ olid: 'ENG', title: 'English one', subjects: SCIFI, languages: ['eng'] }),
-    cand({ olid: 'JPN', title: 'Japanese one', subjects: SCIFI, languages: ['jpn'] }),
-    cand({ olid: 'BOTH', title: 'Translated', subjects: SCIFI, languages: ['jpn', 'eng'] }),
-    cand({ olid: 'NONE', title: 'Unrecorded', subjects: SCIFI, languages: [] })
-  ]
-
-  function olids(languages?: string[]): string[] {
-    return recommend(shelf, pool, { languages, limit: 10 }).map((r) => r.olid)
-  }
-
-  it('keeps every book only when the filter is explicitly emptied', () => {
-    expect(olids([]).sort()).toEqual(['BOTH', 'ENG', 'JPN', 'NONE'])
-  })
-
-  it('does not exclude original editions by default', () => {
-    expect(olids(undefined).sort()).toEqual(['BOTH', 'ENG', 'JPN', 'NONE'])
-  })
-
-  it('drops books with no edition in a language you read', () => {
-    expect(olids(['eng'])).not.toContain('JPN')
-  })
-
-  it('keeps a translated book, because one edition is enough', () => {
-    expect(olids(['eng'])).toContain('BOTH')
-  })
-
-  it('drops a book whose language was never recorded', () => {
-    // Stricter than the genre filters: unlabelled books do not count.
-    expect(olids(['eng'])).not.toContain('NONE')
-  })
-
-  it('accepts any one of several preferred languages', () => {
-    expect(olids(['fre', 'jpn']).sort()).toEqual(['BOTH', 'JPN'])
-  })
-
-  it('matches regardless of the case a code was stored in', () => {
-    const shouty = [cand({ olid: 'UP', title: 'Shouty', subjects: SCIFI, languages: ['ENG'] })]
-    expect(recommend(shelf, shouty, { languages: ['eng'] }).map((r) => r.olid)).toEqual(['UP'])
-  })
-
-  it('applies to the tree as well as the list', () => {
-    const roots = recommendTree(shelf, pool, { languages: ['eng'], limit: 10 })
-    const seen: string[] = []
-    const walk = (nodes: typeof roots): void => {
-      for (const node of nodes) {
-        seen.push(node.olid)
-        walk(node.children)
-      }
-    }
-    walk(roots)
-
-    expect(seen).not.toContain('JPN')
-    expect(seen).toContain('ENG')
   })
 })
 
