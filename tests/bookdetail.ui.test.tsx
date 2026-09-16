@@ -88,6 +88,12 @@ describe('book status control', () => {
     await waitFor(() => expect(bridge.books[0].status).toBe('reading'))
     expect(bridge.books[0].startedAt).toBe(111)
   })
+
+  it('does not expose separate priority membership controls', async () => {
+    setup()
+    await screen.findByRole('group', { name: 'Reading status' })
+    expect(screen.queryByRole('button', { name: /priority/ })).toBeNull()
+  })
 })
 
 // DOM node identity is what catches a rebuild: a rebuilt editor is a different

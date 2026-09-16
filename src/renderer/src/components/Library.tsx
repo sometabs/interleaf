@@ -1,6 +1,5 @@
 import { type Book, type MetadataRefreshProgress, type MetadataRefreshResult } from '@shared/api'
-import type { BookGroup } from '@shared/categories'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
@@ -11,15 +10,7 @@ import {
   useRefreshAllMetadata,
   useRetryMetadataRefresh
 } from '../lib/queries'
-import {
-  categoriesOf,
-  filterByCategory,
-  genresIn,
-  groupBooks,
-  GROUPINGS,
-  type Grouping,
-  type Shelf
-} from '../lib/shelves'
+import { groupBooks, GROUPINGS, type Grouping, type Shelf } from '../lib/shelves'
 import { useView } from '../lib/view'
 import Cover from './Cover'
 import Empty from './Empty'
@@ -28,8 +19,6 @@ import Rating from './Rating'
 interface Props {
   onAdd: () => void
 }
-
-const GROUPS: readonly BookGroup[] = ['Fiction', 'Non-fiction']
 
 export default function Library({ onAdd }: Props): ReactNode {
   const { navigate } = useView()
@@ -42,12 +31,8 @@ export default function Library({ onAdd }: Props): ReactNode {
 
   const [filter, setFilter] = useState('')
   const [grouping, setGrouping] = useState<Grouping>('status')
-  const [group, setGroup] = useState<BookGroup | null>(null)
-  const [genre, setGenre] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<MetadataRefreshResult | null>(null)
   const [stopRequested, setStopRequested] = useState(false)
-
-  const categories = useMemo(() => categoriesOf(books), [books])
 
   const query = filter.trim().toLowerCase()
   const matching = query
@@ -58,20 +43,7 @@ export default function Library({ onAdd }: Props): ReactNode {
       )
     : books
 
-  // Group first, then a genre inside it. The second row only offers genres
-  // present in the first row's selection, so no combination empties the grid.
-  const inGroup = grouping === 'category' ? filterByCategory(matching, categories, group, null) : []
-  const genres = genresIn(inGroup, categories)
-  const activeGenre = genre !== null && genres.includes(genre) ? genre : null
-  const shown =
-    grouping === 'category' ? filterByCategory(inGroup, categories, null, activeGenre) : matching
-
-  // Narrowing to one genre already answers what the shelves ask, so the result
-  // is that single shelf rather than a page of one-book sections.
-  const shelves =
-    activeGenre !== null
-      ? [{ key: activeGenre, label: activeGenre, books: shown }]
-      : groupBooks(shown, grouping, categories)
+  const shelves = groupBooks(matching, grouping)
 
   if (isPending) return <div className="h-full" />
 
@@ -86,18 +58,6 @@ export default function Library({ onAdd }: Props): ReactNode {
         }
       />
     )
-  }
-
-  // Category shelves are reader-owned. Explain a wholly unfiled view without
-  // implying that Open Library failed to classify it.
-  const unfiled =
-    grouping === 'category' &&
-    matching.length > 0 &&
-    !matching.some((book) => categories.has(book.id))
-
-  function chooseGroup(next: BookGroup | null): void {
-    setGroup(next)
-    setGenre(null) // the genres on offer are about to change
   }
 
   async function startMetadataRefresh(): Promise<void> {
@@ -177,45 +137,7 @@ export default function Library({ onAdd }: Props): ReactNode {
           <MetadataRefreshSummary result={refreshResult} onRetry={retryFailures} />
         )}
 
-      {grouping === 'category' && (
-        <div className="mb-6 flex flex-col gap-2.5">
-          <Segmented
-            label="Group"
-            options={[
-              { value: null, label: 'All' },
-              ...GROUPS.map((value) => ({ value, label: value }))
-            ]}
-            value={group}
-            onChange={chooseGroup}
-          />
-
-          {genres.length > 0 && (
-            <div role="group" aria-label="Genre" className="flex flex-wrap gap-1.5">
-              <GenreChip
-                label="All genres"
-                active={activeGenre === null}
-                onClick={() => setGenre(null)}
-              />
-              {genres.map((name) => (
-                <GenreChip
-                  key={name}
-                  label={name}
-                  active={activeGenre === name}
-                  onClick={() => setGenre(activeGenre === name ? null : name)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {unfiled && (
-        <p className="mb-6 text-[13px] text-ink-muted">
-          These books have not been categorised yet.
-        </p>
-      )}
-
-      {shown.length === 0 ? (
+      {matching.length === 0 ? (
         <p className="py-8 text-center text-ink-muted">
           {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
         </p>
@@ -346,31 +268,6 @@ function Segmented<T extends string | null>({
         )
       })}
     </div>
-  )
-}
-
-function GenreChip({
-  label,
-  active,
-  onClick
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-}): ReactNode {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded-control border px-2.5 py-1 text-[12px] transition-colors ${
-        active
-          ? 'border-transparent bg-accent font-medium text-white'
-          : 'border-hairline-strong bg-surface text-ink-muted hover:text-ink'
-      }`}
-    >
-      {label}
-    </button>
   )
 }
 

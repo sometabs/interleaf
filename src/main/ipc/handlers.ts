@@ -84,6 +84,9 @@ const api: InterleafApi = {
     const updated = books.updateBook(db, id, patch)
     return updated
   },
+  async reorderPriority(bookIds) {
+    books.reorderPriority(getDb(), Array.isArray(bookIds) ? bookIds : [])
+  },
   async deleteBook(id) {
     books.deleteBook(getDb(), id)
   },

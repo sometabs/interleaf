@@ -12,6 +12,7 @@ import Library from './components/Library'
 import NoteView from './components/NoteView'
 import Notes from './components/Notes'
 import Quotes from './components/Quotes'
+import ReadingQueue from './components/ReadingQueue'
 import ReviewView from './components/ReviewView'
 import Reviews from './components/Reviews'
 import Sidebar from './components/Sidebar'
@@ -55,6 +56,7 @@ export default function App(): ReactNode {
 
       <main className="min-h-0 min-w-0 bg-canvas">
         {view.kind === 'library' && <Library onAdd={() => setAddOpen(true)} />}
+        {view.kind === 'queue' && <ReadingQueue />}
         {view.kind === 'book' && <BookRoute id={view.id} />}
         {view.kind === 'reviews' && <Reviews />}
         {view.kind === 'review' && <ReviewView key={view.id} noteId={view.id} />}

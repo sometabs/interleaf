@@ -1,14 +1,11 @@
 import { BOOK_STATUSES, STATUS_LABELS, type Book } from '@shared/api'
 
-import { fromChosenGenres, type BookCategories, type BookGroup } from '@shared/categories'
-
 // Every grouping returns the same shape, so the grid never learns which one it
 // is drawing.
-export type Grouping = 'status' | 'category' | 'author' | 'alphabet'
+export type Grouping = 'status' | 'author' | 'alphabet'
 
 export const GROUPINGS: readonly { value: Grouping; label: string }[] = [
   { value: 'status', label: 'Status' },
-  { value: 'category', label: 'Category' },
   { value: 'author', label: 'Author' },
   { value: 'alphabet', label: 'A–Z' }
 ]
@@ -20,12 +17,7 @@ export interface Shelf {
   books: Book[]
 }
 
-export function groupBooks(
-  books: Book[],
-  grouping: Grouping,
-  categories: Map<number, BookCategories> = new Map()
-): Shelf[] {
-  if (grouping === 'category') return byCategory(books, categories)
+export function groupBooks(books: Book[], grouping: Grouping): Shelf[] {
   if (grouping === 'author') return byAuthor(books)
   if (grouping === 'alphabet') return byLetter(books)
   return byStatus(books)
@@ -106,89 +98,4 @@ function byAuthor(books: Book[]): Shelf[] {
       books: [...shelf.books].sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)))
     }))
     .sort((a, b) => (a.key === '' ? 1 : b.key === '' ? -1 : a.key.localeCompare(b.key)))
-}
-
-// ------------------------------------------------------------------ category
-
-// Collected once so chips, counts and shelves agree.
-export function categoriesOf(books: readonly Book[] = []): Map<number, BookCategories> {
-  const map = new Map<number, BookCategories>()
-
-  // Categories exist only when the reader chose them. Open Library subjects
-  // remain searchable recommendation metadata, not shelf labels.
-  for (const book of books) {
-    if (book.genres === null) continue
-    const chosen = fromChosenGenres(book.genres)
-    if (chosen) map.set(book.id, chosen)
-  }
-
-  return map
-}
-
-// Calling a book with no subjects non-fiction would be inventing data.
-const UNFILED = 'Not categorised yet'
-
-function categoriesFor(book: Book, categories: Map<number, BookCategories>): BookCategories | null {
-  return categories.get(book.id) ?? null
-}
-
-// Nulls mean "everything".
-export function filterByCategory(
-  books: Book[],
-  categories: Map<number, BookCategories>,
-  group: BookGroup | null,
-  genre: string | null
-): Book[] {
-  return books.filter((book) => {
-    const found = categoriesFor(book, categories)
-    if (found === null) return group === null && genre === null
-    if (group !== null && found.group !== group) return false
-    return genre === null || found.genres.includes(genre)
-  })
-}
-
-export function genresIn(books: Book[], categories: Map<number, BookCategories>): string[] {
-  const counts = new Map<string, number>()
-  for (const book of books) {
-    for (const genre of categoriesFor(book, categories)?.genres ?? []) {
-      counts.set(genre, (counts.get(genre) ?? 0) + 1)
-    }
-  }
-  return [...counts.entries()]
-    .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
-    .map(([genre]) => genre)
-}
-
-// A book with two genres stands on both, so the counts sum to more than the
-// library holds.
-function byCategory(books: Book[], categories: Map<number, BookCategories>): Shelf[] {
-  const shelves = new Map<string, Book[]>()
-  for (const book of books) {
-    const found = categoriesFor(book, categories)
-    const labels =
-      found === null ? [UNFILED] : found.genres.length > 0 ? found.genres : [found.group]
-    for (const label of labels) {
-      const shelf = shelves.get(label)
-      if (shelf) shelf.push(book)
-      else shelves.set(label, [book])
-    }
-  }
-
-  return [...shelves.entries()]
-    .map(([label, shelfBooks]) => ({
-      key: label,
-      label,
-      books: [...shelfBooks].sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)))
-    }))
-    .sort(
-      (a, b) =>
-        rank(a.key) - rank(b.key) ||
-        b.books.length - a.books.length ||
-        a.label.localeCompare(b.label)
-    )
-}
-
-function rank(label: string): number {
-  if (label === UNFILED) return 2
-  return label === 'Fiction' || label === 'Non-fiction' ? 1 : 0
 }

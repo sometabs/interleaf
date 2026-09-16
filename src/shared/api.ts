@@ -28,6 +28,8 @@ export interface Book {
   rating: number | null
   startedAt: number | null
   finishedAt: number | null
+  // Its place in the reading queue; null outside Want to read.
+  priorityPosition: number | null
   // Reader-chosen filing labels. Null means no choice has been made.
   genres: string[] | null
   createdAt: number
@@ -46,7 +48,7 @@ export interface NewBook {
   rating?: number | null
 }
 
-export type BookPatch = Partial<Omit<Book, 'id' | 'createdAt' | 'updatedAt'>>
+export type BookPatch = Partial<Omit<Book, 'id' | 'createdAt' | 'updatedAt' | 'priorityPosition'>>
 
 export interface Note {
   id: number
@@ -265,6 +267,7 @@ export interface InterleafApi {
   listBooks(): Promise<Book[]>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
+  reorderPriority(bookIds: number[]): Promise<void>
   deleteBook(id: number): Promise<void>
 
   listNotes(bookId?: number | null): Promise<Note[]>
@@ -329,6 +332,7 @@ export const IPC_CHANNELS = [
   'listBooks',
   'createBook',
   'updateBook',
+  'reorderPriority',
   'deleteBook',
   'listNotes',
   'getNote',

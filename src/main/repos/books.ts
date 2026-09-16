@@ -17,6 +17,7 @@ interface BookRow {
   rating: number | null
   started_at: number | null
   finished_at: number | null
+  priority_position: number | null
   /** JSON array of genre names, or null when the reader has chosen none. */
   genres: string | null
   created_at: number
@@ -51,6 +52,7 @@ function toBook(row: BookRow): Book {
     rating: row.rating,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
+    priorityPosition: row.priority_position,
     genres: parseGenres(row.genres),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -87,9 +89,14 @@ export function createBook(db: Database, input: NewBook): Book {
   const info = db
     .prepare(
       `INSERT INTO book
-         (title, author, isbn, edition_olid, olid, page_count, published_year, status, rating)
+         (title, author, isbn, edition_olid, olid, page_count, published_year, status, rating,
+          priority_position)
        VALUES
-         (@title, @author, @isbn, @editionOlid, @olid, @pageCount, @publishedYear, @status, @rating)`
+         (@title, @author, @isbn, @editionOlid, @olid, @pageCount, @publishedYear, @status, @rating,
+          CASE WHEN @status = 'want'
+            THEN (SELECT coalesce(max(priority_position), 0) + 1 FROM book WHERE status = 'want')
+            ELSE NULL
+          END)`
     )
     .run({
       title: input.title,
@@ -116,7 +123,18 @@ export function updateBook(db: Database, id: number, patch: BookPatch): Book | n
   )
 
   if (keys.length > 0) {
-    const assignments = keys.map((k) => `${BOOK_COLUMNS[k]} = @${k}`).join(', ')
+    const assignments = keys.map((k) => `${BOOK_COLUMNS[k]} = @${k}`)
+    // Want to read is the queue: entering appends the book, and leaving removes it.
+    if (patch.status === 'want') {
+      assignments.push(
+        `priority_position = CASE WHEN priority_position IS NULL
+          THEN (SELECT coalesce(max(priority_position), 0) + 1 FROM book WHERE status = 'want')
+          ELSE priority_position
+        END`
+      )
+    } else if (patch.status !== undefined) {
+      assignments.push('priority_position = NULL')
+    }
     const params: Record<string, unknown> = { id }
     for (const k of keys) {
       // The only column that is not a SQLite scalar. Null stays null, so
@@ -125,12 +143,39 @@ export function updateBook(db: Database, id: number, patch: BookPatch): Book | n
         k === 'genres' ? (patch.genres === null ? null : JSON.stringify(patch.genres)) : patch[k]
     }
 
-    db.prepare(`UPDATE book SET ${assignments}, updated_at = unixepoch() WHERE id = @id`).run(
-      params
-    )
+    db.prepare(
+      `UPDATE book SET ${assignments.join(', ')}, updated_at = unixepoch() WHERE id = @id`
+    ).run(params)
   }
 
   return getBook(db, id)
+}
+
+export function reorderPriority(db: Database, bookIds: readonly number[]): void {
+  const ids = bookIds.filter((id) => Number.isInteger(id) && id > 0)
+  if (ids.length !== bookIds.length || new Set(ids).size !== ids.length) {
+    throw new Error('Priority order contains invalid or repeated books.')
+  }
+
+  const current = db
+    .prepare<[], { id: number }>(
+      `SELECT id FROM book
+       WHERE status = 'want'
+       ORDER BY priority_position, id`
+    )
+    .all()
+    .map((row) => row.id)
+  if (current.length !== ids.length || current.some((id) => !ids.includes(id))) {
+    throw new Error('Priority list changed before it could be reordered.')
+  }
+
+  const update = db.prepare(
+    `UPDATE book SET priority_position = ?
+     WHERE id = ? AND status = 'want'`
+  )
+  db.transaction((ordered: readonly number[]) => {
+    ordered.forEach((id, index) => update.run(index + 1, id))
+  })(ids)
 }
 
 export function deleteBook(db: Database, id: number): void {

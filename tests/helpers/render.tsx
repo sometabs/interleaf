@@ -31,6 +31,7 @@ export function makeBook(overrides: Partial<Book> = {}): Book {
     startedAt: null,
     genres: null,
     finishedAt: null,
+    priorityPosition: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides
@@ -126,7 +127,16 @@ export function installBridge(
     cancelMetadataRefresh: async () => {},
 
     createBook: async (input) => {
-      const book = makeBook({ ...input, id: nextId++ })
+      const status = input.status ?? 'want'
+      const book = makeBook({
+        ...input,
+        id: nextId++,
+        status,
+        priorityPosition:
+          status === 'want'
+            ? Math.max(0, ...state.books.map((candidate) => candidate.priorityPosition ?? 0)) + 1
+            : null
+      })
       state.books.push(book)
       state.created.push(input)
       return book
@@ -135,7 +145,19 @@ export function installBridge(
       const index = state.books.findIndex((book) => book.id === id)
       if (index === -1) return null
       state.books[index] = { ...state.books[index], ...patch }
+      if (patch.status === 'want' && state.books[index].priorityPosition === null) {
+        state.books[index].priorityPosition =
+          Math.max(0, ...state.books.map((candidate) => candidate.priorityPosition ?? 0)) + 1
+      } else if (patch.status !== undefined && patch.status !== 'want') {
+        state.books[index].priorityPosition = null
+      }
       return { ...state.books[index] }
+    },
+    reorderPriority: async (bookIds) => {
+      bookIds.forEach((id, index) => {
+        const book = state.books.find((candidate) => candidate.id === id)
+        if (book) book.priorityPosition = index + 1
+      })
     },
     deleteBook: async (id) => {
       state.deleted.push(id)

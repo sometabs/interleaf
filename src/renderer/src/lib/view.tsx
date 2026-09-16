@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 
 export type View =
   | { kind: 'library' }
+  | { kind: 'queue' }
   | { kind: 'book'; id: number }
   | { kind: 'note'; id: number }
   | { kind: 'notes' }
@@ -20,6 +21,7 @@ export type View =
 // Beside the union, so a new screen cannot be added without naming it.
 export const SCREEN_NAMES: Record<View['kind'], string> = {
   library: 'Library',
+  queue: 'Reading queue',
   book: 'Back',
   note: 'Back',
   notes: 'Notes',

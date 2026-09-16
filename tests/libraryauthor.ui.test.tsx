@@ -49,10 +49,10 @@ describe('grouping the library by author', () => {
     await waitFor(() => expect(screen.getAllByTestId('cover')).toHaveLength(4))
   })
 
-  it('sits alongside the other groupings rather than replacing one', async () => {
+  it('sits alongside the remaining groupings', async () => {
     await open()
 
-    for (const label of ['Status', 'Category', 'Author', 'A–Z']) {
+    for (const label of ['Status', 'Author', 'A–Z']) {
       expect(screen.getByRole('radio', { name: label })).toBeDefined()
     }
     expect(screen.getByRole('radio', { name: 'Author' }).getAttribute('aria-checked')).toBe('true')
@@ -68,7 +68,7 @@ describe('grouping the library by author', () => {
     expect(screen.getAllByTestId('cover')).toHaveLength(2)
   })
 
-  it('offers no genre chips, which belong to Category alone', async () => {
+  it('offers no secondary genre filters', async () => {
     await open()
 
     await waitFor(() => expect(shelves()[0]).toBe('Frank Herbert · 2'))

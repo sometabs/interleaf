@@ -54,6 +54,17 @@ export default function Sidebar({ onAdd, onPalette }: Props): ReactNode {
       )
     },
     {
+      label: 'Reading queue',
+      view: { kind: 'queue' },
+      matches: ['queue'],
+      count: books?.filter((book) => book.status === 'want').length,
+      icon: (
+        <Icon>
+          <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />
+        </Icon>
+      )
+    },
+    {
       label: 'Reviews',
       view: { kind: 'reviews' },
       matches: ['reviews', 'review'],

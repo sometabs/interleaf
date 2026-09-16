@@ -226,6 +226,14 @@ export function useUpdateBook(): UseMutationResult<
   })
 }
 
+export function useReorderPriority(): UseMutationResult<void, Error, number[]> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (bookIds) => api().reorderPriority(bookIds),
+    onSuccess: () => invalidateBooks(client)
+  })
+}
+
 export function useDeleteBook(): UseMutationResult<void, Error, number> {
   const client = useQueryClient()
   return useMutation({

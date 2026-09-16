@@ -55,6 +55,33 @@ describe('migrations', () => {
     })
   })
 
+  it('adds an empty priority queue without changing shelf books', () => {
+    const old = createDatabase(':memory:', 16)
+    old.prepare("INSERT INTO book (title) VALUES ('The Left Hand of Darkness')").run()
+
+    old.exec(MIGRATIONS[16])
+
+    expect(old.prepare('SELECT title, priority_position FROM book').get()).toEqual({
+      title: 'The Left Hand of Darkness',
+      priority_position: null
+    })
+  })
+
+  it('turns the whole existing Want to read shelf into an ordered queue', () => {
+    const old = createDatabase(':memory:', 17)
+    old.prepare("INSERT INTO book (title, status) VALUES ('Dune', 'want')").run()
+    old.prepare("INSERT INTO book (title, status) VALUES ('Solaris', 'want')").run()
+    old.prepare("INSERT INTO book (title, status) VALUES ('Read', 'read')").run()
+
+    old.exec(MIGRATIONS[17])
+
+    expect(old.prepare('SELECT title, priority_position FROM book ORDER BY id').all()).toEqual([
+      { title: 'Dune', priority_position: 1 },
+      { title: 'Solaris', priority_position: 2 },
+      { title: 'Read', priority_position: null }
+    ])
+  })
+
   it('is idempotent when re-applied to an already-migrated database', () => {
     const before = db.pragma('user_version', { simple: true })
     expect(() => createDatabase(':memory:')).not.toThrow()
@@ -86,6 +113,37 @@ describe('books', () => {
   it('rejects an out-of-range rating at the schema level', () => {
     const book = books.createBook(db, { title: 'Dune' })
     expect(() => books.updateBook(db, book.id, { rating: 9 })).toThrow()
+  })
+
+  it('appends every want-to-read book and lets the reader rearrange them', () => {
+    const first = books.createBook(db, { title: 'Dune' })
+    const second = books.createBook(db, { title: 'Solaris' })
+
+    expect(first.priorityPosition).toBe(1)
+    expect(second.priorityPosition).toBe(2)
+
+    books.reorderPriority(db, [second.id, first.id])
+
+    expect(books.getBook(db, second.id)?.priorityPosition).toBe(1)
+    expect(books.getBook(db, first.id)?.priorityPosition).toBe(2)
+  })
+
+  it('removes a book from priority when it leaves Want to read', () => {
+    const book = books.createBook(db, { title: 'Dune' })
+
+    const updated = books.updateBook(db, book.id, { status: 'reading' })
+
+    expect(updated?.priorityPosition).toBeNull()
+  })
+
+  it('appends a book when it moves into Want to read', () => {
+    const first = books.createBook(db, { title: 'Dune' })
+    const book = books.createBook(db, { title: 'Dune', status: 'read' })
+
+    const updated = books.updateBook(db, book.id, { status: 'want' })
+
+    expect(first.priorityPosition).toBe(1)
+    expect(updated?.priorityPosition).toBe(2)
   })
 
   it('cascades deletion to the book notes', () => {

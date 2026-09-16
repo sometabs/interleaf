@@ -52,16 +52,11 @@ describe('grouping the library', () => {
     expect(await headings()).toEqual(['Reading · 1', 'Want to read · 1', 'Read · 1'])
   })
 
-  it('regroups by category on request', async () => {
-    const user = show()
+  it('does not offer the removed Category grouping or embed the priority queue', async () => {
+    show()
 
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-
-    expect(await headings()).toEqual([
-      'Science Fiction · 2',
-      'Historical Fiction · 1',
-      'Thriller & Suspense · 1'
-    ])
+    expect(screen.queryByRole('radio', { name: 'Category' })).toBeNull()
+    expect(screen.queryByLabelText('Priority reading order')).toBeNull()
   })
 
   it('regroups alphabetically on request, ignoring a leading article', async () => {
@@ -76,9 +71,9 @@ describe('grouping the library', () => {
     const user = show()
     const control = await screen.findByRole('radiogroup', { name: 'Group by' })
 
-    await user.click(within(control).getByRole('radio', { name: 'Category' }))
+    await user.click(within(control).getByRole('radio', { name: 'Author' }))
 
-    expect(within(control).getByRole('radio', { name: 'Category' })).toHaveProperty(
+    expect(within(control).getByRole('radio', { name: 'Author' })).toHaveProperty(
       'ariaChecked',
       'true'
     )
@@ -102,10 +97,9 @@ describe('filtering inside a grouping', () => {
   it('narrows the shelves rather than the covers', async () => {
     const user = show()
 
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-    await user.type(screen.getByLabelText('Filter library'), 'wolf')
+    await user.type(await screen.findByLabelText('Filter library'), 'wolf')
 
-    await waitFor(async () => expect(await headings()).toEqual(['Historical Fiction · 1']))
+    await waitFor(async () => expect(await headings()).toEqual(['Want to read · 1']))
     expect(screen.queryByText('Solaris')).toBeNull()
   })
 
@@ -115,152 +109,6 @@ describe('filtering inside a grouping', () => {
     await user.type(await screen.findByLabelText('Filter library'), 'zzz')
 
     expect(await screen.findByText(/Nothing matches/)).toBeTruthy()
-  })
-})
-
-describe('a library the reader has not categorised', () => {
-  it('explains the category view instead of filing everything automatically', async () => {
-    installBridge({ books: [makeBook({ id: 10, title: 'Unfiled' })] })
-    renderApp(<Library onAdd={() => {}} />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-
-    expect(await screen.findByText(/not been categorised yet/)).toBeTruthy()
-  })
-
-  it('stays quiet when the reader chose categories', async () => {
-    const user = show()
-
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-    await screen.findByText('Science Fiction · 2')
-
-    expect(screen.queryByText(/not been categorised yet/)).toBeNull()
-  })
-})
-
-describe('filtering by group, then by genre', () => {
-  const MEMOIR = makeBook({
-    id: 4,
-    title: "Can't Hurt Me",
-    author: 'David Goggins',
-    genres: ['Biography & Memoir', 'Sports']
-  })
-  const MIXED = [SOLARIS, PICNIC, HALL, MEMOIR]
-
-  async function openCategory(): Promise<ReturnType<typeof userEvent.setup>> {
-    installBridge({ books: MIXED })
-    renderApp(<Library onAdd={() => {}} />)
-    const user = userEvent.setup()
-    await user.click(await screen.findByRole('radio', { name: 'Category' }))
-    return user
-  }
-
-  async function genreChips(): Promise<string[]> {
-    const row = await screen.findByRole('group', { name: 'Genre' })
-    return within(row)
-      .getAllByRole('button')
-      .map((node) => node.textContent ?? '')
-  }
-
-  it('offers the two groups only in the category view', async () => {
-    const user = await openCategory()
-    expect(screen.getByRole('radiogroup', { name: 'Group' })).toBeTruthy()
-
-    await user.click(screen.getByRole('radio', { name: 'Status' }))
-
-    expect(screen.queryByRole('radiogroup', { name: 'Group' })).toBeNull()
-    expect(screen.queryByRole('group', { name: 'Genre' })).toBeNull()
-  })
-
-  it('narrows to fiction, and the genre row follows', async () => {
-    const user = await openCategory()
-
-    await user.click(screen.getByRole('radio', { name: 'Fiction' }))
-
-    await waitFor(async () =>
-      expect(await genreChips()).toEqual([
-        'All genres',
-        'Science Fiction',
-        'Historical Fiction',
-        'Thriller & Suspense'
-      ])
-    )
-    expect(screen.queryByText("Can't Hurt Me")).toBeNull()
-  })
-
-  it('offers only the other half under non-fiction', async () => {
-    const user = await openCategory()
-
-    await user.click(screen.getByRole('radio', { name: 'Non-fiction' }))
-
-    await waitFor(async () =>
-      expect(await genreChips()).toEqual(['All genres', 'Biography & Memoir', 'Sports'])
-    )
-    expect(await headings()).toEqual(['Biography & Memoir · 1', 'Sports · 1'])
-  })
-
-  it('then narrows to a single genre, shown as one shelf', async () => {
-    const user = await openCategory()
-
-    await user.click(screen.getByRole('radio', { name: 'Fiction' }))
-    await user.click(await screen.findByRole('button', { name: 'Thriller & Suspense' }))
-
-    expect(await headings()).toEqual(['Thriller & Suspense · 1'])
-    // The title appears twice per card: on the cover and beneath it.
-    expect(screen.getAllByText('Roadside Picnic').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Solaris')).toBeNull()
-  })
-
-  it('clears the genre when the group changes, so no empty grid can appear', async () => {
-    const user = await openCategory()
-
-    await user.click(screen.getByRole('radio', { name: 'Fiction' }))
-    await user.click(await screen.findByRole('button', { name: 'Science Fiction' }))
-    await user.click(screen.getByRole('radio', { name: 'Non-fiction' }))
-
-    expect(await headings()).toEqual(['Biography & Memoir · 1', 'Sports · 1'])
-  })
-
-  it('forgets the genre when the group changes, rather than reviving it later', async () => {
-    const user = await openCategory()
-
-    await user.click(await screen.findByRole('button', { name: 'Science Fiction' }))
-    await user.click(screen.getByRole('radio', { name: 'Non-fiction' }))
-    await user.click(screen.getByRole('radio', { name: 'Fiction' }))
-
-    await waitFor(async () =>
-      expect(await headings()).toEqual([
-        'Science Fiction · 2',
-        'Historical Fiction · 1',
-        'Thriller & Suspense · 1'
-      ])
-    )
-    expect(await screen.findByRole('button', { name: 'All genres' })).toHaveProperty(
-      'ariaPressed',
-      'true'
-    )
-  })
-
-  it('drops a genre that the search box has filtered out of existence', async () => {
-    const user = await openCategory()
-
-    await user.click(await screen.findByRole('button', { name: 'Thriller & Suspense' }))
-    await user.type(screen.getByLabelText('Filter library'), 'solaris')
-
-    // The selected genre no longer exists here, so it must fall back to what
-    // does match rather than to an empty page.
-    await waitFor(async () => expect(await headings()).toEqual(['Science Fiction · 1']))
-  })
-
-  it('toggles a genre off when it is pressed again', async () => {
-    const user = await openCategory()
-
-    await user.click(await screen.findByRole('button', { name: 'Science Fiction' }))
-    expect(await headings()).toEqual(['Science Fiction · 2'])
-
-    await user.click(await screen.findByRole('button', { name: 'Science Fiction' }))
-    expect((await headings()).length).toBeGreaterThan(1)
   })
 })
 
