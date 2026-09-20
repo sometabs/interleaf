@@ -288,6 +288,39 @@
     box-shadow: 0 0 0 2px var(--color-accent-soft);
   }
 
+  .app-shell {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    transition: grid-template-columns 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .app-shell > aside {
+    min-width: 0;
+    overflow: hidden;
+    transition:
+      opacity 140ms ease,
+      transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .app-shell[data-sidebar-expanded='false'] {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .sidebar-collapsed {
+    overflow: hidden;
+  }
+
+  .sidebar-icon-button {
+    flex-shrink: 0;
+  }
+
+  .sidebar-collapsed .sidebar-icon-button {
+    transition:
+      background-color 120ms ease,
+      color 120ms ease,
+      transform 120ms ease;
+  }
+
   /* The editor renders real HTML, so these style the document itself rather
      than a preview of it. */
   .note-prose {

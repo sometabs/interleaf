@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import App from '../src/renderer/src/App'
 import Library from '../src/renderer/src/components/Library'
 import Sidebar from '../src/renderer/src/components/Sidebar'
 import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
@@ -9,6 +10,21 @@ import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 // Every component mounted at least once: a render crash is invisible to both
 // the type checker and the linter.
 describe('Sidebar', () => {
+  it('collapses to an icon rail and can be reopened', async () => {
+    installBridge()
+    renderApp(<App />)
+    const user = userEvent.setup()
+    const shell = document.querySelector('.app-shell')
+
+    expect(shell?.getAttribute('data-sidebar-expanded')).toBe('true')
+    await user.click(await screen.findByRole('button', { name: 'Hide sidebar' }))
+
+    expect(shell?.getAttribute('data-sidebar-expanded')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Library' })).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Show sidebar' }))
+    expect(shell?.getAttribute('data-sidebar-expanded')).toBe('true')
+  })
+
   it('mounts with an empty library without logging an error', async () => {
     const errors: unknown[] = []
     vi.spyOn(console, 'error').mockImplementation((...args) => void errors.push(args))

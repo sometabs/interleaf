@@ -7,6 +7,8 @@ import { useView, type View } from '../lib/view'
 interface Props {
   onAdd: () => void
   onPalette: () => void
+  collapsed?: boolean
+  onToggle?: () => void
 }
 
 interface NavItem {
@@ -36,7 +38,12 @@ function Icon({ children }: { children: ReactNode }): ReactNode {
   )
 }
 
-export default function Sidebar({ onAdd, onPalette }: Props): ReactNode {
+export default function Sidebar({
+  collapsed = false,
+  onAdd,
+  onPalette,
+  onToggle
+}: Props): ReactNode {
   const { view, navigate } = useView()
   const { data: books } = useBooks()
   const { data: notes } = useNotes()
@@ -124,24 +131,82 @@ export default function Sidebar({ onAdd, onPalette }: Props): ReactNode {
   ]
 
   return (
-    <aside className="flex min-h-0 flex-col border-r border-hairline bg-surface">
-      <header className="flex items-center justify-between px-4 pt-4 pb-3">
-        <span className="font-semibold tracking-tight">Interleaf</span>
-        <button
-          type="button"
-          onClick={onPalette}
-          title="Search and commands (Ctrl+K)"
-          aria-label="Search and commands"
-          className="btn btn-ghost rounded-control px-1.5 py-1.5 text-ink-faint hover:text-ink"
-        >
-          <Icon>
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </Icon>
-        </button>
+    <aside
+      className={`flex min-h-0 flex-col border-r border-hairline bg-surface ${
+        collapsed ? 'sidebar-collapsed' : ''
+      }`}
+    >
+      <header
+        className={`flex items-center pt-4 pb-3 ${
+          collapsed ? 'justify-center px-2' : 'justify-between px-4'
+        }`}
+      >
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            title="Show sidebar"
+            aria-label="Show sidebar"
+            aria-expanded={false}
+            className="btn btn-ghost rounded-control px-1.5 py-1.5 text-ink-faint hover:text-ink"
+          >
+            <Icon>
+              <rect x="4" y="4" width="16" height="16" rx="1" />
+              <path d="M9 4v16" />
+            </Icon>
+          </button>
+        ) : (
+          <>
+            <span className="font-semibold tracking-tight">Interleaf</span>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={onPalette}
+                title="Search and commands (Ctrl+K)"
+                aria-label="Search and commands"
+                className="btn btn-ghost rounded-control px-1.5 py-1.5 text-ink-faint hover:text-ink"
+              >
+                <Icon>
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </Icon>
+              </button>
+              <button
+                type="button"
+                onClick={onToggle}
+                title="Hide sidebar"
+                aria-label="Hide sidebar"
+                aria-expanded={true}
+                className="btn btn-ghost rounded-control px-1.5 py-1.5 text-ink-faint hover:text-ink"
+              >
+                <Icon>
+                  <rect x="4" y="4" width="16" height="16" rx="1" />
+                  <path d="M9 4v16" />
+                </Icon>
+              </button>
+            </div>
+          </>
+        )}
       </header>
 
-      <nav className="flex flex-col gap-0.5 px-2">
+      {collapsed && (
+        <div className="flex justify-center px-2 pb-2">
+          <button
+            type="button"
+            onClick={onPalette}
+            title="Search and commands (Ctrl+K)"
+            aria-label="Search and commands"
+            className="sidebar-icon-button btn btn-ghost rounded-control px-1.5 py-1.5 text-ink-faint hover:text-ink"
+          >
+            <Icon>
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </Icon>
+          </button>
+        </div>
+      )}
+
+      <nav className={`flex flex-col gap-0.5 ${collapsed ? 'items-center px-2' : 'px-2'}`}>
         {items.map((item) => {
           const active = item.matches.includes(view.kind)
           return (
@@ -150,15 +215,19 @@ export default function Sidebar({ onAdd, onPalette }: Props): ReactNode {
               type="button"
               onClick={() => navigate(item.view)}
               aria-current={active ? 'page' : undefined}
-              className={`flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-[14px] transition-colors ${
+              aria-label={collapsed ? item.label : undefined}
+              title={collapsed ? item.label : undefined}
+              className={`flex items-center gap-2.5 rounded-control py-2 text-left text-[14px] transition-colors ${
+                collapsed ? 'sidebar-icon-button size-9 justify-center px-0' : 'w-full px-2.5'
+              } ${
                 active
                   ? 'bg-accent-soft font-medium text-accent'
                   : 'text-ink-muted hover:bg-hover hover:text-ink'
               }`}
             >
               {item.icon}
-              <span className="flex-1">{item.label}</span>
-              {item.count !== undefined && (
+              {!collapsed && <span className="flex-1">{item.label}</span>}
+              {!collapsed && item.count !== undefined && (
                 <span className="text-xs tabular-nums text-ink-faint">{item.count}</span>
               )}
             </button>
@@ -168,10 +237,24 @@ export default function Sidebar({ onAdd, onPalette }: Props): ReactNode {
 
       <div className="flex-1" />
 
-      <footer className="p-3">
-        <button type="button" className="btn btn-primary w-full" onClick={onAdd}>
-          Add book
-        </button>
+      <footer className={collapsed ? 'flex justify-center p-2' : 'p-3'}>
+        {collapsed ? (
+          <button
+            type="button"
+            title="Add book (Ctrl+N)"
+            aria-label="Add book"
+            onClick={onAdd}
+            className="sidebar-icon-button btn btn-primary size-9 px-0"
+          >
+            <Icon>
+              <path d="M12 5v14M5 12h14" />
+            </Icon>
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary w-full" onClick={onAdd}>
+            Add book
+          </button>
+        )}
       </footer>
     </aside>
   )

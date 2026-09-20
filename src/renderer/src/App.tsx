@@ -25,6 +25,7 @@ export default function App(): ReactNode {
   const { view, back } = useView()
   const [addOpen, setAddOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const confirming = usePendingConfirm() !== null
 
   useEffect(() => {
@@ -51,8 +52,13 @@ export default function App(): ReactNode {
   }, [addOpen, paletteOpen, confirming, back])
 
   return (
-    <div className="grid h-screen grid-cols-[248px_1fr]">
-      <Sidebar onAdd={() => setAddOpen(true)} onPalette={() => setPaletteOpen(true)} />
+    <div className="app-shell h-screen" data-sidebar-expanded={sidebarExpanded}>
+      <Sidebar
+        collapsed={!sidebarExpanded}
+        onAdd={() => setAddOpen(true)}
+        onPalette={() => setPaletteOpen(true)}
+        onToggle={() => setSidebarExpanded((expanded) => !expanded)}
+      />
 
       <main className="min-h-0 min-w-0 bg-canvas">
         {view.kind === 'library' && <Library onAdd={() => setAddOpen(true)} />}
