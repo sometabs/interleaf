@@ -230,7 +230,9 @@ export function useReorderPriority(): UseMutationResult<void, Error, number[]> {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (bookIds) => api().reorderPriority(bookIds),
-    onSuccess: () => invalidateBooks(client)
+    // Await the refetch so callers can safely discard optimistic ordering only
+    // after the SQLite-backed list is current again.
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.books })
   })
 }
 

@@ -93,6 +93,10 @@ export default function ReadingQueue(): ReactNode {
 
     setPreviewIds(next)
     reorderPriority.mutate(next, {
+      // The mutation remains pending until the books query has read SQLite's
+      // confirmed order, so removing the temporary preview cannot flash back
+      // to the old order.
+      onSuccess: () => setPreviewIds(null),
       onError: () => {
         rememberRowPositions()
         setPreviewIds(null)
