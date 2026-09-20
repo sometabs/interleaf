@@ -121,6 +121,38 @@ describe('ranking mode', () => {
       expect(getSemanticRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     )
   })
+
+  it('remembers Advanced ranking and the tree layout', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    const getSemanticRecommendations = vi.fn(async () => [])
+    const getSemanticRecommendationTree = vi.fn(async () => [])
+    installBridge(
+      { books: [makeBook({ id: 1, status: 'read', rating: 5 })] },
+      {
+        getRecommendations: async () => ALL,
+        getRecommendationTree: async () => [],
+        getSemanticRecommendations,
+        getSemanticRecommendationTree
+      }
+    )
+    const first = renderApp(<Discover />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Advanced' }))
+    await user.click(screen.getByRole('button', { name: 'tree' }))
+    expect(window.localStorage.getItem('interleaf.recommendationRanking')).toBe('"semantic"')
+    expect(window.localStorage.getItem('interleaf.recommendationLayout')).toBe('"tree"')
+    first.unmount()
+
+    renderApp(<Discover />)
+    expect(
+      (await screen.findByRole('button', { name: 'Advanced' })).getAttribute('aria-pressed')
+    ).toBe('true')
+    expect(screen.getByRole('button', { name: 'tree' }).getAttribute('aria-pressed')).toBe('true')
+    await waitFor(() =>
+      expect(getSemanticRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
+    )
+  })
 })
 
 describe('books like one book', () => {

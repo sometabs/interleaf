@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
+import { usePersistentState } from '../lib/persistent'
 import {
   useBooks,
   useCancelMetadataRefresh,
@@ -30,7 +31,11 @@ export default function Library({ onAdd }: Props): ReactNode {
   const progress = useMetadataRefreshProgress(refreshing)
 
   const [filter, setFilter] = useState('')
-  const [grouping, setGrouping] = useState<Grouping>('status')
+  const [grouping, setGrouping] = usePersistentState<Grouping>(
+    'interleaf.libraryGrouping',
+    'status',
+    parseGrouping
+  )
   const [refreshResult, setRefreshResult] = useState<MetadataRefreshResult | null>(null)
   const [stopRequested, setStopRequested] = useState(false)
 
@@ -152,6 +157,10 @@ export default function Library({ onAdd }: Props): ReactNode {
       )}
     </div>
   )
+}
+
+function parseGrouping(raw: unknown): Grouping | null {
+  return raw === 'status' || raw === 'author' || raw === 'alphabet' ? raw : null
 }
 
 function MetadataProgressPanel({

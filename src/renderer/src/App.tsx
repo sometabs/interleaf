@@ -18,6 +18,7 @@ import Reviews from './components/Reviews'
 import Sidebar from './components/Sidebar'
 import Toasts from './components/Toasts'
 import { usePendingConfirm } from './lib/confirm'
+import { usePersistentState } from './lib/persistent'
 import { useBook } from './lib/queries'
 import { useView } from './lib/view'
 
@@ -25,7 +26,11 @@ export default function App(): ReactNode {
   const { view, back } = useView()
   const [addOpen, setAddOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const [sidebarExpanded, setSidebarExpanded] = usePersistentState(
+    'interleaf.sidebarExpanded',
+    true,
+    (raw) => (typeof raw === 'boolean' ? raw : null)
+  )
   const confirming = usePendingConfirm() !== null
 
   useEffect(() => {
@@ -57,7 +62,7 @@ export default function App(): ReactNode {
         collapsed={!sidebarExpanded}
         onAdd={() => setAddOpen(true)}
         onPalette={() => setPaletteOpen(true)}
-        onToggle={() => setSidebarExpanded((expanded) => !expanded)}
+        onToggle={() => setSidebarExpanded(!sidebarExpanded)}
       />
 
       <main className="min-h-0 min-w-0 bg-canvas">

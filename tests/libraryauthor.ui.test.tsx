@@ -58,6 +58,21 @@ describe('grouping the library by author', () => {
     expect(screen.getByRole('radio', { name: 'Author' }).getAttribute('aria-checked')).toBe('true')
   })
 
+  it('remembers the chosen grouping', async () => {
+    const user = userEvent.setup()
+    installBridge({ books: [DUNE, DISPOSSESSED] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+
+    await user.click(await screen.findByRole('radio', { name: 'Author' }))
+    expect(window.localStorage.getItem('interleaf.libraryGrouping')).toBe('"author"')
+    first.unmount()
+
+    renderApp(<Library onAdd={() => {}} />)
+    expect(
+      (await screen.findByRole('radio', { name: 'Author' })).getAttribute('aria-checked')
+    ).toBe('true')
+  })
+
   it('narrows with the search box, which is what filtering is for', async () => {
     const user = userEvent.setup()
     await open()

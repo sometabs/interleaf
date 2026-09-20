@@ -1,5 +1,5 @@
 import type { HarvestProgress } from '@shared/api'
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
@@ -27,8 +27,16 @@ type Layout = 'grid' | 'tree'
 type RankingMode = 'standard' | 'semantic'
 
 export default function Discover(): ReactNode {
-  const [layout, setLayout] = useState<Layout>('grid')
-  const [rankingMode, setRankingMode] = useState<RankingMode>('standard')
+  const [layout, setLayout] = usePersistentState<Layout>(
+    'interleaf.recommendationLayout',
+    'grid',
+    parseLayout
+  )
+  const [rankingMode, setRankingMode] = usePersistentState<RankingMode>(
+    'interleaf.recommendationRanking',
+    'standard',
+    parseRankingMode
+  )
   const [advancedAcknowledged, setAdvancedAcknowledged] = usePersistentState(
     'interleaf.advancedDownloadAcknowledged',
     false,
@@ -312,6 +320,14 @@ export default function Discover(): ReactNode {
       )}
     </div>
   )
+}
+
+function parseLayout(raw: unknown): Layout | null {
+  return raw === 'grid' || raw === 'tree' ? raw : null
+}
+
+function parseRankingMode(raw: unknown): RankingMode | null {
+  return raw === 'standard' || raw === 'semantic' ? raw : null
 }
 
 function SemanticProgressPanel({

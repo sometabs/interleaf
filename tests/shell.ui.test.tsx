@@ -25,6 +25,22 @@ describe('Sidebar', () => {
     expect(shell?.getAttribute('data-sidebar-expanded')).toBe('true')
   })
 
+  it('remembers that the sidebar was collapsed', async () => {
+    installBridge()
+    const first = renderApp(<App />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Hide sidebar' }))
+    expect(window.localStorage.getItem('interleaf.sidebarExpanded')).toBe('false')
+    first.unmount()
+
+    renderApp(<App />)
+    expect(document.querySelector('.app-shell')?.getAttribute('data-sidebar-expanded')).toBe(
+      'false'
+    )
+    expect(await screen.findByRole('button', { name: 'Show sidebar' })).toBeDefined()
+  })
+
   it('mounts with an empty library without logging an error', async () => {
     const errors: unknown[] = []
     vi.spyOn(console, 'error').mockImplementation((...args) => void errors.push(args))
