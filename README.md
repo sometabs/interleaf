@@ -24,7 +24,7 @@ A book page: the review at the top, quotes and notes below, all edited in place.
 
 `Ctrl + K` searches every book, review, note and quote at once.
 
-<img src="docs/screenshots/05-palette.png" width="700" alt="The command palette searching for the word world, matching a book and a note">
+<img src="docs/screenshots/05-palette.png" width="700" alt="The command palette searching for Dune and matching the book in the library">
 
 ## Install
 
