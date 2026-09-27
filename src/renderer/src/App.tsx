@@ -17,6 +17,7 @@ import ReadingQueue from './components/ReadingQueue'
 import ReviewView from './components/ReviewView'
 import Reviews from './components/Reviews'
 import Sidebar from './components/Sidebar'
+import Stats from './components/Stats'
 import Toasts from './components/Toasts'
 import { usePendingConfirm } from './lib/confirm'
 import { usePersistentState } from './lib/persistent'
@@ -76,6 +77,7 @@ export default function App(): ReactNode {
         {view.kind === 'review' && <ReviewView key={view.id} noteId={view.id} />}
         {view.kind === 'notes' && <Notes />}
         {view.kind === 'quotes' && <Quotes />}
+        {view.kind === 'stats' && <Stats />}
         {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} />}
         {view.kind === 'discover' && <Discover />}
         {view.kind === 'data' && <Data />}

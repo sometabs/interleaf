@@ -120,6 +120,16 @@ export default function Sidebar({
       )
     },
     {
+      label: 'Stats',
+      view: { kind: 'stats' },
+      matches: ['stats'],
+      icon: (
+        <Icon>
+          <path d="M5 20V10M12 20V4M19 20v-7" />
+        </Icon>
+      )
+    },
+    {
       label: 'Data',
       view: { kind: 'data' },
       matches: ['data'],

@@ -46,6 +46,7 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
     { id: 'notes', label: 'Go to Notes', run: () => navigate({ kind: 'notes' }) },
     { id: 'quotes', label: 'Go to Quotes', run: () => navigate({ kind: 'quotes' }) },
     { id: 'discover', label: 'Go to Discover', run: () => navigate({ kind: 'discover' }) },
+    { id: 'stats', label: 'Go to Stats', run: () => navigate({ kind: 'stats' }) },
     {
       // Restoring is not here: it replaces the library and restarts the app,
       // which is not something to reach by typing three letters.

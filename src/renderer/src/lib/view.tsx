@@ -10,6 +10,7 @@ export type View =
   | { kind: 'reviews' }
   | { kind: 'review'; id: number }
   | { kind: 'quotes' }
+  | { kind: 'stats' }
   // Set when the screen was opened from one book: Discover then ranks against
   // that book alone.
   | { kind: 'discover'; likeBookId?: number }
@@ -28,6 +29,7 @@ export const SCREEN_NAMES: Record<View['kind'], string> = {
   reviews: 'Reviews',
   review: 'Back',
   quotes: 'Quotes',
+  stats: 'Stats',
   discover: 'Discover',
   data: 'Data',
   import: 'Import'

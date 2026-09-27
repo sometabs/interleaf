@@ -86,6 +86,16 @@ describe('Sidebar', () => {
     await user.click(await screen.findByRole('button', { name: 'Add book' }))
     expect(onAdd).toHaveBeenCalledOnce()
   })
+
+  it('opens Stats from the sidebar', async () => {
+    installBridge()
+    renderApp(<App />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Stats' }))
+
+    expect(await screen.findByRole('heading', { name: 'Stats' })).toBeDefined()
+  })
 })
 
 describe('Library', () => {
