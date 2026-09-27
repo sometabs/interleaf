@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { downloadCover, toOlBook } from '../src/main/services/openlibrary'
+import { checkAvailability, downloadCover, toOlBook } from '../src/main/services/openlibrary'
 
 // Fixtures are trimmed from real /search.json responses.
 
@@ -358,5 +358,20 @@ describe('downloadCover id validation', () => {
 
     await expect(downloadCover(13617691, 'M')).resolves.not.toBeNull()
     expect(fetchSpy.mock.calls[0][0]).toBe('https://covers.openlibrary.org/b/id/13617691-M.jpg')
+  })
+})
+
+describe('Open Library availability check', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('uses one small Search API request', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await expect(checkAvailability()).resolves.toBe(true)
+
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(fetchSpy.mock.calls[0][0]).toContain('/search.json?')
+    expect(fetchSpy.mock.calls[0][0]).toContain('limit=1&fields=key')
   })
 })

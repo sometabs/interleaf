@@ -134,7 +134,7 @@ describe('the Notes screen', () => {
 describe('Sidebar', () => {
   it('counts reviews and thoughts apart', async () => {
     installBridge({ books: [BOOK], notes: [REVIEW, THOUGHT, QUOTE] })
-    renderApp(<Sidebar onAdd={() => {}} onPalette={() => {}} />)
+    renderApp(<Sidebar onAbout={() => {}} onAdd={() => {}} onPalette={() => {}} />)
 
     const reviews = await screen.findByRole('button', { name: /^Reviews/ })
     const notes = await screen.findByRole('button', { name: /^Notes/ })

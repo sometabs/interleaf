@@ -5,6 +5,7 @@ import { isQuote } from '../lib/quotes'
 import { useView, type View } from '../lib/view'
 
 interface Props {
+  onAbout: () => void
   onAdd: () => void
   onPalette: () => void
   collapsed?: boolean
@@ -40,6 +41,7 @@ function Icon({ children }: { children: ReactNode }): ReactNode {
 
 export default function Sidebar({
   collapsed = false,
+  onAbout,
   onAdd,
   onPalette,
   onToggle
@@ -237,23 +239,50 @@ export default function Sidebar({
 
       <div className="flex-1" />
 
-      <footer className={collapsed ? 'flex justify-center p-2' : 'p-3'}>
+      <footer className={collapsed ? 'flex flex-col items-center gap-1 p-2' : 'space-y-2 p-3'}>
         {collapsed ? (
-          <button
-            type="button"
-            title="Add book (Ctrl+N)"
-            aria-label="Add book"
-            onClick={onAdd}
-            className="sidebar-icon-button btn btn-primary size-9 px-0"
-          >
-            <Icon>
-              <path d="M12 5v14M5 12h14" />
-            </Icon>
-          </button>
+          <>
+            <button
+              type="button"
+              title="About & diagnostics"
+              aria-label="About & diagnostics"
+              onClick={onAbout}
+              className="sidebar-icon-button btn btn-ghost size-9 px-0 text-ink-faint hover:text-ink"
+            >
+              <Icon>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v6M12 7h.01" />
+              </Icon>
+            </button>
+            <button
+              type="button"
+              title="Add book (Ctrl+N)"
+              aria-label="Add book"
+              onClick={onAdd}
+              className="sidebar-icon-button btn btn-primary size-9 px-0"
+            >
+              <Icon>
+                <path d="M12 5v14M5 12h14" />
+              </Icon>
+            </button>
+          </>
         ) : (
-          <button type="button" className="btn btn-primary w-full" onClick={onAdd}>
-            Add book
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost w-full justify-start text-ink-muted"
+              onClick={onAbout}
+            >
+              <Icon>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v6M12 7h.01" />
+              </Icon>
+              About &amp; diagnostics
+            </button>
+            <button type="button" className="btn btn-primary w-full" onClick={onAdd}>
+              Add book
+            </button>
+          </>
         )}
       </footer>
     </aside>

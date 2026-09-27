@@ -46,7 +46,7 @@ describe('Sidebar', () => {
     vi.spyOn(console, 'error').mockImplementation((...args) => void errors.push(args))
 
     installBridge()
-    renderApp(<Sidebar onAdd={() => {}} onPalette={() => {}} />)
+    renderApp(<Sidebar onAbout={() => {}} onAdd={() => {}} onPalette={() => {}} />)
 
     await waitFor(() => expect(screen.getByText('Library')).toBeDefined())
     expect(errors).toHaveLength(0)
@@ -57,7 +57,7 @@ describe('Sidebar', () => {
       books: [makeBook({ id: 1 }), makeBook({ id: 2 })],
       notes: [makeNote({ id: 1 })]
     })
-    renderApp(<Sidebar onAdd={() => {}} onPalette={() => {}} />)
+    renderApp(<Sidebar onAbout={() => {}} onAdd={() => {}} onPalette={() => {}} />)
 
     const library = await screen.findByRole('button', { name: /^Library/ })
     const notes = await screen.findByRole('button', { name: /^Notes/ })
@@ -68,7 +68,10 @@ describe('Sidebar', () => {
 
   it('marks the section matching the current view', async () => {
     installBridge({ books: [makeBook()] })
-    renderApp(<Sidebar onAdd={() => {}} onPalette={() => {}} />, { kind: 'book', id: 1 })
+    renderApp(<Sidebar onAbout={() => {}} onAdd={() => {}} onPalette={() => {}} />, {
+      kind: 'book',
+      id: 1
+    })
 
     const library = await screen.findByRole('button', { name: /^Library/ })
     expect(library.getAttribute('aria-current')).toBe('page')
@@ -78,7 +81,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     const onAdd = vi.fn()
     installBridge()
-    renderApp(<Sidebar onAdd={onAdd} onPalette={() => {}} />)
+    renderApp(<Sidebar onAbout={() => {}} onAdd={onAdd} onPalette={() => {}} />)
 
     await user.click(await screen.findByRole('button', { name: 'Add book' }))
     expect(onAdd).toHaveBeenCalledOnce()

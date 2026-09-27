@@ -11,6 +11,7 @@ const UA = 'Interleaf/1.0 (personal reading journal; offline-first)'
 
 // A search carrying `editions` runs ~6s, and has been seen at 21s.
 const TIMEOUT_MS = 25000
+const STATUS_TIMEOUT_MS = 10000
 
 // 1 req/sec for unidentified clients. Cover downloads bypass this: only
 // ISBN/OCLC/LCCN lookups are rate-limited there, never cover ids.
@@ -25,6 +26,24 @@ function describeFailure(err: unknown): string {
   const error = err as { name?: string; message?: string; cause?: { code?: string } }
   const code = error?.cause?.code
   return code ? `${error.name}: ${error.message} (${code})` : `${error?.name}: ${error?.message}`
+}
+
+// A single small Search API request: reaching the home page would not prove
+// that the catalogue endpoint used by Interleaf is healthy.
+export async function checkAvailability(): Promise<boolean> {
+  return throttle(async () => {
+    const url = `${BASE}/search.json?q=key%3A%2Fworks%2FOL45804W&limit=1&fields=key`
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': UA, Accept: 'application/json' },
+        signal: AbortSignal.timeout(STATUS_TIMEOUT_MS)
+      })
+      return response.ok
+    } catch (err) {
+      console.warn(`[openlibrary] status check failed: ${describeFailure(err)}`)
+      return false
+    }
+  })
 }
 
 export interface OlBook {

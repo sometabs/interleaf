@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 
+import AboutDialog from './components/AboutDialog'
 import AddBookDialog from './components/AddBookDialog'
 import BookDetail from './components/BookDetail'
 import CommandPalette from './components/CommandPalette'
@@ -25,6 +26,7 @@ import { useView } from './lib/view'
 export default function App(): ReactNode {
   const { view, back } = useView()
   const [addOpen, setAddOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [sidebarExpanded, setSidebarExpanded] = usePersistentState(
     'interleaf.sidebarExpanded',
@@ -49,17 +51,18 @@ export default function App(): ReactNode {
       }
       // Radix owns Escape while a dialog is open, and without the confirm
       // check one press would dismiss the dialog and walk back a screen.
-      if (event.key === 'Escape' && !addOpen && !paletteOpen && !confirming) back()
+      if (event.key === 'Escape' && !aboutOpen && !addOpen && !paletteOpen && !confirming) back()
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [addOpen, paletteOpen, confirming, back])
+  }, [aboutOpen, addOpen, paletteOpen, confirming, back])
 
   return (
     <div className="app-shell h-screen" data-sidebar-expanded={sidebarExpanded}>
       <Sidebar
         collapsed={!sidebarExpanded}
+        onAbout={() => setAboutOpen(true)}
         onAdd={() => setAddOpen(true)}
         onPalette={() => setPaletteOpen(true)}
         onToggle={() => setSidebarExpanded(!sidebarExpanded)}
@@ -79,6 +82,7 @@ export default function App(): ReactNode {
         {view.kind === 'import' && <HighlightImport plan={view.plan} />}
       </main>
 
+      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
       <AddBookDialog open={addOpen} onOpenChange={setAddOpen} />
       <CommandPalette
         open={paletteOpen}

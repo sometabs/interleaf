@@ -266,6 +266,13 @@ export interface DataCounts {
   dismissed: number
 }
 
+export interface AppDiagnostics {
+  version: string
+  dataDirectory: string
+  schemaVersion: number
+  advancedModelInstalled: boolean
+}
+
 // Every method is async because it crosses IPC, though better-sqlite3 itself
 // is synchronous.
 export interface InterleafApi {
@@ -315,6 +322,9 @@ export interface InterleafApi {
   readHighlightExport(): Promise<HighlightImportPlan | null>
   // The links are remembered, so a later export of the same books needs none.
   importHighlights(filePath: string, links: HighlightImportLink[]): Promise<HighlightImportResult>
+
+  getAppDiagnostics(): Promise<AppDiagnostics>
+  checkOpenLibrary(): Promise<boolean>
 
   dataCounts(): Promise<DataCounts>
   // Notes not attached to a book survive.
@@ -367,6 +377,8 @@ export const IPC_CHANNELS = [
   'restoreDismissed',
   'readHighlightExport',
   'importHighlights',
+  'getAppDiagnostics',
+  'checkOpenLibrary',
   'dataCounts',
   'deleteAllBooks',
   'deleteAllNotes',

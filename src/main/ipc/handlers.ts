@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
+import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 import {
@@ -54,6 +55,21 @@ function sendSemanticProgress(progress: SemanticProgress): void {
 
 function semanticModelsDir(): string {
   return join(app.getPath('userData'), 'semantic-models')
+}
+
+function semanticModelInstalled(): boolean {
+  const dir = semanticModelsDir()
+  if (!existsSync(dir)) return false
+
+  try {
+    const files = readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    return (
+      files.some((file) => file.toLowerCase().endsWith('.onnx')) &&
+      files.some((file) => file.toLowerCase().endsWith('tokenizer.json'))
+    )
+  } catch {
+    return false
+  }
 }
 
 async function runMetadataRefresh(bookIds?: number[]): Promise<MetadataRefreshResult> {
@@ -278,6 +294,18 @@ const api: InterleafApi = {
   },
   async importHighlights(filePath, links) {
     return highlights.runImport(getDb(), filePath, links)
+  },
+
+  async getAppDiagnostics() {
+    return {
+      version: app.getVersion(),
+      dataDirectory: app.getPath('userData'),
+      schemaVersion: getDb().pragma('user_version', { simple: true }) as number,
+      advancedModelInstalled: semanticModelInstalled()
+    }
+  },
+  async checkOpenLibrary() {
+    return ol.checkAvailability()
   },
 
   async dataCounts() {
