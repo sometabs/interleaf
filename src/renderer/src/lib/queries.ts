@@ -11,9 +11,9 @@ import { useEffect, useState } from 'react'
 
 import type {
   Book,
-  CalibreImportPlan,
-  CalibreImportResult,
-  CalibreLink,
+  HighlightImportPlan,
+  HighlightImportResult,
+  HighlightImportLink,
   InterleafBridge,
   BookMetadata,
   BookPatch,
@@ -455,18 +455,22 @@ export function useExportBackup(): UseMutationResult<BackupResult | null, Error,
 
 // Reads the file and reports what it holds; nothing is written until the
 // links are confirmed.
-export function useReadCalibreExport(): UseMutationResult<CalibreImportPlan | null, Error, void> {
-  return useMutation({ mutationFn: () => api().readCalibreExport() })
+export function useReadHighlightExport(): UseMutationResult<
+  HighlightImportPlan | null,
+  Error,
+  void
+> {
+  return useMutation({ mutationFn: () => api().readHighlightExport() })
 }
 
-export function useImportCalibreHighlights(): UseMutationResult<
-  CalibreImportResult,
+export function useImportHighlights(): UseMutationResult<
+  HighlightImportResult,
   Error,
-  { filePath: string; links: CalibreLink[] }
+  { filePath: string; links: HighlightImportLink[] }
 > {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ filePath, links }) => api().importCalibreHighlights(filePath, links),
+    mutationFn: ({ filePath, links }) => api().importHighlights(filePath, links),
     onSuccess: () => {
       invalidateNotes(client)
       void client.invalidateQueries({ queryKey: keys.dataCounts })

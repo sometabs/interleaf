@@ -216,30 +216,35 @@ export interface RestoreResult {
   replaced: string | null
 }
 
-// ------------------------------------------------------- Calibre highlights
+// ------------------------------------------------------ Highlight imports
 
-// One Calibre book in an export. The export names no titles, so an unmatched
-// book is recognised by its passages.
-export interface CalibreBookPlan {
-  calibreId: number
-  // The library book this Calibre id was matched to on an earlier import.
+export type HighlightImportSource = 'calibre' | 'kindle'
+
+// One source book in an export. Matching is deliberately manual because book
+// metadata differs between readers and Open Library.
+export interface HighlightBookPlan {
+  sourceKey: string
+  sourceTitle: string
+  sourceAuthor: string | null
+  // The library book this source book was matched to on an earlier import.
   bookId: number | null
   newHighlights: number
   knownHighlights: number
   samples: string[]
 }
 
-export interface CalibreImportPlan {
+export interface HighlightImportPlan {
   filePath: string
-  books: CalibreBookPlan[]
+  source: HighlightImportSource
+  books: HighlightBookPlan[]
 }
 
-export interface CalibreLink {
-  calibreId: number
+export interface HighlightImportLink {
+  sourceKey: string
   bookId: number
 }
 
-export interface CalibreImportResult {
+export interface HighlightImportResult {
   imported: number
   skipped: number
   // How many library books gained highlights.
@@ -307,9 +312,9 @@ export interface InterleafApi {
   restoreDismissed(olid: string): Promise<void>
 
   // Null when the file picker was cancelled. Reads the export, changes nothing.
-  readCalibreExport(): Promise<CalibreImportPlan | null>
+  readHighlightExport(): Promise<HighlightImportPlan | null>
   // The links are remembered, so a later export of the same books needs none.
-  importCalibreHighlights(filePath: string, links: CalibreLink[]): Promise<CalibreImportResult>
+  importHighlights(filePath: string, links: HighlightImportLink[]): Promise<HighlightImportResult>
 
   dataCounts(): Promise<DataCounts>
   // Notes not attached to a book survive.
@@ -360,8 +365,8 @@ export const IPC_CHANNELS = [
   'restoreBackup',
   'listDismissed',
   'restoreDismissed',
-  'readCalibreExport',
-  'importCalibreHighlights',
+  'readHighlightExport',
+  'importHighlights',
   'dataCounts',
   'deleteAllBooks',
   'deleteAllNotes',

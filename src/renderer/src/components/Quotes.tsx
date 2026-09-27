@@ -6,8 +6,11 @@ import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
 import { useBooks, useCreateNote, useDeleteNote, useNotes, useUpdateNote } from '../lib/queries'
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
+import { authorKey } from '../lib/shelves'
 import Empty from './Empty'
 import QuoteCard from './QuoteCard'
+
+const UNKNOWN_AUTHOR_FILTER = '__unknown_author__'
 
 // Still stored as a note of kind `highlight`; only the presentation differs.
 export default function Quotes(): ReactNode {
@@ -19,7 +22,8 @@ export default function Quotes(): ReactNode {
   const deleteNote = useDeleteNote()
 
   const [filter, setFilter] = useState('')
-  const [bookFilter, setBookFilter] = useState('')
+  const [filterMode, setFilterMode] = useState<'book' | 'author'>('book')
+  const [filterValue, setFilterValue] = useState('')
   const [openId, setOpenId] = useState<number | null>(null)
   // A quote with no book cannot be stored, so one starts here and is written
   // the moment a book is picked.
@@ -27,24 +31,57 @@ export default function Quotes(): ReactNode {
 
   const quotes = notes.filter(isQuote)
 
-  function bookTitle(quote: Note): string | null {
+  function quoteBook(quote: Note): (typeof books)[number] | null {
     if (quote.bookId === null) return null
-    return books.find((book) => book.id === quote.bookId)?.title ?? null
+    return books.find((book) => book.id === quote.bookId) ?? null
+  }
+
+  function bookTitle(quote: Note): string | null {
+    return quoteBook(quote)?.title ?? null
+  }
+
+  function sourceLabel(quote: Note): string | null {
+    const book = quoteBook(quote)
+    if (!book) return null
+    return [book.title, book.author].filter(Boolean).join(' · ')
   }
 
   const query = filter.trim().toLowerCase()
+  const selectedBookId = filterMode === 'book' && filterValue ? Number(filterValue) : null
+  const selectedAuthor =
+    filterMode === 'author' && filterValue !== ''
+      ? filterValue === UNKNOWN_AUTHOR_FILTER
+        ? ''
+        : filterValue
+      : null
+
+  const authorOptions = [
+    ...books.reduce((authors, book) => {
+      const key = authorKey(book.author)
+      if (!authors.has(key)) authors.set(key, book.author?.trim() || 'Unknown author')
+      return authors
+    }, new Map<string, string>())
+  ].sort(([, a], [, b]) => a.localeCompare(b))
+
+  const sortedBooks = [...books].sort((a, b) => a.title.localeCompare(b.title))
+  const draftBooks =
+    selectedAuthor === null
+      ? sortedBooks
+      : sortedBooks.filter((book) => authorKey(book.author) === selectedAuthor)
 
   const matching = quotes.filter((quote) => {
-    if (bookFilter && quote.bookId !== Number(bookFilter)) return false
+    if (selectedBookId !== null && quote.bookId !== selectedBookId) return false
+    if (selectedAuthor !== null && authorKey(quoteBook(quote)?.author ?? null) !== selectedAuthor)
+      return false
     if (!query) return true
 
-    return [toPlainText(quote.bodyMd), bookTitle(quote) ?? '']
+    return [toPlainText(quote.bodyMd), bookTitle(quote) ?? '', quoteBook(quote)?.author ?? '']
       .join('\n')
       .toLowerCase()
       .includes(query)
   })
 
-  const narrowed = query !== '' || bookFilter !== ''
+  const narrowed = query !== '' || filterValue !== ''
 
   function newQuote(): void {
     // Reuse the one that is open and still blank rather than stacking up empties.
@@ -53,9 +90,9 @@ export default function Quotes(): ReactNode {
     if (draft !== null) return
 
     // The filter names a book, so there is nothing left to ask.
-    if (bookFilter) {
+    if (selectedBookId !== null) {
       createNote.mutate(
-        { kind: QUOTE_KIND, bookId: Number(bookFilter) },
+        { kind: QUOTE_KIND, bookId: selectedBookId },
         { onSuccess: (quote) => setOpenId(quote.id) }
       )
       return
@@ -154,19 +191,49 @@ export default function Quotes(): ReactNode {
 
         {quotes.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-[13px] text-ink-muted">Filter by</span>
             <select
-              aria-label="Filter by book"
-              className="field w-auto max-w-56 py-1.5 text-[13px]"
-              value={bookFilter}
-              onChange={(event) => setBookFilter(event.target.value)}
+              aria-label="Filter quotes by"
+              className="field w-auto py-1.5 text-[13px]"
+              value={filterMode}
+              onChange={(event) => {
+                setFilterMode(event.target.value as 'book' | 'author')
+                setFilterValue('')
+              }}
             >
-              <option value="">All books</option>
-              {books.map((book) => (
-                <option key={book.id} value={book.id}>
-                  {book.title}
-                </option>
-              ))}
+              <option value="book">Books</option>
+              <option value="author">Authors</option>
             </select>
+
+            {filterMode === 'book' ? (
+              <select
+                aria-label="Filter by book"
+                className="field w-auto max-w-56 py-1.5 text-[13px]"
+                value={filterValue}
+                onChange={(event) => setFilterValue(event.target.value)}
+              >
+                <option value="">All books</option>
+                {sortedBooks.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.title}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                aria-label="Filter by author"
+                className="field w-auto max-w-56 py-1.5 text-[13px]"
+                value={filterValue}
+                onChange={(event) => setFilterValue(event.target.value)}
+              >
+                <option value="">All authors</option>
+                {authorOptions.map(([key, author]) => (
+                  <option key={key || 'unknown'} value={key || UNKNOWN_AUTHOR_FILTER}>
+                    {author}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {narrowed && (
               <button
@@ -174,7 +241,7 @@ export default function Quotes(): ReactNode {
                 className="btn btn-ghost"
                 onClick={() => {
                   setFilter('')
-                  setBookFilter('')
+                  setFilterValue('')
                 }}
               >
                 Clear
@@ -211,9 +278,9 @@ export default function Quotes(): ReactNode {
                   <option value="" disabled>
                     Choose a book…
                   </option>
-                  {books.map((book) => (
+                  {draftBooks.map((book) => (
                     <option key={book.id} value={book.id}>
-                      {book.title}
+                      {[book.title, book.author].filter(Boolean).join(' · ')}
                     </option>
                   ))}
                 </select>
@@ -233,7 +300,7 @@ export default function Quotes(): ReactNode {
           />
         ) : matching.length === 0 ? (
           <p className="py-8 text-center text-ink-muted">
-            {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing under this book.'}
+            {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing under this source.'}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -258,14 +325,14 @@ export default function Quotes(): ReactNode {
                       }
                       className="h-7 w-full max-w-56 truncate rounded-control border-none bg-transparent px-1.5 text-[13px] text-ink-muted hover:bg-hover focus:outline-none"
                     >
-                      {books.map((book) => (
+                      {sortedBooks.map((book) => (
                         <option key={book.id} value={book.id}>
-                          {book.title}
+                          {[book.title, book.author].filter(Boolean).join(' · ')}
                         </option>
                       ))}
                     </select>
                   ) : (
-                    bookTitle(quote)
+                    sourceLabel(quote)
                   )
                 }
               />

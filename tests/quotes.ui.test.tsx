@@ -145,6 +145,79 @@ describe('the Quotes screen', () => {
     expect(state.created[0]).toMatchObject({ kind: 'highlight', bookId: 7 })
   })
 
+  it('shows each quote’s book and author together', async () => {
+    installBridge({
+      books: [makeBook({ id: 7, title: 'The Dispossessed', author: 'Ursula K. Le Guin' })],
+      notes: [{ ...QUOTE, bookId: 7 }]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+
+    expect(await screen.findByText('The Dispossessed · Ursula K. Le Guin')).toBeTruthy()
+  })
+
+  it('switches the value filter between books and authors', async () => {
+    installBridge({
+      books: [
+        makeBook({ id: 7, title: 'The Dispossessed', author: 'Ursula K. Le Guin' }),
+        makeBook({ id: 8, title: 'A Wizard of Earthsea', author: 'Ursula K. Le Guin' }),
+        makeBook({ id: 9, title: 'Dune', author: 'Frank Herbert' })
+      ],
+      notes: [
+        { ...QUOTE, id: 10, bookId: 7, bodyMd: 'Anarres' },
+        { ...QUOTE, id: 11, bookId: 8, bodyMd: 'Earthsea' },
+        { ...QUOTE, id: 12, bookId: 9, bodyMd: 'Arrakis' }
+      ]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    const mode = await screen.findByLabelText('Filter quotes by')
+    expect(screen.queryByLabelText('Filter by author')).toBeNull()
+    expect(screen.getByLabelText('Filter by book')).toBeTruthy()
+
+    await user.selectOptions(mode, 'author')
+    expect(screen.queryByLabelText('Filter by book')).toBeNull()
+    const author = await screen.findByLabelText('Filter by author')
+    await user.selectOptions(author, 'ursula k. le guin')
+    await screen.findByText(/Anarres/)
+    expect(screen.getAllByTestId('quote-body').map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Anarres'),
+      expect.stringContaining('Earthsea')
+    ])
+
+    await user.selectOptions(mode, 'book')
+    await user.selectOptions(await screen.findByLabelText('Filter by book'), '9')
+    await screen.findByText(/Arrakis/)
+    expect(screen.getAllByTestId('quote-body').map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Arrakis')
+    ])
+  })
+
+  it('limits a new quote’s book choices when an author is selected', async () => {
+    installBridge({
+      books: [
+        makeBook({ id: 7, title: 'The Dispossessed', author: 'Ursula K. Le Guin' }),
+        makeBook({ id: 8, title: 'A Wizard of Earthsea', author: 'Ursula K. Le Guin' }),
+        makeBook({ id: 9, title: 'Dune', author: 'Frank Herbert' })
+      ],
+      notes: [QUOTE]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.selectOptions(await screen.findByLabelText('Filter quotes by'), 'author')
+    await user.selectOptions(await screen.findByLabelText('Filter by author'), 'ursula k. le guin')
+    await user.click(screen.getByRole('button', { name: 'New quote' }))
+
+    const picker = await screen.findByLabelText('Book this quote is from')
+    const choices = Array.from(picker.querySelectorAll('option')).map(
+      (option) => option.textContent
+    )
+    expect(choices).toContain('The Dispossessed · Ursula K. Le Guin')
+    expect(choices).toContain('A Wizard of Earthsea · Ursula K. Le Guin')
+    expect(choices).not.toContain('Dune · Frank Herbert')
+  })
+
   it('opens the passage in place rather than on a page of its own', async () => {
     installBridge({ notes: [QUOTE] })
     renderApp(<Quotes />, { kind: 'quotes' })

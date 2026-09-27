@@ -19,7 +19,7 @@ import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
 import * as searchRepo from '../repos/search'
 import * as backup from '../services/backup'
-import * as calibre from '../services/calibre'
+import * as highlights from '../services/highlights'
 import { harvestCandidates } from '../services/harvest'
 import {
   addFromOpenLibrary,
@@ -266,15 +266,18 @@ const api: InterleafApi = {
     meta.undismiss(getDb(), olid)
   },
 
-  async readCalibreExport() {
-    const file = await pickFile('Choose a Calibre highlights export', 'Read this file', [
-      { name: 'Calibre annotations', extensions: ['calibre_annotation_collection', 'json'] }
+  async readHighlightExport() {
+    const file = await pickFile('Choose a highlights export', 'Read this file', [
+      {
+        name: 'Calibre or Kindle highlights',
+        extensions: ['calibre_annotation_collection', 'json', 'txt']
+      }
     ])
     if (!file) return null
-    return calibre.planImport(getDb(), file)
+    return highlights.planImport(getDb(), file)
   },
-  async importCalibreHighlights(filePath, links) {
-    return calibre.runImport(getDb(), filePath, links)
+  async importHighlights(filePath, links) {
+    return highlights.runImport(getDb(), filePath, links)
   },
 
   async dataCounts() {

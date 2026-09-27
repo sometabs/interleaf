@@ -1,34 +1,35 @@
-import type { CalibreImportPlan } from '@shared/api'
+import type { HighlightImportPlan } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
-import { importSummary } from '../lib/calibre'
+import { importSummary } from '../lib/highlights'
 import { notify } from '../lib/feedback'
-import { useBooks, useImportCalibreHighlights } from '../lib/queries'
+import { useBooks, useImportHighlights } from '../lib/queries'
 import { SCREEN_NAMES, useView } from '../lib/view'
 import Empty from './Empty'
 
 const NONE = ''
 
 interface Props {
-  plan: CalibreImportPlan
+  plan: HighlightImportPlan
 }
 
-export default function CalibreImport({ plan }: Props): ReactNode {
+export default function HighlightImport({ plan }: Props): ReactNode {
   const { navigate, previous, back } = useView()
   const { data: books = [] } = useBooks()
-  const runImport = useImportCalibreHighlights()
+  const runImport = useImportHighlights()
+  const sourceName = plan.source === 'kindle' ? 'Kindle' : 'Calibre'
 
-  const [choice, setChoice] = useState<Record<number, string>>(() =>
-    Object.fromEntries(plan.books.map((book) => [book.calibreId, book.bookId?.toString() ?? NONE]))
+  const [choice, setChoice] = useState<Record<string, string>>(() =>
+    Object.fromEntries(plan.books.map((book) => [book.sourceKey, book.bookId?.toString() ?? NONE]))
   )
 
   const links = plan.books
-    .filter((book) => choice[book.calibreId] !== NONE)
-    .map((book) => ({ calibreId: book.calibreId, bookId: Number(choice[book.calibreId]) }))
+    .filter((book) => choice[book.sourceKey] !== NONE)
+    .map((book) => ({ sourceKey: book.sourceKey, bookId: Number(choice[book.sourceKey]) }))
 
-  const chosen = new Set(links.map((link) => link.calibreId))
+  const chosen = new Set(links.map((link) => link.sourceKey))
   const total = plan.books
-    .filter((book) => chosen.has(book.calibreId))
+    .filter((book) => chosen.has(book.sourceKey))
     .reduce((sum, book) => sum + book.newHighlights, 0)
 
   const sorted = [...books].sort((a, b) => a.title.localeCompare(b.title))
@@ -53,9 +54,8 @@ export default function CalibreImport({ plan }: Props): ReactNode {
 
           <h1 className="text-[22px] font-semibold tracking-tight">Import highlights</h1>
           <p className="mt-1 text-[13px] text-ink-muted">
-            Calibre names no books in its export, only numbers. Match each one to a book in your
-            library. Anything left unmatched is skipped, and every match is remembered for next
-            time.
+            Match each {sourceName} book to a book in your library. Anything left unmatched is
+            skipped, and every match is remembered for next time.
           </p>
         </div>
 
@@ -65,12 +65,17 @@ export default function CalibreImport({ plan }: Props): ReactNode {
           <div className="flex flex-col gap-2">
             {plan.books.map((book) => (
               <div
-                key={book.calibreId}
-                data-testid="calibre-book"
+                key={book.sourceKey}
+                data-testid="import-book"
                 className="flex flex-col gap-3 rounded-card border border-hairline bg-surface px-4 py-3"
               >
                 <div className="flex items-baseline justify-between gap-4">
-                  <p className="text-[14px]">Calibre book {book.calibreId}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px]">{book.sourceTitle}</p>
+                    {book.sourceAuthor && (
+                      <p className="truncate text-[12px] text-ink-muted">{book.sourceAuthor}</p>
+                    )}
+                  </div>
                   <p className="shrink-0 text-[12px] text-ink-faint">
                     {book.newHighlights} new
                     {book.knownHighlights > 0 && `, ${book.knownHighlights} already imported`}
@@ -90,12 +95,12 @@ export default function CalibreImport({ plan }: Props): ReactNode {
 
                 <select
                   className="field w-full text-[13px]"
-                  aria-label={`Book for Calibre book ${book.calibreId}`}
-                  value={choice[book.calibreId] ?? NONE}
+                  aria-label={`Book for ${book.sourceTitle}`}
+                  value={choice[book.sourceKey] ?? NONE}
                   onChange={(event) =>
                     setChoice((current) => ({
                       ...current,
-                      [book.calibreId]: event.target.value
+                      [book.sourceKey]: event.target.value
                     }))
                   }
                 >

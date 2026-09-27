@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
 import * as notes from '../src/main/repos/notes'
-import { parseCollection, planImport, runImport } from '../src/main/services/calibre'
+import { parseCollection } from '../src/main/services/calibre'
+import { planImport, runImport } from '../src/main/services/highlights'
 
 let db: Database
 let dir: string
@@ -62,9 +63,42 @@ describe('upgrading a library that predates the import', () => {
 
     const after = createDatabase(file)
     try {
-      runImport(after, exportFile([annotation()]), [{ calibreId: 42, bookId }])
+      runImport(after, exportFile([annotation()]), [{ sourceKey: '42', bookId }])
       expect(notes.listNotes(after).map((note) => note.bodyMd)).toContain('Typed by hand')
       expect(notes.listNotes(after)).toHaveLength(2)
+    } finally {
+      after.close()
+    }
+  })
+
+  it('keeps Calibre UUIDs and remembered book matches from the old schema', () => {
+    const file = join(dir, 'interleaf-old-import.db')
+    const before = createDatabase(file, 15)
+    const bookId = Number(
+      before.prepare("INSERT INTO book (title) VALUES ('Frankenstein')").run().lastInsertRowid
+    )
+    const noteId = Number(
+      before
+        .prepare(
+          "INSERT INTO note (book_id, kind, title, body_md) VALUES (?, 'highlight', '', 'Old quote')"
+        )
+        .run(bookId).lastInsertRowid
+    )
+    before
+      .prepare('UPDATE note SET calibre_uuid = ? WHERE id = ?')
+      .run('k2QpvLm7T0aZ9RxCwXyNbA', noteId)
+    before.prepare('INSERT INTO calibre_book (calibre_id, book_id) VALUES (42, ?)').run(bookId)
+    before.close()
+
+    const after = createDatabase(file)
+    try {
+      const plan = planImport(after, exportFile([annotation()]))
+      expect(plan.books[0]).toMatchObject({
+        bookId,
+        newHighlights: 0,
+        knownHighlights: 1
+      })
+      expect(runImport(after, plan.filePath, [])).toEqual({ imported: 0, skipped: 1, books: 0 })
     } finally {
       after.close()
     }
@@ -105,7 +139,7 @@ describe('reading an export', () => {
 
   it('groups by Calibre book and counts what is new', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
-    runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+    runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])
 
     const plan = planImport(
       db,
@@ -116,10 +150,10 @@ describe('reading an export', () => {
       ])
     )
 
-    const shelley = plan.books.find((entry) => entry.calibreId === 42)
+    const shelley = plan.books.find((entry) => entry.sourceKey === '42')
     expect(shelley).toMatchObject({ bookId: book.id, newHighlights: 1, knownHighlights: 1 })
     // Never matched, so it has no book and everything in it is new.
-    expect(plan.books.find((entry) => entry.calibreId === 21)).toMatchObject({
+    expect(plan.books.find((entry) => entry.sourceKey === '21')).toMatchObject({
       bookId: null,
       newHighlights: 1
     })
@@ -141,7 +175,7 @@ describe('importing highlights', () => {
   it('stores each one as a quote on the matched book', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
 
-    const result = runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+    const result = runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])
 
     expect(result).toEqual({ imported: 1, skipped: 0, books: 1 })
     const [quote] = notes.listNotes(db)
@@ -154,7 +188,7 @@ describe('importing highlights', () => {
 
   it('keeps the date the passage was highlighted', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
-    runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+    runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])
 
     expect(notes.listNotes(db)[0].createdAt).toBe(
       Math.floor(Date.parse('2025-11-02T14:08:12.640Z') / 1000)
@@ -164,7 +198,7 @@ describe('importing highlights', () => {
   it('puts a Calibre note under the passage as a quotation', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
     runImport(db, exportFile([annotation({ notes: 'Read this again after the second volume.' })]), [
-      { calibreId: 42, bookId: book.id }
+      { sourceKey: '42', bookId: book.id }
     ])
 
     expect(notes.listNotes(db)[0].bodyMd).toBe(
@@ -178,7 +212,7 @@ describe('importing highlights', () => {
     const result = runImport(
       db,
       exportFile([annotation(), annotation({ book_id: 21, uuid: 'other' })]),
-      [{ calibreId: 42, bookId: book.id }]
+      [{ sourceKey: '42', bookId: book.id }]
     )
 
     expect(result).toEqual({ imported: 1, skipped: 1, books: 1 })
@@ -188,9 +222,9 @@ describe('importing highlights', () => {
   it('adds nothing on a second run of the same file', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
     const path = exportFile([annotation()])
-    runImport(db, path, [{ calibreId: 42, bookId: book.id }])
+    runImport(db, path, [{ sourceKey: '42', bookId: book.id }])
 
-    const again = runImport(db, path, [{ calibreId: 42, bookId: book.id }])
+    const again = runImport(db, path, [{ sourceKey: '42', bookId: book.id }])
 
     expect(again).toEqual({ imported: 0, skipped: 1, books: 0 })
     expect(notes.listNotes(db)).toHaveLength(1)
@@ -198,10 +232,10 @@ describe('importing highlights', () => {
 
   it('leaves a highlight edited in Calibre as it was imported', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
-    runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+    runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])
 
     runImport(db, exportFile([annotation({ highlighted_text: 'a longer passage entirely' })]), [
-      { calibreId: 42, bookId: book.id }
+      { sourceKey: '42', bookId: book.id }
     ])
 
     const stored = notes.listNotes(db)
@@ -213,7 +247,7 @@ describe('importing highlights', () => {
 
   it('remembers the match, so a later export needs none', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
-    runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+    runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])
 
     const plan = planImport(db, exportFile([annotation({ uuid: 'later' })]))
 
@@ -223,14 +257,14 @@ describe('importing highlights', () => {
 
   it('refuses a match to a book that is gone', () => {
     expect(() =>
-      runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: 404 }])
+      runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: 404 }])
     ).toThrow(/no longer in your library/)
     expect(notes.listNotes(db)).toHaveLength(0)
   })
 
   it('forgets the match when the book is deleted', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
-    runImport(db, exportFile([annotation()]), [{ calibreId: 42, bookId: book.id }])
+    runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])
 
     books.deleteBook(db, book.id)
 

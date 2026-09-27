@@ -87,10 +87,10 @@ resembles. Nothing is uploaded, and no profile is built about you anywhere.
 same question of that book alone instead of your whole taste. It searches what Discover has already
 found, so it is instant, and it comes up empty when the book sits far from everything else you read.
 
-**Highlights from Calibre.** Export your highlights from the Calibre viewer and read the file
-straight into Interleaf, notes and dates included. Calibre's export names no books, only numbers, so
-you match each one to a book yourself the first time and it is remembered after that. Re-importing
-the same file adds nothing twice. Nothing touches your Calibre library.
+**Highlights from Calibre or Kindle.** Read a Calibre annotations export or Kindle My Clippings file
+straight into Interleaf, dates included. Match each source book to your library once and Interleaf
+remembers it; re-importing an updated file adds only new highlights. Nothing touches the source
+library or device.
 
 **Backups.** One button writes your whole library to a folder you choose: the database, the covers,
 and a Markdown copy of everything you have written. Another button reads it back, replacing what you

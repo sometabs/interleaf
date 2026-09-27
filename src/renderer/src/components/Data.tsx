@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { importSummary } from '../lib/calibre'
+import { importSummary } from '../lib/highlights'
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
 import {
@@ -10,8 +10,8 @@ import {
   useDeleteEverything,
   useDismissed,
   useExportBackup,
-  useImportCalibreHighlights,
-  useReadCalibreExport,
+  useImportHighlights,
+  useReadHighlightExport,
   useRestoreBackup,
   useRestoreDismissed
 } from '../lib/queries'
@@ -26,8 +26,8 @@ export default function Data(): ReactNode {
   const { data: counts } = useDataCounts()
   const exportBackup = useExportBackup()
   const restoreBackup = useRestoreBackup()
-  const readExport = useReadCalibreExport()
-  const runImport = useImportCalibreHighlights()
+  const readExport = useReadHighlightExport()
+  const runImport = useImportHighlights()
 
   const deleteBooks = useDeleteAllBooks()
   const deleteNotes = useDeleteAllNotes()
@@ -74,7 +74,7 @@ export default function Data(): ReactNode {
     }
 
     const links = plan.books.map((book) => ({
-      calibreId: book.calibreId,
+      sourceKey: book.sourceKey,
       bookId: book.bookId as number
     }))
     notify(importSummary(await runImport.mutateAsync({ filePath: plan.filePath, links })))
@@ -168,9 +168,9 @@ export default function Data(): ReactNode {
 
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px]">Highlights from Calibre</p>
+              <p className="text-[14px]">Highlights from Calibre or Kindle</p>
               <p className="mt-0.5 text-[13px] text-ink-muted">
-                The file the Calibre viewer writes when you export your highlights
+                A Calibre annotations export or Kindle My Clippings file
               </p>
             </div>
             <button
@@ -195,8 +195,12 @@ export default function Data(): ReactNode {
                 collection”.
               </p>
               <p>
-                <span className="text-ink">Here:</span> Choose file, then match each Calibre book to
-                a book in your library. It has to be the type "Calibre annotation collection".
+                <span className="text-ink">On Kindle:</span> Connect it to your computer and choose
+                the “My Clippings.txt” file from its documents folder.
+              </p>
+              <p>
+                <span className="text-ink">Here:</span> Choose the file, then match each source book
+                to a book in your library. Matches are remembered for later imports.
               </p>
             </div>
           </details>

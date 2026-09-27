@@ -1,4 +1,4 @@
-import type { CalibreImportPlan } from '@shared/api'
+import type { HighlightImportPlan } from '@shared/api'
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 
 export type View =
@@ -16,7 +16,7 @@ export type View =
   | { kind: 'data' }
   // The plan travels with the view: it is read from a file, not from the
   // library, so nothing else can fetch it back.
-  | { kind: 'import'; plan: CalibreImportPlan }
+  | { kind: 'import'; plan: HighlightImportPlan }
 
 // Beside the union, so a new screen cannot be added without naming it.
 export const SCREEN_NAMES: Record<View['kind'], string> = {

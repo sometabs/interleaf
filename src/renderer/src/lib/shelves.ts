@@ -71,7 +71,7 @@ const UNKNOWN_AUTHOR = 'Unknown author'
 
 // Stroked letters survive: ł is its own letter, so "Stanisław" and "Stanislaw"
 // stay apart.
-function authorKey(author: string | null): string {
+export function authorKey(author: string | null): string {
   return (author ?? '')
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
