@@ -17,7 +17,12 @@ function node(
     olid,
     title: `Book ${olid}`,
     author: 'Someone',
+    editionOlid: null,
     coverId: null,
+    isbn: null,
+    pageCount: null,
+    publishedYear: null,
+    description: null,
     score,
     becauseOf: { bookId: 1, title: 'The Dispossessed' },
     subjects: ['Science fiction'],
@@ -108,7 +113,7 @@ describe('RecommendationTree', () => {
 
     await user.click(screen.getByLabelText('Want to read Book grandchild'))
 
-    expect(onSave).toHaveBeenCalledWith('grandchild')
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'grandchild' }))
   })
 
   it('says so when there is nothing to arrange', () => {
@@ -384,7 +389,7 @@ describe('Dragging the tree around', () => {
     // The whole tree is draggable, so buttons inside it must still click.
     await user.click(screen.getByLabelText('Want to read Book root'))
 
-    expect(onSave).toHaveBeenCalledWith('root')
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'root' }))
     expect(canvas().scrollLeft).toBe(0)
   })
 
@@ -421,6 +426,6 @@ describe('Dragging the tree around', () => {
     expect(onSave).not.toHaveBeenCalled()
 
     fireEvent.click(button)
-    expect(onSave).toHaveBeenCalledWith('root')
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'root' }))
   })
 })

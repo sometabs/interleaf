@@ -1,4 +1,4 @@
-import type { RecommendationNode } from '@shared/api'
+import type { Recommendation, RecommendationNode } from '@shared/api'
 import {
   useEffect,
   useLayoutEffect,
@@ -15,14 +15,14 @@ import Spinner from './Spinner'
 
 interface Props {
   roots: RecommendationNode[]
-  onSave: (olid: string) => void
+  onSave: (recommendation: Recommendation) => void
   onDismiss: (olid: string) => void
   // The book currently being added, so its node alone shows the work.
   savingOlid: string | null
 }
 
 interface Handlers {
-  onSave: (olid: string) => void
+  onSave: (recommendation: Recommendation) => void
   onDismiss: (olid: string) => void
   savingOlid: string | null
 }
@@ -488,7 +488,7 @@ function NodeCard({
             label={`Want to read ${node.title}`}
             tooltip="Want to read"
             className="hover:bg-accent-soft hover:text-accent"
-            onClick={() => onSave(node.olid)}
+            onClick={() => onSave(node)}
           >
             <path d="M8 3.5v9M3.5 8h9" />
           </IconButton>

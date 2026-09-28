@@ -29,9 +29,14 @@ const OL_BOOK = {
 
 const REC = {
   olid: 'OL9W',
+  editionOlid: 'OL99M',
   title: 'Solaris',
   author: 'Stanisław Lem',
   coverId: null,
+  isbn: '9780000000009',
+  pageCount: 204,
+  publishedYear: 1961,
+  description: 'A psychologist visits a station orbiting Solaris.',
   score: 0.8,
   subjects: ['Science fiction'],
   becauseOf: null
@@ -161,13 +166,14 @@ describe('adding from the Discover grid', () => {
   it('marks the card it is working on', async () => {
     const user = userEvent.setup()
     const slow = deferred<ReturnType<typeof makeBook>>()
+    const saveRecommendation = vi.fn(() => slow.promise)
 
     installBridge(
       { books: [makeBook({ id: 1, rating: 5 })] },
       {
         getRecommendations: async () => [REC, { ...REC, olid: 'OL8W', title: 'Roadside Picnic' }],
         getRecommendationTree: async () => [],
-        saveRecommendation: () => slow.promise
+        saveRecommendation
       }
     )
     renderApp(<Discover />, { kind: 'discover' })
@@ -176,6 +182,19 @@ describe('adding from the Discover grid', () => {
       expect(screen.getAllByRole('button', { name: 'Want to read' })).toHaveLength(2)
     )
     await user.click(screen.getAllByRole('button', { name: 'Want to read' })[0])
+
+    expect(saveRecommendation).toHaveBeenCalledWith({
+      olid: 'OL9W',
+      editionOlid: 'OL99M',
+      title: 'Solaris',
+      author: 'Stanisław Lem',
+      publishedYear: 1961,
+      coverId: null,
+      isbn: '9780000000009',
+      pageCount: 204,
+      subjects: ['Science fiction'],
+      description: 'A psychologist visits a station orbiting Solaris.'
+    })
 
     await waitFor(() => expect(screen.getByLabelText('Adding Solaris')).toBeDefined())
     expect(screen.getByText('Adding…')).toBeDefined()
@@ -191,9 +210,14 @@ describe('adding from the Discover grid', () => {
 describe('adding from the recommendation tree', () => {
   const node = {
     olid: 'OL9W',
+    editionOlid: null,
     title: 'Solaris',
     author: 'Stanisław Lem',
     coverId: null,
+    isbn: null,
+    pageCount: null,
+    publishedYear: null,
+    description: null,
     score: 0.8,
     subjects: ['Science fiction'],
     becauseOf: null,

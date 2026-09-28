@@ -3,14 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
-import { getBookMetadata } from '../src/main/repos/metadata'
+import { getBookMetadata, saveBookMetadata } from '../src/main/repos/metadata'
 
 let db: Database
 
-function response(body: unknown): Response {
+function response(body: unknown, status = 200): Response {
   return {
-    ok: true,
-    status: 200,
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 404 ? 'Not Found' : 'OK',
     headers: new Headers(),
     json: async () => body,
     arrayBuffer: async () => new ArrayBuffer(0)
@@ -28,191 +29,159 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('choosing shelf metadata', () => {
-  it('keeps search subjects instead of replacing them with a sparse work record', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL) =>
-        String(input).includes('/works/')
-          ? response({ subjects: ['Continental drama'], description: 'A work description.' })
-          : response({ docs: [] })
-      )
-    )
+describe('adding from Open Library', () => {
+  it('saves the selected result without searching for another edition', async () => {
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      void input
+      return response({
+        title: 'A different work title',
+        subjects: ['Sparse work subject'],
+        description: 'The complete description.'
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const { addFromOpenLibrary } = await import('../src/main/services/library')
 
-    const done = addFromOpenLibrary(db, {
+    const pending = addFromOpenLibrary(db, {
       olid: 'OL1W',
-      title: 'Beyond Good and Evil',
-      author: 'Friedrich Nietzsche',
-      publishedYear: 1886,
+      editionOlid: 'OL10M',
+      title: 'The selected title',
+      author: 'Selected Author',
+      publishedYear: 1984,
       coverId: null,
-      isbn: null,
-      pageCount: null,
-      subjects: ['Philosophy', 'Ethics']
+      isbn: 'selected-isbn',
+      pageCount: 321,
+      subjects: ['Search subject']
     })
     await vi.advanceTimersByTimeAsync(5_000)
-    const book = await done
+    const book = await pending
 
+    expect(book).toMatchObject({
+      olid: 'OL1W',
+      editionOlid: 'OL10M',
+      title: 'The selected title',
+      author: 'Selected Author',
+      isbn: 'selected-isbn',
+      pageCount: 321,
+      publishedYear: 1984
+    })
     expect(getBookMetadata(db, book.id)).toMatchObject({
-      subjects: ['Philosophy', 'Ethics'],
-      description: 'A work description.'
+      subjects: ['Search subject'],
+      description: 'The complete description.'
     })
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      'https://openlibrary.org/works/OL1W.json'
+    ])
   })
 
-  it('repairs an older sparse record from the matching search result', async () => {
-    const fetchMock = vi.fn(async (input: string | URL) => {
-      const url = String(input)
-      if (url.includes('/works/')) {
-        return response({ subjects: ['Continental drama'], covers: [] })
-      }
-      return response({
-        docs: [
-          {
-            key: '/works/OL1W',
-            title: 'Beyond Good and Evil',
-            author_name: ['Friedrich Nietzsche'],
-            subject: ['Philosophy', 'Ethics'],
-            language: ['eng']
-          }
-        ]
-      })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    const { enrich } = await import('../src/main/services/library')
-    const book = books.createBook(db, {
-      title: 'Beyond Good and Evil',
-      author: 'Friedrich Nietzsche',
-      olid: 'OL1W'
-    })
-
-    const done = enrich(db, book.id)
-    await vi.advanceTimersByTimeAsync(5_000)
-    await done
-
-    expect(getBookMetadata(db, book.id)?.subjects).toEqual(['Philosophy', 'Ethics'])
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not replace a stored work with a richer duplicate', async () => {
-    const fetchMock = vi.fn(async (input: string | URL) => {
-      if (String(input).includes('/works/')) return response({ subjects: [] })
-      return response({
-        docs: [
-          {
-            key: '/works/OL1161325W',
-            title: "L'être et le néant",
-            author_name: ['Jean-Paul Sartre'],
-            subject: ['Existentialism', 'Ontology', 'Philosophy'],
-            language: ['eng', 'fre'],
-            editions: {
-              docs: [
-                {
-                  key: '/books/OL51699762M',
-                  title: 'Being and Nothingness',
-                  cover_i: 14882069,
-                  language: ['eng']
+  it('looks identical after an immediate metadata refresh', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        if (String(input).includes('/search.json')) {
+          return response({
+            docs: [
+              {
+                key: '/works/OL1W',
+                title: 'A different work title',
+                author_name: ['Different Author'],
+                first_publish_year: 1900,
+                number_of_pages_median: 999,
+                editions: {
+                  docs: [
+                    {
+                      key: '/books/OL99M',
+                      title: 'A different edition',
+                      cover_i: 999,
+                      isbn: ['different-isbn']
+                    }
+                  ]
                 }
-              ]
-            }
-          }
-        ]
-      })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    const { enrich } = await import('../src/main/services/library')
-    const book = books.createBook(db, {
-      title: 'Being and Nothingness',
-      author: 'Jean-Paul Sartre',
-      olid: 'OL38060433W',
-      isbn: '9781973776659'
-    })
-
-    const done = enrich(db, book.id)
-    await vi.advanceTimersByTimeAsync(5_000)
-    await done
-
-    const saved = books.getBook(db, book.id)
-    expect(saved).toMatchObject({
-      olid: 'OL38060433W',
-      editionOlid: null,
-      isbn: '9781973776659'
-    })
-    expect(getBookMetadata(db, book.id)?.subjects).toEqual([])
-
-    const searchUrl = fetchMock.mock.calls
-      .map(([input]) => String(input))
-      .find((url) => url.includes('/search.json'))
-    expect(new URL(searchUrl ?? '').searchParams.get('q')).toBe(
-      'title:"Being and Nothingness" author:"Jean-Paul Sartre"'
-    )
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/b/id/'))).toBe(false)
-  })
-
-  it('keeps a sparse work instead of silently rebinding its OLID', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL) => {
-        if (String(input).includes('/works/')) return response({ subjects: ['Continental drama'] })
-        return response({
-          docs: [
-            {
-              key: '/works/OL2W',
-              title: 'Beyond Good and Evil',
-              author_name: ['Friedrich Nietzsche'],
-              subject: ['Philosophy', 'Ethics', 'Good and evil'],
-              language: ['eng']
-            }
-          ]
-        })
+              }
+            ]
+          })
+        }
+        return response({ subjects: ['Updated subject'], description: 'Updated description.' })
       })
     )
-    const { enrich } = await import('../src/main/services/library')
-    const book = books.createBook(db, {
-      title: 'Beyond Good and Evil',
-      author: 'Friedrich Nietzsche',
-      olid: 'OL1W'
+    const { addFromOpenLibrary, refreshOneBookMetadata } =
+      await import('../src/main/services/library')
+
+    const adding = addFromOpenLibrary(db, {
+      olid: 'OL1W',
+      editionOlid: 'OL10M',
+      title: 'The selected title',
+      author: 'Selected Author',
+      publishedYear: 1984,
+      coverId: null,
+      isbn: 'selected-isbn',
+      pageCount: 321,
+      subjects: ['Original subject']
     })
-
-    const done = enrich(db, book.id)
     await vi.advanceTimersByTimeAsync(5_000)
-    await done
+    const added = await adding
 
-    expect(books.getBook(db, book.id)?.olid).toBe('OL1W')
-    expect(getBookMetadata(db, book.id)?.subjects).toEqual(['Continental drama'])
-  })
+    const refreshing = refreshOneBookMetadata(db, added.id)
+    await vi.advanceTimersByTimeAsync(8_000)
+    const refreshed = await refreshing
 
-  it('does not turn a one-word title into a sequel with a similar name', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL) => {
-        if (String(input).includes('/works/')) return response({ subjects: ['Fiction'] })
-        return response({
-          docs: [
-            {
-              key: '/works/OL2W',
-              title: 'Dune Messiah',
-              author_name: ['Frank Herbert'],
-              subject: ['Science fiction', 'Dystopias', 'Space opera'],
-              language: ['eng']
-            }
-          ]
-        })
-      })
-    )
-    const { enrich } = await import('../src/main/services/library')
-    const book = books.createBook(db, { title: 'Dune', author: 'Frank Herbert', olid: 'OL1W' })
-
-    const done = enrich(db, book.id)
-    await vi.advanceTimersByTimeAsync(5_000)
-    await done
-
-    expect(books.getBook(db, book.id)?.olid).toBe('OL1W')
-    expect(getBookMetadata(db, book.id)?.subjects).toEqual(['Fiction'])
+    expect(refreshed).toMatchObject({
+      olid: 'OL1W',
+      editionOlid: 'OL10M',
+      title: 'The selected title',
+      author: 'Selected Author',
+      isbn: 'selected-isbn',
+      pageCount: 321,
+      publishedYear: 1984,
+      coverPath: null
+    })
+    expect(getBookMetadata(db, added.id)).toMatchObject({
+      subjects: ['Updated subject'],
+      description: 'Updated description.'
+    })
   })
 })
 
 describe('refreshing the whole library', () => {
-  it('refreshes the stored work without re-identifying it from title or author text', async () => {
+  it('reports a missing Work without treating Open Library as offline', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        if (String(input).includes('/works/')) return response({}, 404)
+        return response({
+          docs: [
+            {
+              key: '/works/OL1W',
+              title: 'A deleted work',
+              number_of_pages_median: 200
+            }
+          ]
+        })
+      })
+    )
+    const { refreshAllBookMetadata } = await import('../src/main/services/library')
+    const original = books.createBook(db, { title: 'A deleted work', olid: 'OL1W' })
+
+    const pending = refreshAllBookMetadata(db)
+    await vi.advanceTimersByTimeAsync(5_000)
+    const result = await pending
+
+    expect(result).toEqual({
+      refreshed: 0,
+      failures: [
+        {
+          bookId: original.id,
+          title: 'A deleted work',
+          reason: 'Open Library no longer has this Work ID.'
+        }
+      ],
+      cancelled: false,
+      offline: false
+    })
+    expect(books.getBook(db, original.id)?.pageCount).toBeNull()
+  })
+
+  it('refreshes by Work ID without requesting or selecting an edition', async () => {
     const fetchMock = vi.fn(async (input: string | URL) => {
       const url = String(input)
       if (url.includes('/works/')) return response({ subjects: ['Fantasy'] })
@@ -250,17 +219,20 @@ describe('refreshing the whole library', () => {
     await pending
 
     expect(books.getBook(db, original.id)).toMatchObject({
-      author: 'J.R.R. Tolkien',
-      editionOlid: 'OL51709286M'
+      title: 'The Hobbit',
+      author: 'J. R. R. Tolkien',
+      olid: 'OL27482W',
+      editionOlid: null
     })
-    const queries = fetchMock.mock.calls
+    const searchUrl = fetchMock.mock.calls
       .map(([input]) => String(input))
-      .filter((url) => url.includes('/search.json'))
-      .map((url) => new URL(url).searchParams.get('q'))
-    expect(queries).toEqual(['key:/works/OL27482W'])
+      .find((url) => url.includes('/search.json'))
+    const parsed = new URL(searchUrl ?? '')
+    expect(parsed.searchParams.get('q')).toBe('key:/works/OL27482W')
+    expect(parsed.searchParams.get('fields')?.split(',')).not.toContain('editions')
   })
 
-  it('uses Open Library’s selected edition and its Latin author for that exact work', async () => {
+  it('fills missing work fields without adopting nested-edition identity', async () => {
     const fetchMock = vi.fn(async (input: string | URL) => {
       const url = String(input)
       if (url.includes('/works/')) return response({ subjects: ['Fiction'] })
@@ -273,6 +245,8 @@ describe('refreshing the whole library', () => {
             author_alternative_name: ['Murata Sayaka', 'Sayaka Murata', 'MURATA SAYAKA'],
             subject: ['Fiction'],
             language: ['eng'],
+            number_of_pages_median: 176,
+            first_publish_year: 2016,
             editions: {
               docs: [
                 {
@@ -300,9 +274,12 @@ describe('refreshing the whole library', () => {
     await pending
 
     expect(books.getBook(db, original.id)).toMatchObject({
-      author: 'Murata Sayaka',
-      editionOlid: 'OL28719876M',
-      isbn: '9781846276842'
+      title: 'Convenience Store Woman',
+      author: 'Sayaka Murata',
+      editionOlid: null,
+      isbn: null,
+      pageCount: 176,
+      publishedYear: 2016
     })
     const searchUrl = fetchMock.mock.calls
       .map(([input]) => String(input))
@@ -310,7 +287,7 @@ describe('refreshing the whole library', () => {
     expect(new URL(searchUrl ?? '').searchParams.get('q')).toBe('key:/works/OL19744024W')
   })
 
-  it('rebuilds Open Library fields while preserving reader-owned fields', async () => {
+  it('refreshes metadata while preserving the selected edition and visible fields', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL) => {
@@ -322,6 +299,8 @@ describe('refreshing the whole library', () => {
             {
               key: '/works/OL1W',
               title: 'Old title',
+              first_publish_year: 2005,
+              number_of_pages_median: 144,
               author_name: ['Albert Camus'],
               author_alternative_name: ['Camus, Albert'],
               subject: ['Philosophy', 'Absurdism'],
@@ -356,7 +335,8 @@ describe('refreshing the whole library', () => {
     books.updateBook(db, original.id, {
       genres: ['Philosophy'],
       startedAt: 100,
-      finishedAt: 200
+      finishedAt: 200,
+      coverPath: `book-${original.id}-123.jpg`
     })
 
     const pending = refreshAllBookMetadata(db)
@@ -368,10 +348,11 @@ describe('refreshing the whole library', () => {
       title: 'The Myth of Sisyphus',
       author: 'Albert Camus',
       olid: 'OL1W',
-      editionOlid: 'OL2M',
-      isbn: '9780141023991',
+      editionOlid: 'OL1M',
+      isbn: 'old-isbn',
       pageCount: 144,
       publishedYear: 2005,
+      coverPath: `book-${original.id}-123.jpg`,
       status: 'read',
       rating: 5,
       genres: ['Philosophy'],
@@ -381,6 +362,57 @@ describe('refreshing the whole library', () => {
     expect(getBookMetadata(db, original.id)).toMatchObject({
       subjects: ['Philosophy', 'Absurdism'],
       description: 'The complete description.'
+    })
+  })
+
+  it('does not erase stored metadata when a refresh response is sparse', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        if (String(input).includes('/works/')) return response({ covers: [456] })
+        return response({
+          docs: [
+            {
+              key: '/works/OL1W',
+              title: 'Existing title',
+              first_publish_year: 2020,
+              number_of_pages_median: 999,
+              editions: { docs: [{ key: '/books/OL2M', title: 'Existing title' }] }
+            }
+          ]
+        })
+      })
+    )
+    const { refreshOneBookMetadata } = await import('../src/main/services/library')
+    const original = books.createBook(db, {
+      title: 'Existing title',
+      author: 'Existing author',
+      olid: 'OL1W',
+      editionOlid: 'OL1M',
+      isbn: 'existing-isbn',
+      pageCount: 200,
+      publishedYear: 1999
+    })
+    books.updateBook(db, original.id, { coverPath: `book-${original.id}-123.jpg` })
+    saveBookMetadata(db, original.id, {
+      subjects: ['Existing subject'],
+      description: 'Existing description.'
+    })
+
+    const pending = refreshOneBookMetadata(db, original.id)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await pending
+
+    expect(books.getBook(db, original.id)).toMatchObject({
+      author: 'Existing author',
+      isbn: 'existing-isbn',
+      pageCount: 200,
+      publishedYear: 1999,
+      coverPath: `book-${original.id}-123.jpg`
+    })
+    expect(getBookMetadata(db, original.id)).toMatchObject({
+      subjects: ['Existing subject'],
+      description: 'Existing description.'
     })
   })
 

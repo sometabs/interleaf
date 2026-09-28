@@ -106,16 +106,22 @@ function candidateUpsert(db: Database): ReturnType<Database['prepare']> {
        (@olid, @editionOlid, @isbn, @title, @author, @subjects, @description, @coverId,
         @pageCount, @publishedYear, @source, @languages, unixepoch())
      ON CONFLICT (olid) DO UPDATE SET
-       edition_olid = excluded.edition_olid,
-       isbn = excluded.isbn,
-       title = excluded.title,
-       author = excluded.author,
-       subjects = excluded.subjects,
-       description = excluded.description,
-       cover_id = excluded.cover_id,
-       page_count = excluded.page_count,
-       published_year = excluded.published_year,
-       languages = excluded.languages,
+       edition_olid = coalesce(book_candidate.edition_olid, excluded.edition_olid),
+       isbn = coalesce(book_candidate.isbn, excluded.isbn),
+       title = book_candidate.title,
+       author = coalesce(book_candidate.author, excluded.author),
+       subjects = CASE
+         WHEN excluded.subjects <> '[]' THEN excluded.subjects
+         ELSE book_candidate.subjects
+       END,
+       description = coalesce(excluded.description, book_candidate.description),
+       cover_id = coalesce(book_candidate.cover_id, excluded.cover_id),
+       page_count = coalesce(book_candidate.page_count, excluded.page_count),
+       published_year = coalesce(book_candidate.published_year, excluded.published_year),
+       languages = CASE
+         WHEN excluded.languages <> '[]' THEN excluded.languages
+         ELSE book_candidate.languages
+       END,
        source = excluded.source,
        harvested_at = unixepoch()`
   )

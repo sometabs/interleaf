@@ -301,6 +301,36 @@ describe('candidate languages', () => {
     })
   })
 
+  it('does not let a targeted result replace an existing edition snapshot', () => {
+    const original = harvested('OL1W', ['eng'], 'subject:science fiction')
+    original.title = 'The displayed edition'
+    original.editionOlid = 'OL10M'
+    original.isbn = 'first-isbn'
+    original.coverId = 10
+    original.pageCount = 300
+    original.publishedYear = 2001
+
+    const targeted = harvested('OL1W', ['eng'], 'author:Someone')
+    targeted.title = 'A different nested edition'
+    targeted.editionOlid = 'OL20M'
+    targeted.isbn = 'second-isbn'
+    targeted.coverId = 20
+    targeted.pageCount = 400
+    targeted.publishedYear = 2002
+
+    meta.upsertCandidates(db, [original])
+    meta.upsertCandidates(db, [targeted])
+
+    expect(meta.scorableCandidates(db)[0]).toMatchObject({
+      title: 'The displayed edition',
+      editionOlid: 'OL10M',
+      isbn: 'first-isbn',
+      coverId: 10,
+      pageCount: 300,
+      publishedYear: 2001
+    })
+  })
+
   it('reads a row migrated from before the column existed as unknown', () => {
     meta.upsertCandidates(db, [harvested('OL1W', [], 'subject:x')])
     db.prepare('UPDATE book_candidate SET languages = NULL').run()
@@ -309,11 +339,11 @@ describe('candidate languages', () => {
     expect(meta.scorableCandidates(db)[0].languages).toEqual([])
   })
 
-  it('stores the latest language list exactly, including an empty one', () => {
+  it('does not erase known languages when a later result is sparse', () => {
     meta.upsertCandidates(db, [harvested('OL1W', ['jpn'], 'author:Someone')])
     meta.upsertCandidates(db, [harvested('OL1W', [], 'subject:science fiction')])
 
-    expect(meta.scorableCandidates(db)[0].languages).toEqual([])
+    expect(meta.scorableCandidates(db)[0].languages).toEqual(['jpn'])
   })
 
   it('still updates languages when a later harvest actually knows some', () => {
@@ -340,7 +370,7 @@ describe('metadata refreshes', () => {
     })
   })
 
-  it('stores an empty candidate subject list instead of overruling it', () => {
+  it('does not erase known candidate subjects when a later result is sparse', () => {
     const row = (subjects: string[]): meta.CandidateRow => ({
       olid: 'OL1W',
       editionOlid: null,
@@ -359,7 +389,7 @@ describe('metadata refreshes', () => {
     meta.upsertCandidates(db, [row(['Philosophy', 'Ethics'])])
     meta.upsertCandidates(db, [row([])])
 
-    expect(meta.scorableCandidates(db)[0].subjects).toEqual([])
+    expect(meta.scorableCandidates(db)[0].subjects).toEqual(['Philosophy', 'Ethics'])
   })
 })
 
@@ -557,39 +587,39 @@ describe('a candidate harvested again', () => {
     }
   }
 
-  it('takes the newer title', () => {
+  it('keeps the first displayed title', () => {
     meta.upsertCandidates(db, [harvested('Братья Карамазовы', 1)])
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', 2)])
 
-    expect(meta.scorableCandidates(db)[0].title).toBe('The Brothers Karamazov')
+    expect(meta.scorableCandidates(db)[0].title).toBe('Братья Карамазовы')
   })
 
-  it('takes the newer title even when the old one was already readable', () => {
+  it('does not let a targeted search replace an already displayed title', () => {
     meta.upsertCandidates(db, [harvested('Os Maias', 1)])
     meta.upsertCandidates(db, [harvested('The maias', 2)])
 
-    expect(meta.scorableCandidates(db)[0].title).toBe('The maias')
+    expect(meta.scorableCandidates(db)[0].title).toBe('Os Maias')
   })
 
-  it('brings the new cover with the new title', () => {
+  it('keeps the cover paired with the first displayed title', () => {
     meta.upsertCandidates(db, [harvested('Братья Карамазовы', 1)])
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', 2)])
 
-    expect(meta.scorableCandidates(db)[0].coverId).toBe(2)
+    expect(meta.scorableCandidates(db)[0].coverId).toBe(1)
   })
 
-  it('drops the old cover rather than pair it with a different title', () => {
+  it('does not erase a known cover when a later result has none', () => {
     meta.upsertCandidates(db, [harvested('Братья Карамазовы', 1)])
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', null)])
 
-    expect(meta.scorableCandidates(db)[0].coverId).toBeNull()
+    expect(meta.scorableCandidates(db)[0].coverId).toBe(1)
   })
 
-  it('stores a missing cover from the latest Open Library result', () => {
+  it('preserves a known cover across sparse repeated results', () => {
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', 1)])
     meta.upsertCandidates(db, [harvested('The Brothers Karamazov', null)])
 
-    expect(meta.scorableCandidates(db)[0].coverId).toBeNull()
+    expect(meta.scorableCandidates(db)[0].coverId).toBe(1)
   })
 })
 

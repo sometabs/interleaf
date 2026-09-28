@@ -231,7 +231,11 @@ export async function harvestCandidates(
   total = done
   report('Sorting what came back')
 
-  const unique = new Map(rows.map((r) => [r.olid, r]))
+  // The same work may be returned by several subject queries with a different
+  // nested edition each time. Keep the first displayed snapshot instead of
+  // letting the final query silently replace its title, cover, and ISBN.
+  const unique = new Map<string, CandidateRow>()
+  for (const row of rows) if (!unique.has(row.olid)) unique.set(row.olid, row)
   const candidates = [...unique.values()]
   // A shelf-wide refresh owns the whole cache and may replace it after a
   // complete response. A targeted "books like this" search only adds its

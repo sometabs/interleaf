@@ -136,9 +136,14 @@ export interface RecommendationRefreshQuery {
 
 export interface Recommendation {
   olid: string
+  editionOlid: string | null
   title: string
   author: string | null
   coverId: number | null
+  isbn: string | null
+  pageCount: number | null
+  publishedYear: number | null
+  description: string | null
   // Cosine similarity to the taste profile; higher is closer.
   score: number
   // The library book this most resembles.
@@ -309,7 +314,7 @@ export interface InterleafApi {
   getRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
   getSemanticRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
   dismissRecommendation(olid: string): Promise<void>
-  saveRecommendation(olid: string): Promise<Book>
+  saveRecommendation(book: OlBookDto): Promise<Book>
 
   exportBackup(): Promise<BackupResult | null>
   // Replaces the whole library, so the app relaunches onto the restored file.

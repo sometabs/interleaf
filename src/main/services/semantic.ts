@@ -201,9 +201,14 @@ async function runSemanticRecommendation(
       vector: item.vector,
       recommendation: {
         olid: item.candidate.olid,
+        editionOlid: item.candidate.editionOlid ?? null,
         title: item.candidate.title,
         author: item.candidate.author,
         coverId: item.candidate.coverId,
+        isbn: item.candidate.isbn ?? null,
+        pageCount: item.candidate.pageCount ?? null,
+        publishedYear: item.candidate.publishedYear ?? null,
+        description: item.candidate.description,
         score: item.matches[0].similarity - item.negativePenalty,
         becauseOf: { bookId: source.book.bookId, title: source.book.title },
         subjects: [...item.candidate.subjects]
@@ -236,9 +241,14 @@ async function runSemanticRecommendation(
           vector: item.vector,
           recommendation: {
             olid: item.candidate.olid,
+            editionOlid: item.candidate.editionOlid ?? null,
             title: item.candidate.title,
             author: item.candidate.author,
             coverId: item.candidate.coverId,
+            isbn: item.candidate.isbn ?? null,
+            pageCount: item.candidate.pageCount ?? null,
+            publishedYear: item.candidate.publishedYear ?? null,
+            description: item.candidate.description,
             score:
               ratingStrength * similarity * (rankQuality * 0.75 + 0.2 + support * 0.05) -
               item.negativePenalty,

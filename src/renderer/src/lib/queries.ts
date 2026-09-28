@@ -386,10 +386,10 @@ export function useDismissRecommendation(): UseMutationResult<void, Error, strin
   })
 }
 
-export function useSaveRecommendation(): UseMutationResult<Book, Error, string> {
+export function useSaveRecommendation(): UseMutationResult<Book, Error, OlBookDto> {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (olid: string) => api().saveRecommendation(olid),
+    mutationFn: (book: OlBookDto) => api().saveRecommendation(book),
     onSuccess: () => {
       invalidateBooks(client)
       invalidateRecommendations(client)

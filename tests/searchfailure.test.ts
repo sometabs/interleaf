@@ -112,6 +112,13 @@ describe('what the log says when a request fails', () => {
 })
 
 describe('a search that did happen', () => {
+  it('is null when a successful response has no result list', async () => {
+    respondWith({ numFound: 12 })
+    const searchBooks = await loadSearch()
+
+    expect(await searchBooks('the dispossessed')).toBeNull()
+  })
+
   it('is an empty array when Open Library genuinely has nothing', async () => {
     respondWith({ numFound: 0, docs: [] })
     const searchBooks = await loadSearch()
@@ -128,7 +135,7 @@ describe('a search that did happen', () => {
     expect(found?.[0]).toMatchObject({ olid: 'OL27448W', title: 'The Dispossessed' })
   })
 
-  it('collapses duplicate title/author results without changing API order', async () => {
+  it('preserves separate Open Library works in API order', async () => {
     respondWith({
       docs: [
         {
@@ -166,13 +173,20 @@ describe('a search that did happen', () => {
     const searchBooks = await loadSearch()
 
     const found = await searchBooks('Being and Nothingness')
-    expect(found).toHaveLength(1)
+    expect(found).toHaveLength(2)
     expect(found?.[0]).toMatchObject({
       olid: 'OL38060433W',
       editionOlid: 'OL55213692M',
       title: 'Being and Nothingness',
       coverId: null,
       subjects: []
+    })
+    expect(found?.[1]).toMatchObject({
+      olid: 'OL1161325W',
+      editionOlid: 'OL51699762M',
+      title: 'Being and Nothingness',
+      coverId: 14882069,
+      subjects: ['Existentialism', 'Ontology', 'Philosophy']
     })
   })
 

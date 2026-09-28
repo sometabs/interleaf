@@ -11,7 +11,12 @@ import { installBridge, makeBook, renderApp } from './helpers/render'
 function rec(partial: Partial<Recommendation> & { olid: string; title: string }): Recommendation {
   return {
     author: 'Stanisław Lem',
+    editionOlid: null,
     coverId: null,
+    isbn: null,
+    pageCount: null,
+    publishedYear: null,
+    description: null,
     score: 0.5,
     becauseOf: null,
     subjects: ['Science fiction'],

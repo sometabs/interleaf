@@ -1,4 +1,4 @@
-import type { HarvestProgress } from '@shared/api'
+import type { HarvestProgress, OlBookDto, Recommendation } from '@shared/api'
 import type { ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
@@ -92,10 +92,10 @@ export default function Discover(): ReactNode {
   ).length
   // Which book is being added, not merely that one is: adding fetches metadata
   // and a cover, so only that card should show the work.
-  const saving = save.isPending ? save.variables : null
+  const saving = save.isPending ? save.variables.olid : null
 
-  function saveOne(olid: string): void {
-    save.mutate(olid, {
+  function saveOne(recommendation: Recommendation): void {
+    save.mutate(recommendationBook(recommendation), {
       onSuccess: (book) => {
         notify(`Added “${book.title}” to your shelf.`)
       }
@@ -295,7 +295,7 @@ export default function Discover(): ReactNode {
                     type="button"
                     className="btn btn-primary px-2.5 py-1 text-[12px]"
                     disabled={saving === rec.olid}
-                    onClick={() => saveOne(rec.olid)}
+                    onClick={() => saveOne(rec)}
                   >
                     {saving === rec.olid && (
                       <Spinner
@@ -320,6 +320,21 @@ export default function Discover(): ReactNode {
       )}
     </div>
   )
+}
+
+function recommendationBook(recommendation: Recommendation): OlBookDto {
+  return {
+    olid: recommendation.olid,
+    editionOlid: recommendation.editionOlid,
+    title: recommendation.title,
+    author: recommendation.author,
+    publishedYear: recommendation.publishedYear,
+    coverId: recommendation.coverId,
+    isbn: recommendation.isbn,
+    pageCount: recommendation.pageCount,
+    subjects: [...recommendation.subjects],
+    description: recommendation.description
+  }
 }
 
 function parseLayout(raw: unknown): Layout | null {

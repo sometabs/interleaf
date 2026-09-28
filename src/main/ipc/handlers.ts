@@ -223,25 +223,11 @@ const api: InterleafApi = {
   async dismissRecommendation(olid) {
     meta.recordFeedback(getDb(), olid, 'dismissed')
   },
-  async saveRecommendation(olid) {
+  async saveRecommendation(book) {
     const db = getDb()
-    meta.recordFeedback(db, olid, 'saved')
-
-    // The candidate already holds title, author and cover, and search cannot
-    // resolve an olid anyway.
-    const candidate = meta.getCandidate(db, olid)
-    return addFromOpenLibrary(db, {
-      olid,
-      editionOlid: candidate?.editionOlid ?? null,
-      title: candidate?.title ?? olid,
-      author: candidate?.author ?? null,
-      publishedYear: candidate?.publishedYear ?? null,
-      coverId: candidate?.coverId ?? null,
-      isbn: candidate?.isbn ?? null,
-      pageCount: candidate?.pageCount ?? null,
-      subjects: candidate?.subjects ?? [],
-      description: candidate?.description ?? null
-    })
+    const added = await addFromOpenLibrary(db, book)
+    meta.recordFeedback(db, book.olid, 'saved')
+    return added
   },
 
   async exportBackup() {

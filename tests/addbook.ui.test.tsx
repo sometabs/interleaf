@@ -122,16 +122,15 @@ describe('Open Library search', () => {
     expect(screen.queryByText(/has nothing for that/i)).toBeNull()
   })
 
-  // The way out of a failed lookup is to add the book now and refresh later,
-  // so that button has to be present while the failure is on screen.
-  it('points at the way through, and offers it', async () => {
+  it('offers manual entry without promising an automatic match later', async () => {
     const user = typist()
     open()
     searchOpenLibrary.mockRejectedValue(new Error('Open Library did not answer.'))
 
     await user.type(screen.getByLabelText('Search for a book'), 'the dispossessed{Enter}')
 
-    expect(await screen.findByText(/Refresh metadata/i)).toBeTruthy()
+    expect(await screen.findByText(/edit its details later/i)).toBeTruthy()
+    expect(screen.queryByText(/Refresh metadata/i)).toBeNull()
     expect(screen.getByRole('button', { name: /Add .the dispossessed. manually/ })).toBeTruthy()
   })
 

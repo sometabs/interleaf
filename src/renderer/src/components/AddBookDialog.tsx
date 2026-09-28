@@ -149,8 +149,8 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
             {/* A lookup that never happened is not entitled to say "nothing found". */}
             {isError && !isFetching && (
               <p className="px-4 py-6 text-center text-[13px] text-ink-muted">
-                Open Library is unreachable. Add the book by hand, and “Refresh metadata” on its
-                page will fill in the rest once Open Library is back.
+                Open Library is unreachable. You can add the title manually and edit its details
+                later.
               </p>
             )}
 

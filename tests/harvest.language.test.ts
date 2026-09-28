@@ -184,7 +184,7 @@ describe('accepting Open Library editions', () => {
   })
 })
 
-describe('using Open Library’s selected edition', () => {
+describe('using Open Library work results with attached edition data', () => {
   it('does not constrain direct author or subject searches by language', async () => {
     const { ol } = await load()
 
@@ -203,7 +203,7 @@ describe('using Open Library’s selected edition', () => {
     }
   })
 
-  it('asks for the nested edition Open Library selected', async () => {
+  it('asks only for nested edition fields the app still uses', async () => {
     const { ol } = await load()
 
     const search = ol.searchBooks('dune')
@@ -231,7 +231,7 @@ describe('using Open Library’s selected edition', () => {
       expect(fields.split(',')).toContain('editions.isbn')
       expect(fields.split(',')).toContain('editions.language')
       expect(fields.split(',')).toContain('editions.number_of_pages')
-      expect(fields.split(',')).toContain('editions.publish_date')
+      expect(fields.split(',')).not.toContain('editions.publish_date')
     }
   })
 

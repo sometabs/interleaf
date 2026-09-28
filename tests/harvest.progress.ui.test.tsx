@@ -11,9 +11,14 @@ import { installBridge, makeBook, renderApp, type FakeBridge } from './helpers/r
 
 const REC: Recommendation = {
   olid: 'LHD',
+  editionOlid: null,
   title: 'The Left Hand of Darkness',
   author: 'Ursula K. Le Guin',
   coverId: null,
+  isbn: null,
+  pageCount: null,
+  publishedYear: null,
+  description: null,
   score: 0.5,
   becauseOf: null,
   subjects: ['Science fiction']

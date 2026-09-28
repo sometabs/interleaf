@@ -23,11 +23,15 @@ export interface ProfileBook {
 
 export interface CandidateInput {
   olid: string
+  editionOlid?: string | null
   title: string
   author: string | null
   subjects: string[]
   description: string | null
   coverId: number | null
+  isbn?: string | null
+  pageCount?: number | null
+  publishedYear?: number | null
   languages: string[]
 }
 
@@ -396,9 +400,14 @@ function scoreCandidates(
         vec,
         rec: {
           olid: candidate.olid,
+          editionOlid: candidate.editionOlid ?? null,
           title: candidate.title,
           author: candidate.author,
           coverId: candidate.coverId,
+          isbn: candidate.isbn ?? null,
+          pageCount: candidate.pageCount ?? null,
+          publishedYear: candidate.publishedYear ?? null,
+          description: candidate.description,
           score,
           becauseOf:
             bestIdx >= 0

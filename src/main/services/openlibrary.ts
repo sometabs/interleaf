@@ -63,16 +63,25 @@ export interface OlBook {
   languages: string[]
 }
 
+// Work-only fields used by metadata refresh. Keeping this separate from
+// OlBook prevents an arbitrary nested edition from becoming a saved book.
+export interface OlWorkRefresh {
+  olid: string
+  publishedYear: number | null
+  pageCount: number | null
+  subjects: string[]
+  description: string | null
+}
+
 export interface OlWorkDetail {
-  title: string | null
   description: string | null
   subjects: string[]
-  // Attached to the work itself, used when search gave us none.
-  covers: number[]
   raw: unknown
 }
 
-async function getJson<T>(url: string): Promise<T | null> {
+type JsonResult<T> = { kind: 'ok'; value: T } | { kind: 'missing' } | { kind: 'unavailable' }
+
+async function requestJson<T>(url: string): Promise<JsonResult<T>> {
   return throttle(async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -82,7 +91,7 @@ async function getJson<T>(url: string): Promise<T | null> {
         })
 
         if (res.status === 429 || res.status === 503) {
-          if (attempt === 1) return null
+          if (attempt === 1) return { kind: 'unavailable' }
           const retryAfter = Number(res.headers.get('retry-after'))
           const waitMs =
             Number.isFinite(retryAfter) && retryAfter > 0
@@ -93,20 +102,26 @@ async function getJson<T>(url: string): Promise<T | null> {
           continue
         }
 
+        if (res.status === 404) return { kind: 'missing' }
         if (!res.ok) {
           console.warn(`[openlibrary] ${res.status} ${res.statusText} from ${url}`)
-          return null
+          return { kind: 'unavailable' }
         }
-        return (await res.json()) as T
+        return { kind: 'ok', value: (await res.json()) as T }
       } catch (err) {
         // Null to the caller but logged: the cause is the only way to tell
         // "Open Library is down" from "this app is broken".
         console.warn(`[openlibrary] ${describeFailure(err)} for ${url}`)
-        return null
+        return { kind: 'unavailable' }
       }
     }
-    return null
+    return { kind: 'unavailable' }
   })
+}
+
+async function getJson<T>(url: string): Promise<T | null> {
+  const result = await requestJson<T>(url)
+  return result.kind === 'ok' ? result.value : null
 }
 
 function toOlid(key: string | undefined): string | null {
@@ -143,6 +158,10 @@ interface SearchDoc {
   }
 }
 
+function responseDocs(data: { docs?: unknown }): SearchDoc[] | null {
+  return Array.isArray(data.docs) ? (data.docs as SearchDoc[]) : null
+}
+
 function firstSentence(doc: SearchDoc): string | null {
   const value = Array.isArray(doc.first_sentence) ? doc.first_sentence[0] : doc.first_sentence
   return value?.trim() || null
@@ -163,40 +182,19 @@ function toEditionOlid(key: string | undefined): string | null {
   return match?.[1] ?? null
 }
 
-function yearOf(value: string | string[] | undefined): number | null {
-  const values = Array.isArray(value) ? value : value ? [value] : []
-  for (const item of values) {
-    const match = item.match(/\b(1[0-9]{3}|20[0-9]{2})\b/)
-    if (match) return Number(match[1])
-  }
-  return null
-}
-
-// Open Library orders the nested editions by relevance and returns its chosen
-// edition first. Keep that edition's title, jacket and identifiers together
-// instead of second-guessing the catalogue's language metadata.
+// Open Library's search display combines the chosen edition's title and cover
+// with the work's first publication year. Keep that same combination here;
+// page count remains the work median, with the edition only as a fallback.
 function display(doc: SearchDoc): Display {
-  const work = {
-    title: (doc.title ?? '').trim(),
-    coverId: doc.cover_i ?? null,
-    isbn: null,
-    editionOlid: null,
-    pageCount: doc.number_of_pages_median ?? null,
-    publishedYear: doc.first_publish_year ?? null,
-    languages: [...(doc.language ?? [])]
-  }
-
   const edition = doc.editions?.docs?.[0]
-  if (!edition) return work
-
   return {
-    title: edition.title?.trim() || work.title,
-    coverId: edition.cover_i ?? null,
-    isbn: edition.isbn?.[0] ?? null,
-    editionOlid: toEditionOlid(edition.key),
-    pageCount: edition.number_of_pages ?? null,
-    publishedYear: yearOf(edition.publish_date),
-    languages: [...(edition.language ?? [])]
+    title: edition?.title?.trim() || (doc.title ?? '').trim(),
+    coverId: edition?.cover_i ?? doc.cover_i ?? null,
+    isbn: edition?.isbn?.[0] ?? doc.isbn?.[0] ?? null,
+    editionOlid: toEditionOlid(edition?.key),
+    pageCount: doc.number_of_pages_median ?? edition?.number_of_pages ?? null,
+    publishedYear: doc.first_publish_year ?? null,
+    languages: edition?.language?.length ? [...edition.language] : [...(doc.language ?? [])]
   }
 }
 
@@ -246,38 +244,8 @@ const SEARCH_FIELDS = [
   'editions.cover_i',
   'editions.isbn',
   'editions.language',
-  'editions.number_of_pages',
-  'editions.publish_date'
+  'editions.number_of_pages'
 ].join(',')
-
-function identityPart(value: string | null): string {
-  return (value ?? '')
-    .normalize('NFKD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-}
-
-function personIdentity(value: string | null): string {
-  return identityPart(value).split(' ').filter(Boolean).sort().join(' ')
-}
-
-// Search should show one title/author pair, but the first one stays first:
-// Open Library's relevance order is authoritative.
-function firstDuplicateOnly(items: OlBook[]): OlBook[] {
-  const result: OlBook[] = []
-  const seen = new Set<string>()
-
-  for (const item of items) {
-    const key = `${identityPart(item.title)}\u0000${identityPart(item.author)}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(item)
-  }
-
-  return result
-}
 
 // `null` when the request failed, `[]` when Open Library answered with nothing:
 // collapsing them shows a timeout as "no such book".
@@ -286,48 +254,47 @@ export async function searchBooks(query: string, limit = 12): Promise<OlBook[] |
   if (!q) return []
 
   const url = `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${SEARCH_FIELDS}`
-  const data = await getJson<{ docs?: SearchDoc[] }>(url)
+  const data = await getJson<{ docs?: unknown }>(url)
   if (data === null) return null
+  const docs = responseDocs(data)
+  if (docs === null) return null
 
-  return firstDuplicateOnly((data.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null))
+  return docs.map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
-function searchPhrase(value: string): string {
-  return value.replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()
+const WORK_REFRESH_FIELDS = [
+  'key',
+  'first_publish_year',
+  'number_of_pages_median',
+  'subject',
+  'first_sentence'
+].join(',')
+
+function toOlWorkRefresh(doc: SearchDoc): OlWorkRefresh | null {
+  const olid = toOlid(doc.key)
+  if (!olid) return null
+  return {
+    olid,
+    publishedYear: doc.first_publish_year ?? null,
+    pageCount: doc.number_of_pages_median ?? null,
+    subjects: [...(doc.subject ?? [])],
+    description: firstSentence(doc)
+  }
 }
 
-export async function searchBookByTitleAuthor(
-  title: string,
-  author: string | null,
-  limit = 12
-): Promise<OlBook[] | null> {
-  const cleanTitle = searchPhrase(title)
-  if (!cleanTitle) return []
-  const cleanAuthor = searchPhrase(author ?? '')
-  const query = cleanAuthor
-    ? `title:"${cleanTitle}" author:"${cleanAuthor}"`
-    : `title:"${cleanTitle}"`
-  const exact = await searchBooks(query, limit)
-  if (exact === null || exact.length > 0 || !cleanAuthor) return exact
-
-  // Open Library's author phrase parser treats punctuation and spacing as
-  // significant: "J. R. R. Tolkien" can miss a record filed as
-  // "J.R.R. Tolkien". Retry by title, then keep only the same normalized
-  // author so the fallback cannot turn a book into a different author's work.
-  const byTitle = await searchBooks(`title:"${cleanTitle}"`, Math.max(limit, 12))
-  if (byTitle === null) return null
-
-  const wantedAuthor = personIdentity(author)
-  return byTitle.filter((book) => personIdentity(book.author) === wantedAuthor).slice(0, limit)
-}
-
-// A saved book is already identified. Querying the Search API by its exact
-// work key lets Open Library select its current best edition without
-// re-identifying the book from mutable title and author text.
-export function searchWorkByOlid(olid: string): Promise<OlBook[] | null> {
+// Refresh asks only for work-level values. It deliberately does not request
+// editions, so refreshing cannot silently select a different one.
+export async function searchWorkByOlid(olid: string): Promise<OlWorkRefresh[] | null> {
   const id = olid.trim().toUpperCase()
-  if (!/^OL\d+W$/.test(id)) return Promise.resolve([])
-  return searchBooks(`key:/works/${id}`, 1)
+  if (!/^OL\d+W$/.test(id)) return []
+
+  const q = `key:/works/${id}`
+  const url = `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=1&fields=${WORK_REFRESH_FIELDS}`
+  const data = await getJson<{ docs?: unknown }>(url)
+  if (data === null) return null
+  const docs = responseDocs(data)
+  if (docs === null) return null
+  return docs.map(toOlWorkRefresh).filter((b): b is OlWorkRefresh => b !== null)
 }
 
 // A raw, fielded Search API query for Discover. Unlike the older one-subject
@@ -338,33 +305,38 @@ export async function fetchCandidates(query: string, limit = 50): Promise<OlBook
   if (!q) return []
 
   const url = `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${SEARCH_FIELDS}`
-  const data = await getJson<{ docs?: SearchDoc[] }>(url)
+  const data = await getJson<{ docs?: unknown }>(url)
   if (data === null) return null
+  const docs = responseDocs(data)
+  if (docs === null) return null
 
-  return (data.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
+  return docs.map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
 interface WorkResponse {
-  title?: string
   description?: string | { value?: string }
   subjects?: string[]
-  covers?: number[]
 }
 
+export type OlWorkResult =
+  { kind: 'ok'; work: OlWorkDetail } | { kind: 'missing' } | { kind: 'unavailable' }
+
 // The only reliable way to resolve an OLID: `q=` does not match work ids.
-export async function fetchWork(olid: string): Promise<OlWorkDetail | null> {
-  const data = await getJson<WorkResponse>(`${BASE}/works/${encodeURIComponent(olid)}.json`)
-  if (!data) return null
+export async function fetchWork(olid: string): Promise<OlWorkResult> {
+  const result = await requestJson<WorkResponse>(`${BASE}/works/${encodeURIComponent(olid)}.json`)
+  if (result.kind !== 'ok') return result
+  const data = result.value
 
   const description =
     typeof data.description === 'string' ? data.description : (data.description?.value ?? null)
 
   return {
-    title: data.title ?? null,
-    description,
-    subjects: [...(data.subjects ?? [])],
-    covers: (data.covers ?? []).filter((id) => id > 0),
-    raw: data
+    kind: 'ok',
+    work: {
+      description,
+      subjects: [...(data.subjects ?? [])],
+      raw: data
+    }
   }
 }
 
@@ -379,9 +351,10 @@ export async function fetchSubject(subject: string, limit = 24): Promise<OlBook[
     `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}` +
     `&sort=editions&fields=${SEARCH_FIELDS}`
 
-  const data = await getJson<{ docs?: SearchDoc[] }>(url)
+  const data = await getJson<{ docs?: unknown }>(url)
+  const docs = data ? responseDocs(data) : null
 
-  return (data?.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
+  return (docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
 export async function fetchByAuthor(author: string, limit = 16): Promise<OlBook[]> {
@@ -389,9 +362,10 @@ export async function fetchByAuthor(author: string, limit = 16): Promise<OlBook[
   if (!a) return []
 
   const url = `${BASE}/search.json?author=${encodeURIComponent(a)}&limit=${limit}&fields=${SEARCH_FIELDS}`
-  const data = await getJson<{ docs?: SearchDoc[] }>(url)
+  const data = await getJson<{ docs?: unknown }>(url)
+  const docs = data ? responseDocs(data) : null
 
-  return (data?.docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
+  return (docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
 }
 
 function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {

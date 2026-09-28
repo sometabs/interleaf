@@ -6,7 +6,7 @@ import { useChooseCover, useRemoveCover } from '../lib/queries'
 import Cover from './Cover'
 import Spinner from './Spinner'
 
-// "Refresh metadata" only fills an empty cover, so a wrong jacket needs this.
+// Metadata refresh never changes a jacket; covers are changed only here.
 // Real buttons, so hover is not the only way to reach them.
 export default function CoverPicker({ book }: { book: Book }): ReactNode {
   const choose = useChooseCover()

@@ -13,9 +13,14 @@ import { installBridge, makeBook, renderApp } from './helpers/render'
 function pool(size: number): Recommendation[] {
   return Array.from({ length: size }, (_, i) => ({
     olid: `OL${i}W`,
+    editionOlid: null,
     title: `Candidate ${i}`,
     author: `Author ${i}`,
     coverId: null,
+    isbn: null,
+    pageCount: null,
+    publishedYear: null,
+    description: null,
     score: 1 - i / 1000,
     becauseOf: null,
     subjects: ['Science fiction']
