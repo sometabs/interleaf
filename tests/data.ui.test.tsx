@@ -24,7 +24,11 @@ function setup(
 ): Record<string, ReturnType<typeof vi.fn>> {
   const spies = {
     deleteAllBooks: vi.fn(async () => counts.books ?? 0),
-    deleteAllNotes: vi.fn(async () => counts.notes ?? 0),
+    deleteAllThoughts: vi.fn(async () => counts.notes ?? 0),
+    deleteAllQuotes: vi.fn(async () => counts.quotes ?? 0),
+    deleteAllReviews: vi.fn(async () => counts.reviews ?? 0),
+    clearRecommendationCache: vi.fn(async () => counts.candidates ?? 0),
+    removeAdvancedModel: vi.fn(async () => true),
     deleteEverything: vi.fn(async () => undefined),
     restoreDismissed: vi.fn(async () => undefined),
     exportBackup: vi.fn(async () => ({
@@ -43,8 +47,16 @@ function setup(
       dataCounts: async () => ({
         books: counts.books ?? 0,
         notes: counts.notes ?? 0,
+        quotes: counts.quotes ?? 0,
+        reviews: counts.reviews ?? 0,
         candidates: counts.candidates ?? 0,
         dismissed: counts.dismissed ?? dismissed.length
+      }),
+      getAppDiagnostics: async () => ({
+        version: 'test',
+        dataDirectory: 'C:/data',
+        schemaVersion: 19,
+        advancedModelInstalled: false
       }),
       listDismissed: async () => dismissed,
       ...spies,
@@ -73,10 +85,12 @@ async function press(name: RegExp | string): Promise<void> {
 
 describe('the Data screen', () => {
   it('shows how much there is before you delete it', async () => {
-    setup({ books: 47, notes: 12 })
+    setup({ books: 47, notes: 12, quotes: 8, reviews: 3 })
 
     expect(await screen.findByText(/47 books/)).toBeDefined()
-    expect(await screen.findByText(/12 notes/)).toBeDefined()
+    expect(await screen.findByText(/12 ordinary notes/)).toBeDefined()
+    expect(await screen.findByText(/8 saved and imported quotes/)).toBeDefined()
+    expect(await screen.findByText(/3 book reviews/)).toBeDefined()
   })
 
   it('deletes nothing until the confirmation is accepted', async () => {
@@ -125,6 +139,26 @@ describe('the Data screen', () => {
     await press(/^Delete everything$/)
 
     await waitFor(() => expect(spies.deleteEverything).toHaveBeenCalled())
+  })
+
+  it('deletes quotes without using the ordinary-note action', async () => {
+    const spies = setup({ quotes: 3, notes: 2 })
+
+    await press('Delete quotes')
+    await press(/^Delete quotes$/)
+
+    await waitFor(() => expect(spies.deleteAllQuotes).toHaveBeenCalled())
+    expect(spies.deleteAllThoughts).not.toHaveBeenCalled()
+  })
+
+  it('clears only the recommendation cache', async () => {
+    const spies = setup({ candidates: 15, dismissed: 2 })
+
+    await press('Clear cache')
+    await press(/^Clear cache$/)
+
+    await waitFor(() => expect(spies.clearRecommendationCache).toHaveBeenCalled())
+    expect(spies.deleteEverything).not.toHaveBeenCalled()
   })
 
   it('disables a delete with nothing behind it', async () => {

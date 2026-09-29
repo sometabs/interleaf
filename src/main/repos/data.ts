@@ -5,6 +5,8 @@ import type { Database } from 'better-sqlite3'
 export interface DataCounts {
   books: number
   notes: number
+  quotes: number
+  reviews: number
   candidates: number
   dismissed: number
 }
@@ -15,7 +17,9 @@ export function dataCounts(db: Database): DataCounts {
 
   return {
     books: count('book'),
-    notes: count('note'),
+    notes: count("note WHERE kind = 'thought'"),
+    quotes: count("note WHERE kind = 'highlight'"),
+    reviews: count("note WHERE kind = 'review'"),
     candidates: count('book_candidate'),
     dismissed: count("rec_feedback WHERE action = 'dismissed'")
   }
@@ -31,11 +35,33 @@ export function deleteAllBooks(db: Database): number {
   })()
 }
 
-/** Deletes every note, attached or free-floating. Books are untouched. */
-export function deleteAllNotes(db: Database): number {
+function deleteNoteKind(db: Database, kind: 'thought' | 'highlight' | 'review'): number {
   return db.transaction(() => {
-    const { n } = db.prepare<[], { n: number }>('SELECT count(*) AS n FROM note').get()!
-    db.prepare('DELETE FROM note').run()
+    const { n } = db
+      .prepare<[string], { n: number }>('SELECT count(*) AS n FROM note WHERE kind = ?')
+      .get(kind)!
+    db.prepare('DELETE FROM note WHERE kind = ?').run(kind)
+    return n
+  })()
+}
+
+/** Deletes ordinary notes, including attached and free-floating ones. */
+export function deleteAllThoughts(db: Database): number {
+  return deleteNoteKind(db, 'thought')
+}
+
+export function deleteAllQuotes(db: Database): number {
+  return deleteNoteKind(db, 'highlight')
+}
+
+export function deleteAllReviews(db: Database): number {
+  return deleteNoteKind(db, 'review')
+}
+
+export function clearRecommendationCache(db: Database): number {
+  return db.transaction(() => {
+    const { n } = db.prepare<[], { n: number }>('SELECT count(*) AS n FROM book_candidate').get()!
+    db.prepare('DELETE FROM book_candidate').run()
     return n
   })()
 }

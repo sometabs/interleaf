@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 
 import type {
   Book,
+  AppDiagnostics,
   HighlightImportPlan,
   HighlightImportResult,
   HighlightImportLink,
@@ -60,6 +61,7 @@ const keys = {
   recommendationTreeFor: (query: RecommendationQuery) => ['recommendation-tree', query] as const,
   dismissed: ['dismissed'] as const,
   dataCounts: ['data-counts'] as const,
+  diagnostics: ['app-diagnostics'] as const,
   search: (query: string) => ['search', query] as const,
   openLibrary: (query: string) => ['open-library', query] as const
 }
@@ -247,6 +249,21 @@ export function useDeleteBook(): UseMutationResult<void, Error, number> {
   })
 }
 
+export function useDeleteBookNotes(): UseMutationResult<
+  number,
+  Error,
+  { bookId: number; kind: 'thought' | 'highlight' }
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ bookId, kind }) => api().deleteBookNotes(bookId, kind),
+    onSuccess: () => {
+      invalidateNotes(client)
+      void client.invalidateQueries({ queryKey: keys.dataCounts })
+    }
+  })
+}
+
 export function useEnrichBook(): UseMutationResult<Book | null, Error, number> {
   const client = useQueryClient()
   return useMutation({
@@ -407,6 +424,10 @@ export function useDataCounts(): UseQueryResult<DataCounts> {
   return useQuery({ queryKey: keys.dataCounts, queryFn: () => api().dataCounts() })
 }
 
+export function useAppDiagnostics(): UseQueryResult<AppDiagnostics> {
+  return useQuery({ queryKey: keys.diagnostics, queryFn: () => api().getAppDiagnostics() })
+}
+
 export function useRestoreDismissed(): UseMutationResult<void, Error, string> {
   const client = useQueryClient()
   return useMutation({
@@ -433,10 +454,42 @@ export function useDeleteAllBooks(): UseMutationResult<number, Error, void> {
   })
 }
 
-export function useDeleteAllNotes(): UseMutationResult<number, Error, void> {
+export function useDeleteAllThoughts(): UseMutationResult<number, Error, void> {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: () => api().deleteAllNotes(),
+    mutationFn: () => api().deleteAllThoughts(),
+    onSuccess: () => invalidateEverything(client)
+  })
+}
+
+export function useDeleteAllQuotes(): UseMutationResult<number, Error, void> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api().deleteAllQuotes(),
+    onSuccess: () => invalidateEverything(client)
+  })
+}
+
+export function useDeleteAllReviews(): UseMutationResult<number, Error, void> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api().deleteAllReviews(),
+    onSuccess: () => invalidateEverything(client)
+  })
+}
+
+export function useClearRecommendationCache(): UseMutationResult<number, Error, void> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api().clearRecommendationCache(),
+    onSuccess: () => invalidateEverything(client)
+  })
+}
+
+export function useRemoveAdvancedModel(): UseMutationResult<boolean, Error, void> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api().removeAdvancedModel(),
     onSuccess: () => invalidateEverything(client)
   })
 }

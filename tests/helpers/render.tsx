@@ -185,6 +185,11 @@ export function installBridge(
       state.deleted.push(id)
       state.notes = state.notes.filter((note) => note.id !== id)
     },
+    deleteBookNotes: async (bookId, kind) => {
+      const before = state.notes.length
+      state.notes = state.notes.filter((note) => note.bookId !== bookId || note.kind !== kind)
+      return before - state.notes.length
+    },
 
     ...overrides
   }

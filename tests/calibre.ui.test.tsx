@@ -67,7 +67,7 @@ describe('starting an import from Data', () => {
     )
     expect(await screen.findByText('Imported 2 highlights into 1 book')).toBeTruthy()
     // Nothing to decide, so the matching screen never appears.
-    expect(screen.queryByRole('heading', { name: 'Import highlights' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Import highlights', level: 1 })).toBeNull()
   })
 
   it('keeps the Calibre steps out of the way until they are asked for', async () => {
@@ -94,7 +94,7 @@ describe('starting an import from Data', () => {
 
     await waitFor(() => expect(spies.readHighlightExport).toHaveBeenCalled())
     expect(spies.importHighlights).not.toHaveBeenCalled()
-    expect(screen.queryByRole('heading', { name: 'Import highlights' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Import highlights', level: 1 })).toBeNull()
   })
 
   it('says so when the file holds no highlights', async () => {

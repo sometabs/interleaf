@@ -58,23 +58,72 @@ describe('deleting all books', () => {
   })
 })
 
-describe('deleting all notes', () => {
-  it('removes attached and free-floating alike', () => {
+describe('deleting note categories', () => {
+  it('removes attached and free-floating ordinary notes alike', () => {
     const book = books.createBook(db, { title: 'Dune' })
     notes.createNote(db, { bookId: book.id, bodyMd: 'attached' })
     notes.createNote(db, { bodyMd: 'floating' })
 
-    expect(data.deleteAllNotes(db)).toBe(2)
+    expect(data.deleteAllThoughts(db)).toBe(2)
     expect(notes.listNotes(db)).toHaveLength(0)
   })
 
-  it('keeps the books', () => {
+  it('deleting ordinary notes keeps books, reviews and quotes', () => {
     const book = books.createBook(db, { title: 'Dune' })
     notes.createNote(db, { bookId: book.id, bodyMd: 'attached' })
+    notes.createNote(db, { bookId: book.id, kind: 'review', bodyMd: 'review' })
+    notes.createNote(db, { bookId: book.id, kind: 'highlight', bodyMd: 'quote' })
 
-    data.deleteAllNotes(db)
+    data.deleteAllThoughts(db)
 
     expect(books.listBooks(db)).toHaveLength(1)
+    expect(
+      notes
+        .listNotes(db)
+        .map((note) => note.kind)
+        .sort()
+    ).toEqual(['highlight', 'review'])
+  })
+
+  it('deletes quotes without touching notes or reviews', () => {
+    const book = books.createBook(db, { title: 'Dune' })
+    notes.createNote(db, { bodyMd: 'note' })
+    notes.createNote(db, { bookId: book.id, kind: 'review', bodyMd: 'review' })
+    notes.createNote(db, { bookId: book.id, kind: 'highlight', bodyMd: 'quote' })
+
+    expect(data.deleteAllQuotes(db)).toBe(1)
+    expect(
+      notes
+        .listNotes(db)
+        .map((note) => note.kind)
+        .sort()
+    ).toEqual(['review', 'thought'])
+  })
+
+  it('deletes reviews without touching notes or quotes', () => {
+    const book = books.createBook(db, { title: 'Dune' })
+    notes.createNote(db, { bodyMd: 'note' })
+    notes.createNote(db, { bookId: book.id, kind: 'review', bodyMd: 'review' })
+    notes.createNote(db, { bookId: book.id, kind: 'highlight', bodyMd: 'quote' })
+
+    expect(data.deleteAllReviews(db)).toBe(1)
+    expect(
+      notes
+        .listNotes(db)
+        .map((note) => note.kind)
+        .sort()
+    ).toEqual(['highlight', 'thought'])
+  })
+})
+
+describe('clearing recommendation data', () => {
+  it('clears candidates without erasing Not for me choices', () => {
+    meta.upsertCandidates(db, [candidate('OL1W', 'Solaris', 'Lem')])
+    meta.recordFeedback(db, 'OL2W', 'dismissed')
+
+    expect(data.clearRecommendationCache(db)).toBe(1)
+    expect(data.dataCounts(db).candidates).toBe(0)
+    expect(meta.dismissedBooks(db)).toHaveLength(1)
   })
 })
 
@@ -88,7 +137,14 @@ describe('deleting everything', () => {
 
     data.deleteEverything(db)
 
-    expect(data.dataCounts(db)).toEqual({ books: 0, notes: 0, candidates: 0, dismissed: 0 })
+    expect(data.dataCounts(db)).toEqual({
+      books: 0,
+      notes: 0,
+      quotes: 0,
+      reviews: 0,
+      candidates: 0,
+      dismissed: 0
+    })
   })
 
   // Empty, not un-migrated: the next launch must not rebuild the schema.
@@ -174,9 +230,19 @@ describe('the counts shown beside each button', () => {
   it('reports what is actually there', () => {
     books.createBook(db, { title: 'Dune' })
     notes.createNote(db, { bodyMd: 'x' })
+    const book = books.createBook(db, { title: 'Hyperion' })
+    notes.createNote(db, { bookId: book.id, kind: 'highlight', bodyMd: 'quote' })
+    notes.createNote(db, { bookId: book.id, kind: 'review', bodyMd: 'review' })
     meta.upsertCandidates(db, [candidate('OL1W', 'Solaris', null)])
     meta.recordFeedback(db, 'OL2W', 'dismissed')
 
-    expect(data.dataCounts(db)).toEqual({ books: 1, notes: 1, candidates: 1, dismissed: 1 })
+    expect(data.dataCounts(db)).toEqual({
+      books: 2,
+      notes: 1,
+      quotes: 1,
+      reviews: 1,
+      candidates: 1,
+      dismissed: 1
+    })
   })
 })

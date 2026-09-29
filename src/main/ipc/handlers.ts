@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readdirSync, rmSync } from 'fs'
 import { join } from 'path'
 
 import {
@@ -35,6 +35,7 @@ import {
   suggestSemanticRecommendations,
   suggestSemanticRecommendationTree
 } from '../services/semantic'
+import { stopSemanticWorker } from '../services/semanticWorkerClient'
 
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
@@ -121,6 +122,9 @@ const api: InterleafApi = {
   },
   async deleteNote(id) {
     notes.deleteNote(getDb(), id)
+  },
+  async deleteBookNotes(bookId, kind) {
+    return notes.deleteBookNotes(getDb(), bookId, kind)
   },
 
   async search(query, limit) {
@@ -300,8 +304,24 @@ const api: InterleafApi = {
   async deleteAllBooks() {
     return data.deleteAllBooks(getDb())
   },
-  async deleteAllNotes() {
-    return data.deleteAllNotes(getDb())
+  async deleteAllThoughts() {
+    return data.deleteAllThoughts(getDb())
+  },
+  async deleteAllQuotes() {
+    return data.deleteAllQuotes(getDb())
+  },
+  async deleteAllReviews() {
+    return data.deleteAllReviews(getDb())
+  },
+  async clearRecommendationCache() {
+    return data.clearRecommendationCache(getDb())
+  },
+  async removeAdvancedModel() {
+    const dir = semanticModelsDir()
+    if (!existsSync(dir)) return false
+    await stopSemanticWorker()
+    rmSync(dir, { recursive: true, force: true })
+    return true
   },
   async deleteEverything() {
     data.deleteEverything(getDb())

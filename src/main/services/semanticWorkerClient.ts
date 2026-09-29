@@ -71,3 +71,13 @@ export function embedInSemanticWorker(
     }
   })
 }
+
+/** Releases model files before the user removes the on-demand download. */
+export async function stopSemanticWorker(): Promise<void> {
+  const current = worker
+  if (!current) return
+
+  worker = null
+  rejectPending(new Error('Advanced ranking model was removed.'))
+  await current.terminate()
+}

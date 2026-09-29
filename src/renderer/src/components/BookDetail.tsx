@@ -8,6 +8,7 @@ import {
   useBookMetadata,
   useCreateNote,
   useDeleteBook,
+  useDeleteBookNotes,
   useDeleteNote,
   useEnrichBook,
   useNotes,
@@ -37,6 +38,7 @@ export default function BookDetail({ book }: Props): ReactNode {
 
   const updateBook = useUpdateBook()
   const deleteBook = useDeleteBook()
+  const deleteBookNotes = useDeleteBookNotes()
   const enrichBook = useEnrichBook()
   const createNote = useCreateNote()
   const updateNote = useUpdateNote()
@@ -147,6 +149,23 @@ export default function BookDetail({ book }: Props): ReactNode {
     })
     if (!ok) return
     deleteBook.mutate(book.id, { onSuccess: () => navigate({ kind: 'library' }) })
+  }
+
+  async function removeBookEntries(kind: 'thought' | 'highlight'): Promise<void> {
+    const entries = kind === 'highlight' ? quotes : thoughts
+    const label = kind === 'highlight' ? 'quotes' : 'notes'
+    const ok = await confirm({
+      title: `Delete all ${entries.length} ${label} from “${book.title}”?`,
+      body: `The book${review ? ' and its review' : ''} will be kept. This cannot be undone.`,
+      confirmLabel: `Delete ${label}`,
+      destructive: true
+    })
+    if (!ok) return
+
+    const deleted = await deleteBookNotes.mutateAsync({ bookId: book.id, kind })
+    if (kind === 'highlight') setOpenQuoteId(null)
+    else setOpenId(null)
+    notify(`Deleted ${deleted} ${label}`)
   }
 
   function refetchMetadata(): void {
@@ -327,6 +346,34 @@ export default function BookDetail({ book }: Props): ReactNode {
                   Delete
                 </button>
               </div>
+
+              {(quotes.length > 0 || thoughts.length > 0) && (
+                <details className="mt-2 text-[12px] text-ink-muted">
+                  <summary className="cursor-pointer select-none">Manage book data</summary>
+                  <div className="mt-1 -ml-2 flex flex-col items-start gap-0.5">
+                    {quotes.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-danger"
+                        onClick={() => void removeBookEntries('highlight')}
+                        disabled={deleteBookNotes.isPending}
+                      >
+                        Delete all quotes ({quotes.length})
+                      </button>
+                    )}
+                    {thoughts.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-danger"
+                        onClick={() => void removeBookEntries('thought')}
+                        disabled={deleteBookNotes.isPending}
+                      >
+                        Delete all notes ({thoughts.length})
+                      </button>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
           </aside>
 

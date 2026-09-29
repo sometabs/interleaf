@@ -2,12 +2,16 @@ import type { Recommendation, RecommendationQuery } from '@shared/api'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import App from '../src/renderer/src/App'
 import BookDetail from '../src/renderer/src/components/BookDetail'
+import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
+import { resetConfirm } from '../src/renderer/src/lib/confirm'
 import { useBook } from '../src/renderer/src/lib/queries'
-import { installBridge, makeBook, renderApp, type FakeBridge } from './helpers/render'
+import { installBridge, makeBook, makeNote, renderApp, type FakeBridge } from './helpers/render'
+
+afterEach(() => resetConfirm())
 
 // Read from the library list as the real route does, so the whole
 // click-mutate-invalidate-refetch round trip is exercised.
@@ -144,5 +148,38 @@ describe('finding books like this one', () => {
     await waitFor(() =>
       expect(getRecommendations.mock.calls.at(-1)?.[0]).toMatchObject({ likeBookId: 1 })
     )
+  })
+})
+
+describe('managing one book’s data', () => {
+  it('deletes only that book’s quotes after confirmation', async () => {
+    const user = userEvent.setup()
+    const deleteBookNotes = vi.fn(async () => 2)
+    installBridge(
+      {
+        books: [makeBook({ id: 1, title: 'Dune' })],
+        notes: [
+          makeNote({ id: 1, bookId: 1, kind: 'highlight' }),
+          makeNote({ id: 2, bookId: 1, kind: 'highlight' }),
+          makeNote({ id: 3, bookId: 1, kind: 'thought' }),
+          makeNote({ id: 4, bookId: 1, kind: 'review' })
+        ]
+      },
+      { deleteBookNotes }
+    )
+    renderApp(
+      <>
+        <BookRoute id={1} />
+        <ConfirmDialog />
+      </>,
+      { kind: 'book', id: 1 }
+    )
+
+    await user.click(await screen.findByText('Manage book data'))
+    await user.click(screen.getByRole('button', { name: 'Delete all quotes (2)' }))
+
+    expect(await screen.findByText('Delete all 2 quotes from “Dune”?')).toBeDefined()
+    await user.click(screen.getByRole('button', { name: 'Delete quotes' }))
+    await waitFor(() => expect(deleteBookNotes).toHaveBeenCalledWith(1, 'highlight'))
   })
 })

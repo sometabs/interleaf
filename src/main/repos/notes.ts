@@ -148,6 +148,16 @@ export function deleteNote(db: Database, id: number): void {
   db.prepare('DELETE FROM note WHERE id = ?').run(id)
 }
 
+/** Deletes one kind of journal entry from one book, leaving its other writing intact. */
+export function deleteBookNotes(
+  db: Database,
+  bookId: number,
+  kind: 'thought' | 'highlight'
+): number {
+  if (kind !== 'thought' && kind !== 'highlight') throw new Error('Unsupported note kind.')
+  return db.prepare('DELETE FROM note WHERE book_id = ? AND kind = ?').run(bookId, kind).changes
+}
+
 /** Turns the one-review-per-book constraint into something the UI can show. */
 function translateConstraint(err: unknown, kind: Note['kind']): Error {
   const message = (err as Error)?.message ?? ''

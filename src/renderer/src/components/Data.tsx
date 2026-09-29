@@ -4,14 +4,19 @@ import { importSummary } from '../lib/highlights'
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
 import {
+  useAppDiagnostics,
+  useClearRecommendationCache,
   useDataCounts,
   useDeleteAllBooks,
-  useDeleteAllNotes,
+  useDeleteAllQuotes,
+  useDeleteAllReviews,
+  useDeleteAllThoughts,
   useDeleteEverything,
   useDismissed,
   useExportBackup,
   useImportHighlights,
   useReadHighlightExport,
+  useRemoveAdvancedModel,
   useRestoreBackup,
   useRestoreDismissed
 } from '../lib/queries'
@@ -24,16 +29,28 @@ import Empty from './Empty'
 export default function Data(): ReactNode {
   const { navigate } = useView()
   const { data: counts } = useDataCounts()
+  const { data: diagnostics } = useAppDiagnostics()
   const exportBackup = useExportBackup()
   const restoreBackup = useRestoreBackup()
   const readExport = useReadHighlightExport()
   const runImport = useImportHighlights()
 
   const deleteBooks = useDeleteAllBooks()
-  const deleteNotes = useDeleteAllNotes()
+  const deleteNotes = useDeleteAllThoughts()
+  const deleteQuotes = useDeleteAllQuotes()
+  const deleteReviews = useDeleteAllReviews()
+  const clearRecommendations = useClearRecommendationCache()
+  const removeModel = useRemoveAdvancedModel()
   const deleteAll = useDeleteEverything()
 
-  const busy = deleteBooks.isPending || deleteNotes.isPending || deleteAll.isPending
+  const busy =
+    deleteBooks.isPending ||
+    deleteNotes.isPending ||
+    deleteQuotes.isPending ||
+    deleteReviews.isPending ||
+    clearRecommendations.isPending ||
+    removeModel.isPending ||
+    deleteAll.isPending
 
   async function onBackup(): Promise<void> {
     // A null result is the folder picker being cancelled, not a failure.
@@ -84,7 +101,7 @@ export default function Data(): ReactNode {
     const n = counts?.books ?? 0
     const ok = await confirm({
       title: `Delete all ${n} books?`,
-      body: 'Their notes, ratings and metadata go with them. Notes not attached to a book are kept. This cannot be undone.',
+      body: 'Their notes, quotes, reviews, ratings and reading data go with them. Notes not attached to a book are kept. This cannot be undone.',
       confirmLabel: 'Delete books',
       destructive: true
     })
@@ -97,7 +114,7 @@ export default function Data(): ReactNode {
     const n = counts?.notes ?? 0
     const ok = await confirm({
       title: `Delete all ${n} notes?`,
-      body: 'Every note, attached or not. Your books are kept. This cannot be undone.',
+      body: 'Ordinary notes, attached or free-floating, will be deleted. Reviews, quotes and books are kept. This cannot be undone.',
       confirmLabel: 'Delete notes',
       destructive: true
     })
@@ -106,16 +123,67 @@ export default function Data(): ReactNode {
     notify(`Deleted ${deleted} notes`)
   }
 
+  async function onDeleteQuotes(): Promise<void> {
+    const n = counts?.quotes ?? 0
+    const ok = await confirm({
+      title: `Delete all ${n} quotes?`,
+      body: 'Every saved and imported quote will be deleted. Notes, reviews and books are kept. This cannot be undone.',
+      confirmLabel: 'Delete quotes',
+      destructive: true
+    })
+    if (!ok) return
+    const deleted = await deleteQuotes.mutateAsync()
+    notify(`Deleted ${deleted} quotes`)
+  }
+
+  async function onDeleteReviews(): Promise<void> {
+    const n = counts?.reviews ?? 0
+    const ok = await confirm({
+      title: `Delete all ${n} reviews?`,
+      body: 'Every book review will be deleted. Notes, quotes and books are kept. This cannot be undone.',
+      confirmLabel: 'Delete reviews',
+      destructive: true
+    })
+    if (!ok) return
+    const deleted = await deleteReviews.mutateAsync()
+    notify(`Deleted ${deleted} reviews`)
+  }
+
+  async function onClearRecommendations(): Promise<void> {
+    const n = counts?.candidates ?? 0
+    const ok = await confirm({
+      title: `Clear ${n} cached recommendations?`,
+      body: 'Discover will be empty until you search online again. Your library and Not for me choices are kept.',
+      confirmLabel: 'Clear cache',
+      destructive: true
+    })
+    if (!ok) return
+    const deleted = await clearRecommendations.mutateAsync()
+    notify(`Cleared ${deleted} cached recommendations`)
+  }
+
+  async function onRemoveModel(): Promise<void> {
+    const ok = await confirm({
+      title: 'Remove the Advanced model?',
+      body: 'Advanced recommendations will require downloading the model again. Standard recommendations and your library are unaffected.',
+      confirmLabel: 'Remove model',
+      destructive: true
+    })
+    if (!ok) return
+    await removeModel.mutateAsync()
+    notify('Advanced model removed')
+  }
+
   async function onDeleteEverything(): Promise<void> {
     const ok = await confirm({
-      title: 'Delete everything?',
-      body: 'Books, notes, recommendations and every "Not for me" choice. The app is left as it was on first launch. This cannot be undone.',
+      title: 'Delete all library data?',
+      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted. The downloaded Advanced model is kept. This cannot be undone.',
       confirmLabel: 'Delete everything',
       destructive: true
     })
     if (!ok) return
     await deleteAll.mutateAsync()
-    notify('Everything deleted')
+    notify('Library data deleted')
   }
 
   return (
@@ -164,7 +232,7 @@ export default function Data(): ReactNode {
         </section>
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-[14px] font-medium">Import</h2>
+          <h2 className="text-[14px] font-medium">Import highlights</h2>
 
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
@@ -207,28 +275,79 @@ export default function Data(): ReactNode {
         </section>
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-[14px] font-medium">Delete</h2>
+          <div>
+            <h2 className="text-[14px] font-medium">Delete library data</h2>
+            <p className="mt-0.5 text-[13px] text-ink-muted">
+              Delete one book, note or quote from its own screen. These actions remove whole
+              categories.
+            </p>
+          </div>
 
           <Row
             label="All books"
-            detail={`${counts?.books ?? 0} books, with their notes and ratings`}
+            detail={`${counts?.books ?? 0} books, with their notes, quotes, reviews and reading data`}
             action="Delete books"
             onAction={onDeleteBooks}
             disabled={busy || (counts?.books ?? 0) === 0}
           />
           <Row
             label="All notes"
-            detail={`${counts?.notes ?? 0} notes, attached and free-floating`}
+            detail={`${counts?.notes ?? 0} ordinary notes, attached and free-floating`}
             action="Delete notes"
             onAction={onDeleteNotes}
             disabled={busy || (counts?.notes ?? 0) === 0}
           />
           <Row
-            label="Everything"
-            detail="Books, notes, recommendations and your Not for me choices"
+            label="All quotes"
+            detail={`${counts?.quotes ?? 0} saved and imported quotes`}
+            action="Delete quotes"
+            onAction={onDeleteQuotes}
+            disabled={busy || (counts?.quotes ?? 0) === 0}
+          />
+          <Row
+            label="All reviews"
+            detail={`${counts?.reviews ?? 0} book reviews`}
+            action="Delete reviews"
+            onAction={onDeleteReviews}
+            disabled={busy || (counts?.reviews ?? 0) === 0}
+          />
+          <Row
+            label="All library data"
+            detail="Books, notes, quotes, reviews, recommendations and Not for me choices"
             action="Delete everything"
             onAction={onDeleteEverything}
-            disabled={busy}
+            disabled={
+              busy ||
+              ((counts?.books ?? 0) === 0 &&
+                (counts?.notes ?? 0) === 0 &&
+                (counts?.quotes ?? 0) === 0 &&
+                (counts?.reviews ?? 0) === 0 &&
+                (counts?.candidates ?? 0) === 0 &&
+                (counts?.dismissed ?? 0) === 0)
+            }
+          />
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h2 className="text-[14px] font-medium">Generated and downloaded data</h2>
+
+          <Row
+            label="Recommendation cache"
+            detail={`${counts?.candidates ?? 0} books fetched for Discover`}
+            action="Clear cache"
+            onAction={onClearRecommendations}
+            disabled={busy || (counts?.candidates ?? 0) === 0}
+          />
+          <Row
+            label="Advanced recommendation model"
+            detail={
+              diagnostics?.advancedModelInstalled
+                ? 'Downloaded locally; it can be downloaded again later'
+                : 'Not downloaded'
+            }
+            action="Remove model"
+            onAction={onRemoveModel}
+            disabled={busy || !diagnostics?.advancedModelInstalled}
           />
         </section>
 

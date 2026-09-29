@@ -256,6 +256,24 @@ describe('notes', () => {
     expect(notes.listNotes(db, null)).toHaveLength(1)
     expect(notes.listNotes(db)).toHaveLength(2)
   })
+
+  it('deletes one kind of writing from one book only', () => {
+    const dune = books.createBook(db, { title: 'Dune' })
+    const solaris = books.createBook(db, { title: 'Solaris' })
+    notes.createNote(db, { bookId: dune.id, bodyMd: 'Dune note' })
+    notes.createNote(db, { bookId: dune.id, kind: 'highlight', bodyMd: 'Dune quote' })
+    notes.createNote(db, { bookId: dune.id, kind: 'review', bodyMd: 'Dune review' })
+    notes.createNote(db, { bookId: solaris.id, kind: 'highlight', bodyMd: 'Solaris quote' })
+
+    expect(notes.deleteBookNotes(db, dune.id, 'highlight')).toBe(1)
+    expect(
+      notes
+        .listNotes(db, dune.id)
+        .map((note) => note.kind)
+        .sort()
+    ).toEqual(['review', 'thought'])
+    expect(notes.listNotes(db, solaris.id)).toHaveLength(1)
+  })
 })
 
 describe('candidate languages', () => {

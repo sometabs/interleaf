@@ -267,6 +267,8 @@ export interface DismissedBook {
 export interface DataCounts {
   books: number
   notes: number
+  quotes: number
+  reviews: number
   candidates: number
   dismissed: number
 }
@@ -292,6 +294,7 @@ export interface InterleafApi {
   createNote(input: NewNote): Promise<Note>
   updateNote(id: number, patch: NotePatch): Promise<Note | null>
   deleteNote(id: number): Promise<void>
+  deleteBookNotes(bookId: number, kind: 'thought' | 'highlight'): Promise<number>
 
   search(query: string, limit?: number): Promise<SearchHit[]>
 
@@ -334,7 +337,11 @@ export interface InterleafApi {
   dataCounts(): Promise<DataCounts>
   // Notes not attached to a book survive.
   deleteAllBooks(): Promise<number>
-  deleteAllNotes(): Promise<number>
+  deleteAllThoughts(): Promise<number>
+  deleteAllQuotes(): Promise<number>
+  deleteAllReviews(): Promise<number>
+  clearRecommendationCache(): Promise<number>
+  removeAdvancedModel(): Promise<boolean>
   deleteEverything(): Promise<void>
 }
 
@@ -359,6 +366,7 @@ export const IPC_CHANNELS = [
   'createNote',
   'updateNote',
   'deleteNote',
+  'deleteBookNotes',
   'search',
   'searchOpenLibrary',
   'addBookFromOpenLibrary',
@@ -386,6 +394,10 @@ export const IPC_CHANNELS = [
   'checkOpenLibrary',
   'dataCounts',
   'deleteAllBooks',
-  'deleteAllNotes',
+  'deleteAllThoughts',
+  'deleteAllQuotes',
+  'deleteAllReviews',
+  'clearRecommendationCache',
+  'removeAdvancedModel',
   'deleteEverything'
 ] as const satisfies readonly (keyof InterleafApi)[]
