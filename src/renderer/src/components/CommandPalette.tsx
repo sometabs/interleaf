@@ -5,7 +5,7 @@ import { Command } from 'cmdk'
 import { useState, type ReactNode } from 'react'
 
 import { notify } from '../lib/feedback'
-import { useCreateNote, useExportBackup, useSearch } from '../lib/queries'
+import { useExportBackup, useSearch } from '../lib/queries'
 import { useView } from '../lib/view'
 
 interface Props {
@@ -18,7 +18,6 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
   const { navigate } = useView()
   const [query, setQuery] = useState('')
 
-  const createNote = useCreateNote()
   const exportBackup = useExportBackup()
   const { data: hits = [] } = useSearch(query)
 
@@ -34,11 +33,7 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
       id: 'note',
       label: 'New note',
       hint: 'A page not tied to a book',
-      run: () =>
-        createNote.mutate(
-          { kind: 'thought' },
-          { onSuccess: (note) => navigate({ kind: 'note', id: note.id }) }
-        )
+      run: () => navigate({ kind: 'new-note' })
     },
     { id: 'library', label: 'Go to Library', run: () => navigate({ kind: 'library' }) },
     { id: 'queue', label: 'Go to Reading queue', run: () => navigate({ kind: 'queue' }) },

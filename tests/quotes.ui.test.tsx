@@ -1,12 +1,14 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import BookDetail from '../src/renderer/src/components/BookDetail'
+import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import Notes from '../src/renderer/src/components/Notes'
 import Quotes from '../src/renderer/src/components/Quotes'
 import Toasts from '../src/renderer/src/components/Toasts'
 import Sidebar from '../src/renderer/src/components/Sidebar'
+import { resetConfirm } from '../src/renderer/src/lib/confirm'
 import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 
 // Quotes are notes of kind `highlight`, shown apart from the rest.
@@ -20,6 +22,18 @@ const QUOTE = makeNote({
 
 const THOUGHT = makeNote({ id: 2, kind: 'thought', title: 'On walls', bodyMd: 'A thought.' })
 const REVIEW = makeNote({ id: 3, kind: 'review', title: 'Review', bodyMd: 'Very good.' })
+
+afterEach(() => resetConfirm())
+
+async function enterPassage(text: string): Promise<void> {
+  const editors = document.querySelectorAll<HTMLElement>('.note-prose')
+  const editor = editors[editors.length - 1]
+  if (!editor) throw new Error('No quote editor is open')
+  await act(async () => {
+    editor.innerHTML = `<p>${text}</p>`
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
 
 describe('the Quotes screen', () => {
   it('shows quotes and nothing else', async () => {
@@ -53,7 +67,7 @@ describe('the Quotes screen', () => {
     expect(state.created).toHaveLength(0)
   })
 
-  it('stores it the moment a book is picked', async () => {
+  it('stores it only after a book, passage and Done', async () => {
     const state = installBridge({
       books: [makeBook({ id: 7, title: 'The Dispossessed' })],
       notes: [QUOTE]
@@ -63,6 +77,9 @@ describe('the Quotes screen', () => {
 
     await user.click(await screen.findByRole('button', { name: 'New quote' }))
     await user.selectOptions(await screen.findByLabelText('Book this quote is from'), '7')
+    expect(state.created).toHaveLength(0)
+    await enterPassage('There was a wall.')
+    await user.click(screen.getByTestId('quote-done'))
 
     await waitFor(() => expect(state.created).toHaveLength(1))
     expect(state.created[0]).toMatchObject({ kind: 'highlight', bookId: 7 })
@@ -80,11 +97,33 @@ describe('the Quotes screen', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'New quote' }))
+    await enterPassage('There was a wall.')
     await user.click(screen.getByTestId('quote-done'))
 
     expect(await screen.findByText(/No book has been selected/)).toBeTruthy()
     // Still there to finish, rather than thrown away or hidden behind a dialog.
     expect(screen.getByLabelText('Book this quote is from')).toBeTruthy()
+  })
+
+  it('accurately warns when discarding an unsaved quote with a selected book', async () => {
+    installBridge({ books: [makeBook({ id: 7, title: 'The Dispossessed' })], notes: [QUOTE] })
+    renderApp(
+      <>
+        <Quotes />
+        <ConfirmDialog />
+      </>,
+      { kind: 'quotes' }
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'New quote' }))
+    await user.selectOptions(await screen.findByLabelText('Book this quote is from'), '7')
+    await enterPassage('There was a wall.')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Discard this quote?')).toBeTruthy()
+    expect(screen.getByText('This draft has not been saved.')).toBeTruthy()
+    expect(screen.queryByText('No book has been selected.')).toBeNull()
   })
 
   it('offers a prompt rather than a way to have no book', async () => {
@@ -111,6 +150,8 @@ describe('the Quotes screen', () => {
 
     await user.selectOptions(await screen.findByLabelText('Filter by book'), '7')
     await user.click(screen.getByRole('button', { name: 'New quote' }))
+    await enterPassage('There was a wall.')
+    await user.click(screen.getByTestId('quote-done'))
 
     await waitFor(() => expect(state.created).toHaveLength(1))
     expect(state.created[0]).toMatchObject({ kind: 'highlight' })
@@ -140,6 +181,8 @@ describe('the Quotes screen', () => {
 
     await user.selectOptions(await screen.findByLabelText('Filter by book'), '7')
     await user.click(screen.getByRole('button', { name: 'New quote' }))
+    await enterPassage('There was a wall.')
+    await user.click(screen.getByTestId('quote-done'))
 
     await waitFor(() => expect(state.created).toHaveLength(1))
     expect(state.created[0]).toMatchObject({ kind: 'highlight', bookId: 7 })
@@ -323,8 +366,26 @@ describe('a book page', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Add quote' }))
+    await enterPassage('There was a wall.')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
 
     await waitFor(() => expect(state.created).toHaveLength(1))
     expect(state.created[0]).toMatchObject({ kind: 'highlight', bookId: 7 })
+  })
+
+  it('keeps a stored quote when Done beats the autosave timer', async () => {
+    const state = installBridge({
+      books: [BOOK],
+      notes: [{ ...QUOTE, id: 9, bookId: 7, title: '', bodyMd: '' }]
+    })
+    renderApp(<BookDetail book={BOOK} />, { kind: 'book', id: 7 })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByText('Empty quote'))
+    await enterPassage('Saved on close.')
+    await user.click(screen.getByTestId('quote-done'))
+
+    await waitFor(() => expect(state.notes[0].bodyMd).toBe('Saved on close.'))
+    expect(state.deleted).toEqual([])
   })
 })

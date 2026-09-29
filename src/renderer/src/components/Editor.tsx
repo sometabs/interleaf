@@ -11,6 +11,9 @@ interface Props {
   placeholder?: string
   // Called after the debounce settles, and immediately on unmount.
   onSave: (value: string) => void
+  // Unlike onSave, this reports every edit immediately. Draft screens use it
+  // to decide whether Done has something worth storing.
+  onChange?: (value: string) => void
   className?: string
   // Omitted where a note-level label makes no sense.
   tag?: string | null
@@ -25,6 +28,7 @@ export default function Editor({
   value,
   placeholder = 'Start writing…',
   onSave,
+  onChange,
   className = '',
   tag,
   onTagChange
@@ -39,8 +43,10 @@ export default function Editor({
 
   // So an inline arrow from a parent is not a reason to rebuild the editor.
   const onSaveRef = useRef(onSave)
+  const onChangeRef = useRef(onChange)
   useEffect(() => {
     onSaveRef.current = onSave
+    onChangeRef.current = onChange
   })
 
   const flush = useCallback((): void => {
@@ -69,6 +75,7 @@ export default function Editor({
       const markdown = htmlToMarkdown(instance.getHTML())
       emittedRef.current = markdown
       pendingRef.current = markdown
+      onChangeRef.current?.(markdown)
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS)
     }

@@ -87,7 +87,7 @@ export default function Sidebar({
     {
       label: 'Notes',
       view: { kind: 'notes' },
-      matches: ['notes', 'note'],
+      matches: ['notes', 'note', 'new-note'],
       count: notes?.filter((note) => note.kind === 'thought').length,
       icon: (
         <Icon>

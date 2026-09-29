@@ -10,6 +10,7 @@ interface Props {
   open: boolean
   onToggle: () => void
   onSave: (text: string) => void
+  onChange?: (text: string) => void
   onDelete: () => void
   // Where the quote came from: a book name, or a control for choosing one.
   source?: ReactNode
@@ -22,6 +23,7 @@ export default function QuoteCard({
   open,
   onToggle,
   onSave,
+  onChange,
   onDelete,
   source
 }: Props): ReactNode {
@@ -58,7 +60,12 @@ export default function QuoteCard({
   return (
     <div data-testid="quote-card" data-open="true" className="card">
       <div className="min-h-32 px-5 py-4">
-        <Editor value={quote.bodyMd} placeholder="Type the passage." onSave={onSave} />
+        <Editor
+          value={quote.bodyMd}
+          placeholder="Type the passage."
+          onSave={onSave}
+          onChange={onChange}
+        />
       </div>
 
       <div className="flex items-center gap-2 border-t border-hairline px-3 py-2">

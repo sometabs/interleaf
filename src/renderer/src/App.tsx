@@ -11,6 +11,7 @@ import Empty from './components/Empty'
 import HighlightImport from './components/HighlightImport'
 import Library from './components/Library'
 import NoteView from './components/NoteView'
+import NewNoteView from './components/NewNoteView'
 import Notes from './components/Notes'
 import Quotes from './components/Quotes'
 import ReadingQueue from './components/ReadingQueue'
@@ -79,6 +80,7 @@ export default function App(): ReactNode {
         {view.kind === 'quotes' && <Quotes />}
         {view.kind === 'stats' && <Stats />}
         {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} />}
+        {view.kind === 'new-note' && <NewNoteView />}
         {view.kind === 'discover' && <Discover />}
         {view.kind === 'data' && <Data />}
         {view.kind === 'import' && <HighlightImport plan={view.plan} />}

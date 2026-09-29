@@ -4,7 +4,7 @@ import { toPlainText } from '@shared/plaintext'
 import { useState, type ReactNode } from 'react'
 
 import { relativeDate } from '../lib/dates'
-import { useBooks, useCreateNote, useNotes } from '../lib/queries'
+import { useBooks, useNotes } from '../lib/queries'
 import { useView } from '../lib/view'
 import Empty from './Empty'
 
@@ -18,7 +18,6 @@ export default function Notes(): ReactNode {
 
   // Reviews and quotes are notes too, and each has its own screen.
   const notes = all.filter((note) => note.kind === 'thought')
-  const createNote = useCreateNote()
   const [filter, setFilter] = useState('')
 
   // `''` is "everything", `NONE` the absence of the thing. Not remembered
@@ -27,10 +26,7 @@ export default function Notes(): ReactNode {
   const [tagFilter, setTagFilter] = useState('')
 
   function newNote(): void {
-    createNote.mutate(
-      { kind: 'thought' },
-      { onSuccess: (note) => navigate({ kind: 'note', id: note.id }) }
-    )
+    navigate({ kind: 'new-note' })
   }
 
   function bookTitle(note: Note): string | null {

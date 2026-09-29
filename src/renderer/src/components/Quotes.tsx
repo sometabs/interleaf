@@ -26,8 +26,9 @@ export default function Quotes(): ReactNode {
   const [filterValue, setFilterValue] = useState('')
   const [openId, setOpenId] = useState<number | null>(null)
   // A quote with no book cannot be stored, so one starts here and is written
-  // the moment a book is picked.
+  // only when Done has both a passage and a book.
   const [draft, setDraft] = useState<string | null>(null)
+  const [draftBookId, setDraftBookId] = useState<number | null>(null)
 
   const quotes = notes.filter(isQuote)
 
@@ -84,63 +85,52 @@ export default function Quotes(): ReactNode {
   const narrowed = query !== '' || filterValue !== ''
 
   function newQuote(): void {
-    // Reuse the one that is open and still blank rather than stacking up empties.
-    const open = quotes.find((quote) => quote.id === openId)
-    if (open && open.bodyMd.trim() === '') return
     if (draft !== null) return
-
-    // The filter names a book, so there is nothing left to ask.
-    if (selectedBookId !== null) {
-      createNote.mutate(
-        { kind: QUOTE_KIND, bookId: selectedBookId },
-        { onSuccess: (quote) => setOpenId(quote.id) }
-      )
-      return
-    }
 
     setOpenId(null)
     setDraft('')
+    setDraftBookId(selectedBookId)
   }
 
-  function keepDraft(bookId: number): void {
+  function finishDraft(): void {
+    if (!(draft ?? '').trim()) {
+      setDraft(null)
+      setDraftBookId(null)
+      return
+    }
+    if (draftBookId === null) {
+      notify('No book has been selected.')
+      return
+    }
+
     createNote.mutate(
-      { kind: QUOTE_KIND, bookId, bodyMd: draft ?? '' },
+      { kind: QUOTE_KIND, bookId: draftBookId, bodyMd: draft ?? '' },
       {
-        onSuccess: (quote) => {
+        onSuccess: () => {
           setDraft(null)
-          setOpenId(quote.id)
+          setDraftBookId(null)
         }
       }
     )
-  }
-
-  // Done cannot finish what was never stored, so it says why. Deleting is a
-  // deliberate throw-away and asks, like deleting a stored quote does.
-  function finishDraft(): void {
-    notify('No book has been selected.')
   }
 
   async function discardDraft(): Promise<void> {
     if ((draft ?? '').trim()) {
       const ok = await confirm({
         title: 'Discard this quote?',
-        body: 'No book has been selected.',
+        body: 'This draft has not been saved.',
         confirmLabel: 'Discard',
         destructive: true
       })
       if (!ok) return
     }
     setDraft(null)
+    setDraftBookId(null)
   }
 
   function toggle(quote: Note): void {
-    const previous = quotes.find((other) => other.id === openId)
     const next = openId === quote.id ? null : quote.id
     setOpenId(next)
-
-    if (previous && previous.id !== next && previous.bodyMd.trim() === '') {
-      deleteNote.mutate(previous.id)
-    }
   }
 
   async function remove(quote: Note): Promise<void> {
@@ -265,13 +255,14 @@ export default function Quotes(): ReactNode {
               }}
               open
               onToggle={finishDraft}
+              onChange={setDraft}
               onSave={(text) => setDraft(text)}
               onDelete={() => void discardDraft()}
               source={
                 <select
                   aria-label="Book this quote is from"
-                  value=""
-                  onChange={(event) => keepDraft(Number(event.target.value))}
+                  value={draftBookId ?? ''}
+                  onChange={(event) => setDraftBookId(Number(event.target.value))}
                   className="h-7 w-full max-w-56 truncate rounded-control border-none bg-transparent px-1.5 text-[13px] text-ink-muted hover:bg-hover focus:outline-none"
                 >
                   {/* A prompt, not a choice: picking it is what stores the quote. */}

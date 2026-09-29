@@ -6,6 +6,7 @@ export type View =
   | { kind: 'queue' }
   | { kind: 'book'; id: number }
   | { kind: 'note'; id: number }
+  | { kind: 'new-note' }
   | { kind: 'notes' }
   | { kind: 'reviews' }
   | { kind: 'review'; id: number }
@@ -25,6 +26,7 @@ export const SCREEN_NAMES: Record<View['kind'], string> = {
   queue: 'Reading queue',
   book: 'Back',
   note: 'Back',
+  'new-note': 'New note',
   notes: 'Notes',
   reviews: 'Reviews',
   review: 'Back',

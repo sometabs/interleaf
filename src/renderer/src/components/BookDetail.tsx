@@ -46,6 +46,8 @@ export default function BookDetail({ book }: Props): ReactNode {
 
   const [openId, setOpenId] = useState<number | null>(null)
   const [openQuoteId, setOpenQuoteId] = useState<number | null>(null)
+  const [noteDraft, setNoteDraft] = useState(false)
+  const [quoteDraft, setQuoteDraft] = useState(false)
 
   const review = notes.find((note) => note.kind === 'review') ?? null
   const thoughts = notes.filter((note) => note.kind !== 'review' && !isQuote(note))
@@ -70,43 +72,44 @@ export default function BookDetail({ book }: Props): ReactNode {
 
   // The row expands into an editor in place, so the book stays in view.
   function addNote(): void {
-    const open = thoughts.find((note) => note.id === openId)
-    if (open && open.bodyMd.trim() === '') return
-
-    createNote.mutate(
-      { bookId: book.id, kind: 'thought' },
-      { onSuccess: (note) => setOpenId(note.id) }
-    )
+    if (noteDraft) return
+    setOpenId(null)
+    setNoteDraft(true)
   }
 
   function toggleNote(note: Note): void {
-    const previous = thoughts.find((other) => other.id === openId)
     const next = openId === note.id ? null : note.id
     setOpenId(next)
-
-    if (previous && previous.id !== next && previous.bodyMd.trim() === '') {
-      deleteNote.mutate(previous.id)
-    }
   }
 
   function addQuote(): void {
-    const open = quotes.find((quote) => quote.id === openQuoteId)
-    if (open && open.bodyMd.trim() === '') return
-
-    createNote.mutate(
-      { bookId: book.id, kind: QUOTE_KIND },
-      { onSuccess: (quote) => setOpenQuoteId(quote.id) }
-    )
+    if (quoteDraft) return
+    setOpenQuoteId(null)
+    setQuoteDraft(true)
   }
 
   function toggleQuote(quote: Note): void {
-    const previous = quotes.find((other) => other.id === openQuoteId)
     const next = openQuoteId === quote.id ? null : quote.id
     setOpenQuoteId(next)
+  }
 
-    if (previous && previous.id !== next && previous.bodyMd.trim() === '') {
-      deleteNote.mutate(previous.id)
-    }
+  function saveNoteDraft(title: string, bodyMd: string): void {
+    createNote.mutate(
+      {
+        bookId: book.id,
+        kind: 'thought',
+        title: title.trim() || undefined,
+        bodyMd
+      },
+      { onSuccess: () => setNoteDraft(false) }
+    )
+  }
+
+  function saveQuoteDraft(bodyMd: string): void {
+    createNote.mutate(
+      { bookId: book.id, kind: QUOTE_KIND, bodyMd },
+      { onSuccess: () => setQuoteDraft(false) }
+    )
   }
 
   async function removeQuote(quote: Note): Promise<void> {
@@ -406,8 +409,15 @@ export default function BookDetail({ book }: Props): ReactNode {
                 </button>
               </div>
 
-              {!isPending && quotes.length > 0 && (
+              {!isPending && (quoteDraft || quotes.length > 0) && (
                 <div className="flex flex-col gap-2">
+                  {quoteDraft && (
+                    <DraftQuoteCard
+                      saving={createNote.isPending}
+                      onDone={saveQuoteDraft}
+                      onDiscard={() => setQuoteDraft(false)}
+                    />
+                  )}
                   {quotes.map((quote) => (
                     <QuoteCard
                       key={quote.id}
@@ -440,8 +450,16 @@ export default function BookDetail({ book }: Props): ReactNode {
               </div>
 
               {!isPending &&
-                (thoughts.length === 0 ? null : (
+                (!noteDraft && thoughts.length === 0 ? null : (
                   <div className="flex flex-col gap-2">
+                    {noteDraft && (
+                      <DraftNoteCard
+                        bookTitle={book.title}
+                        saving={createNote.isPending}
+                        onDone={saveNoteDraft}
+                        onDiscard={() => setNoteDraft(false)}
+                      />
+                    )}
                     {thoughts.map((note) => (
                       <NoteCard
                         key={note.id}
@@ -462,6 +480,119 @@ export default function BookDetail({ book }: Props): ReactNode {
             </section>
           </main>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function DraftQuoteCard({
+  saving,
+  onDone,
+  onDiscard
+}: {
+  saving: boolean
+  onDone: (body: string) => void
+  onDiscard: () => void
+}): ReactNode {
+  const [body, setBody] = useState('')
+
+  async function discard(): Promise<void> {
+    if (body.trim()) {
+      const ok = await confirm({
+        title: 'Discard this quote?',
+        body: 'This draft has not been saved.',
+        confirmLabel: 'Discard',
+        destructive: true
+      })
+      if (!ok) return
+    }
+    onDiscard()
+  }
+
+  return (
+    <div data-testid="quote-card" data-open="true" className="card">
+      <div className="min-h-32 px-5 py-4">
+        <Editor value="" placeholder="Type the passage." onChange={setBody} onSave={setBody} />
+      </div>
+      <div className="flex justify-end gap-1 border-t border-hairline px-3 py-2">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => (body.trim() ? onDone(body) : onDiscard())}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Done'}
+        </button>
+        <button type="button" className="btn btn-ghost btn-danger" onClick={() => void discard()}>
+          Discard
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function DraftNoteCard({
+  bookTitle,
+  saving,
+  onDone,
+  onDiscard
+}: {
+  bookTitle: string
+  saving: boolean
+  onDone: (title: string, body: string) => void
+  onDiscard: () => void
+}): ReactNode {
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const hasContent = title.trim() !== '' || body.trim() !== ''
+
+  async function discard(): Promise<void> {
+    if (hasContent) {
+      const ok = await confirm({
+        title: 'Discard this note?',
+        body: 'This draft has not been saved.',
+        confirmLabel: 'Discard',
+        destructive: true
+      })
+      if (!ok) return
+    }
+    onDiscard()
+  }
+
+  return (
+    <div data-testid="note-card" data-open="true" className="card">
+      <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
+        <input
+          autoFocus
+          aria-label="Note title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Untitled note"
+          className="field min-w-0 flex-1 border-transparent bg-transparent font-medium hover:border-hairline focus:border-hairline"
+        />
+        <button
+          type="button"
+          className="btn btn-ghost shrink-0"
+          onClick={() => (hasContent ? onDone(title, body) : onDiscard())}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Done'}
+        </button>
+      </div>
+
+      <div className="min-h-40 px-4 py-3">
+        <Editor
+          value=""
+          placeholder={`A quote, an idea, a question about ${bookTitle}…`}
+          onChange={setBody}
+          onSave={setBody}
+        />
+      </div>
+
+      <div className="flex justify-end px-2 pb-2">
+        <button type="button" className="btn btn-ghost btn-danger" onClick={() => void discard()}>
+          Discard
+        </button>
       </div>
     </div>
   )

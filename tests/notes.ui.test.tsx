@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 
+import App from '../src/renderer/src/App'
 import BookDetail from '../src/renderer/src/components/BookDetail'
 import Notes from '../src/renderer/src/components/Notes'
 import { useBook } from '../src/renderer/src/lib/queries'
@@ -15,6 +16,16 @@ function BookRoute({ id }: { id: number }): ReactNode {
 
 function openCards(): HTMLElement[] {
   return screen.queryAllByTestId('note-card').filter((card) => card.dataset.open === 'true')
+}
+
+async function enterLastEditor(text: string): Promise<void> {
+  const editors = document.querySelectorAll<HTMLElement>('.note-prose')
+  const editor = editors[editors.length - 1]
+  if (!editor) throw new Error('No note editor is open')
+  await act(async () => {
+    editor.innerHTML = `<p>${text}</p>`
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 }
 
 describe('writing a note on a book', () => {
@@ -36,11 +47,38 @@ describe('writing a note on a book', () => {
     setup()
 
     await user.click(await screen.findByRole('button', { name: 'Add note' }))
+    expect(bridge.created).toHaveLength(0)
+    await user.type(screen.getByLabelText('Note title'), 'Desert politics')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
 
-    await waitFor(() => expect(bridge.created).toContainEqual({ bookId: 1, kind: 'thought' }))
+    await waitFor(() =>
+      expect(bridge.created).toContainEqual({
+        bookId: 1,
+        kind: 'thought',
+        title: 'Desert politics',
+        bodyMd: ''
+      })
+    )
     expect(bridge.created.every((input) => (input as { kind: string }).kind !== 'review')).toBe(
       true
     )
+  })
+
+  it('derives the title when a new book note has only a body', async () => {
+    const user = userEvent.setup()
+    setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Add note' }))
+    await enterLastEditor('A body without a title')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+
+    await waitFor(() => expect(bridge.created).toHaveLength(1))
+    expect(bridge.created[0]).toMatchObject({
+      bookId: 1,
+      kind: 'thought',
+      bodyMd: 'A body without a title'
+    })
+    expect(bridge.created[0]).toHaveProperty('title', undefined)
   })
 
   it('opens the note in place without leaving the book', async () => {
@@ -64,7 +102,8 @@ describe('writing a note on a book', () => {
     await waitFor(() => expect(openCards()).toHaveLength(1))
     await user.click(add)
 
-    await waitFor(() => expect(bridge.created).toHaveLength(1))
+    expect(openCards()).toHaveLength(1)
+    expect(bridge.created).toHaveLength(0)
   })
 
   it('expands an existing note in place rather than navigating', async () => {
@@ -77,17 +116,18 @@ describe('writing a note on a book', () => {
     expect(screen.getByRole('heading', { name: 'The Dispossessed' })).toBeDefined()
   })
 
-  it('discards a note left blank when it is collapsed', async () => {
+  it('discards a new note left blank when Done is clicked', async () => {
     const user = userEvent.setup()
     setup()
 
     await user.click(await screen.findByRole('button', { name: 'Add note' }))
     await waitFor(() => expect(openCards()).toHaveLength(1))
 
-    await user.click(screen.getAllByTestId('note-head')[0])
+    await user.click(screen.getByRole('button', { name: 'Done' }))
 
-    await waitFor(() => expect(bridge.notes).toHaveLength(0))
-    expect(bridge.deleted).toHaveLength(1)
+    await waitFor(() => expect(openCards()).toHaveLength(0))
+    expect(bridge.created).toHaveLength(0)
+    expect(bridge.deleted).toHaveLength(0)
   })
 
   it('keeps a note that has text in it', async () => {
@@ -99,6 +139,18 @@ describe('writing a note on a book', () => {
     await user.click(screen.getAllByTestId('note-head')[0])
 
     await waitFor(() => expect(openCards()).toHaveLength(0))
+    expect(bridge.deleted).toEqual([])
+  })
+
+  it('keeps text when Done beats the autosave timer', async () => {
+    const user = userEvent.setup()
+    setup([makeNote({ id: 7, bookId: 1, title: '', bodyMd: '' })])
+
+    await user.click(await screen.findByText('Untitled note'))
+    await enterLastEditor('Saved on close')
+    await user.click(screen.getByRole('button', { name: 'Collapse note' }))
+
+    await waitFor(() => expect(bridge.notes[0].bodyMd).toBe('Saved on close'))
     expect(bridge.deleted).toEqual([])
   })
 
@@ -154,11 +206,34 @@ describe('Notes index', () => {
   it('creates a note that belongs to no book', async () => {
     const user = userEvent.setup()
     const bridge = installBridge({ books: [], notes: [] })
-    renderApp(<Notes />, { kind: 'notes' })
+    renderApp(<App />, { kind: 'notes' })
 
     await user.click(await screen.findByRole('button', { name: 'Write your first note' }))
+    expect(bridge.created).toHaveLength(0)
+    await user.type(await screen.findByLabelText('Note title'), 'Loose thought')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
 
-    await waitFor(() => expect(bridge.created).toEqual([{ kind: 'thought' }]))
+    await waitFor(() =>
+      expect(bridge.created).toContainEqual({
+        kind: 'thought',
+        title: 'Loose thought',
+        bodyMd: '',
+        tag: null,
+        bookId: null
+      })
+    )
+  })
+
+  it('does not create an empty note from the full-page draft', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge({ books: [], notes: [] })
+    renderApp(<App />, { kind: 'notes' })
+
+    await user.click(await screen.findByRole('button', { name: 'Write your first note' }))
+    await user.click(await screen.findByRole('button', { name: 'Done' }))
+
+    await screen.findByRole('heading', { name: 'Notes' })
+    expect(bridge.created).toHaveLength(0)
   })
 })
 
