@@ -18,6 +18,8 @@ export default function Notes(): ReactNode {
 
   // Reviews and quotes are notes too, and each has its own screen.
   const notes = all.filter((note) => note.kind === 'thought')
+  const noteBookIds = new Set(notes.flatMap((note) => (note.bookId === null ? [] : [note.bookId])))
+  const filterBooks = books.filter((book) => noteBookIds.has(book.id))
   const [filter, setFilter] = useState('')
 
   // `''` is "everything", `NONE` the absence of the thing. Not remembered
@@ -95,7 +97,7 @@ export default function Notes(): ReactNode {
             >
               <option value="">All books</option>
               <option value={NONE}>No book</option>
-              {books.map((book) => (
+              {filterBooks.map((book) => (
                 <option key={book.id} value={book.id}>
                   {book.title}
                 </option>

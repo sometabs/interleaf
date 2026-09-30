@@ -56,15 +56,19 @@ export default function Quotes(): ReactNode {
         : filterValue
       : null
 
+  const sortedBooks = [...books].sort((a, b) => a.title.localeCompare(b.title))
+  const quoteBookIds = new Set(
+    quotes.flatMap((quote) => (quote.bookId === null ? [] : [quote.bookId]))
+  )
+  const filterBooks = sortedBooks.filter((book) => quoteBookIds.has(book.id))
   const authorOptions = [
-    ...books.reduce((authors, book) => {
+    ...filterBooks.reduce((authors, book) => {
       const key = authorKey(book.author)
       if (!authors.has(key)) authors.set(key, book.author?.trim() || 'Unknown author')
       return authors
     }, new Map<string, string>())
   ].sort(([, a], [, b]) => a.localeCompare(b))
 
-  const sortedBooks = [...books].sort((a, b) => a.title.localeCompare(b.title))
   const draftBooks =
     selectedAuthor === null
       ? sortedBooks
@@ -203,7 +207,7 @@ export default function Quotes(): ReactNode {
                 onChange={(event) => setFilterValue(event.target.value)}
               >
                 <option value="">All books</option>
-                {sortedBooks.map((book) => (
+                {filterBooks.map((book) => (
                   <option key={book.id} value={book.id}>
                     {book.title}
                   </option>

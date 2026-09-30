@@ -360,6 +360,28 @@ describe('filtering the notes index', () => {
     expect(titles().join(' ')).not.toContain('Spice')
   })
 
+  it('offers only books that actually contain notes', async () => {
+    installBridge({
+      books: [
+        makeBook({ id: 1, title: 'The Dispossessed' }),
+        makeBook({ id: 2, title: 'Dune' }),
+        makeBook({ id: 3, title: 'The Left Hand of Darkness' })
+      ],
+      notes: [
+        makeNote({ id: 1, bookId: 1, title: 'On walls' }),
+        makeNote({ id: 2, bookId: 2, kind: 'review', title: 'Review' })
+      ]
+    })
+    renderApp(<Notes />, { kind: 'notes' })
+
+    const options = Array.from(
+      (await screen.findByLabelText('Filter by book')).querySelectorAll('option')
+    ).map((option) => option.textContent)
+    expect(options).toContain('The Dispossessed')
+    expect(options).not.toContain('Dune')
+    expect(options).not.toContain('The Left Hand of Darkness')
+  })
+
   it('narrows to one tag', async () => {
     const user = await setup()
     await pick(user, 'Filter by tag', 'THEORY')

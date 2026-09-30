@@ -143,7 +143,7 @@ describe('the Quotes screen', () => {
   it('keeps a new quote as a highlight, not a note', async () => {
     const state = installBridge({
       books: [makeBook({ id: 7, title: 'The Dispossessed' })],
-      notes: [QUOTE]
+      notes: [{ ...QUOTE, bookId: 7 }]
     })
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
@@ -169,12 +169,32 @@ describe('the Quotes screen', () => {
     expect(options).not.toContain('No book')
   })
 
+  it('still offers the whole library when creating a quote', async () => {
+    installBridge({
+      books: [makeBook({ id: 7, title: 'The Dispossessed' }), makeBook({ id: 8, title: 'Dune' })],
+      notes: [{ ...QUOTE, bookId: 7 }]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'New quote' }))
+
+    const options = Array.from(
+      (await screen.findByLabelText('Book this quote is from')).querySelectorAll('option')
+    ).map((option) => option.textContent)
+    expect(options).toEqual([
+      'Choose a book…',
+      expect.stringContaining('Dune'),
+      expect.stringContaining('The Dispossessed')
+    ])
+  })
+
   // The book filter is the only thing on screen naming a book, so a quote
   // typed under it starts there.
   it('starts a new quote on whichever book the list is narrowed to', async () => {
     const state = installBridge({
       books: [makeBook({ id: 7, title: 'The Dispossessed' })],
-      notes: [QUOTE]
+      notes: [{ ...QUOTE, bookId: 7 }]
     })
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
@@ -236,6 +256,33 @@ describe('the Quotes screen', () => {
     ])
   })
 
+  it('offers only books and authors that actually contain quotes as filters', async () => {
+    installBridge({
+      books: [
+        makeBook({ id: 7, title: 'The Dispossessed', author: 'Ursula K. Le Guin' }),
+        makeBook({ id: 8, title: 'Dune', author: 'Frank Herbert' }),
+        makeBook({ id: 9, title: 'The Left Hand of Darkness', author: 'Ursula K. Le Guin' })
+      ],
+      notes: [{ ...QUOTE, id: 10, bookId: 7 }, makeNote({ id: 11, bookId: 8, kind: 'thought' })]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    const bookOptions = Array.from(
+      (await screen.findByLabelText('Filter by book')).querySelectorAll('option')
+    ).map((option) => option.textContent)
+    expect(bookOptions).toContain('The Dispossessed')
+    expect(bookOptions).not.toContain('Dune')
+    expect(bookOptions).not.toContain('The Left Hand of Darkness')
+
+    await user.selectOptions(screen.getByLabelText('Filter quotes by'), 'author')
+    const authorOptions = Array.from(
+      (await screen.findByLabelText('Filter by author')).querySelectorAll('option')
+    ).map((option) => option.textContent)
+    expect(authorOptions).toContain('Ursula K. Le Guin')
+    expect(authorOptions).not.toContain('Frank Herbert')
+  })
+
   it('limits a new quote’s book choices when an author is selected', async () => {
     installBridge({
       books: [
@@ -243,7 +290,7 @@ describe('the Quotes screen', () => {
         makeBook({ id: 8, title: 'A Wizard of Earthsea', author: 'Ursula K. Le Guin' }),
         makeBook({ id: 9, title: 'Dune', author: 'Frank Herbert' })
       ],
-      notes: [QUOTE]
+      notes: [{ ...QUOTE, bookId: 7 }]
     })
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
