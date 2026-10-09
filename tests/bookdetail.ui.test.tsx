@@ -1,5 +1,5 @@
-import type { Recommendation, RecommendationQuery } from '@shared/api'
-import { screen, waitFor } from '@testing-library/react'
+import type { NewNote, Note, Recommendation, RecommendationQuery } from '@shared/api'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -103,6 +103,41 @@ describe('book status control', () => {
 // DOM node identity is what catches a rebuild: a rebuilt editor is a different
 // element, and has lost the cursor and undo history.
 describe('editor stability', () => {
+  it('creates one review and saves the newest text when the first save is still pending', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let finishCreate!: (note: Note) => void
+    const created = new Promise<Note>((resolve) => {
+      finishCreate = resolve
+    })
+    const createNote = vi.fn<(input: NewNote) => Promise<Note>>(() => created)
+    const bridge = installBridge({ books: [makeBook()] }, { createNote })
+    const view = renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
+    try {
+      await screen.findByTestId('editor')
+      const dom = document.querySelector<HTMLElement>('.note-prose')!
+      for (const text of ['First draft', 'Newest draft']) {
+        await act(async () => {
+          dom.innerHTML = `<p>${text}</p>`
+          dom.dispatchEvent(new Event('input', { bubbles: true }))
+        })
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(800)
+        })
+      }
+      // Leaving immediately must still finish both writes to the same review.
+      view.unmount()
+      expect(createNote).toHaveBeenCalledTimes(1)
+      const note = makeNote({ id: 90, bookId: 1, kind: 'review', bodyMd: 'First draft' })
+      bridge.notes.push(note)
+      await act(async () => {
+        finishCreate(note)
+      })
+      await waitFor(() => expect(bridge.notes[0].bodyMd).toBe('Newest draft'))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('survives a refetch triggered by a status change', async () => {
     const user = userEvent.setup()
     installBridge({ books: [makeBook()] })

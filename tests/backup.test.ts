@@ -5,12 +5,13 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createDatabase, MIGRATIONS } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
@@ -21,6 +22,11 @@ import {
   resolveBackupRoot,
   restoreBackup
 } from '../src/main/services/backup'
+
+vi.mock('fs', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('fs')>()
+  return { ...fs, renameSync: vi.fn(fs.renameSync) }
+})
 
 let parent: string
 let live: string
@@ -143,6 +149,37 @@ describe('writing a backup', () => {
 
     expect(counted).toBe(2)
   })
+
+  it('keeps the previous backup when writing its replacement fails', () => {
+    const db = seed()
+    const { dir } = exportBackup(db, parent)
+    const before = readFileSync(join(dir, 'interleaf.db'))
+    db.exec('BEGIN')
+    try {
+      expect(() => exportBackup(db, parent)).toThrow(BackupError)
+      expect(readFileSync(join(dir, 'interleaf.db'))).toEqual(before)
+    } finally {
+      db.exec('ROLLBACK')
+      db.close()
+    }
+  })
+
+  it('keeps the previous database backup if publishing the new file fails', () => {
+    const db = seed()
+    const { dir } = exportBackup(db, parent)
+    const before = readFileSync(join(dir, 'interleaf.db'))
+    books.createBook(db, { title: 'Only in the current library' })
+    vi.mocked(renameSync).mockImplementationOnce(() => {
+      throw new Error('File locked')
+    })
+    try {
+      expect(() => exportBackup(db, parent)).toThrow(/File locked/)
+      expect(readFileSync(join(dir, 'interleaf.db'))).toEqual(before)
+      expect(readdirSync(dir).filter((name) => name.startsWith('.pending-'))).toEqual([])
+    } finally {
+      db.close()
+    }
+  })
 })
 
 describe('finding a backup', () => {
@@ -161,6 +198,52 @@ describe('finding a backup', () => {
 })
 
 describe('restoring a backup', () => {
+  it('upgrades a valid older backup on a copy without modifying the original backup', () => {
+    const db = seed()
+    db.close()
+    const oldDir = join(parent, 'old-backup')
+    mkdirSync(oldDir)
+    const oldPath = join(oldDir, 'interleaf.db')
+    const old = createDatabase(oldPath, 18)
+    books.createBook(old, { title: 'From an older build', rating: 4 })
+    old.close()
+    const original = readFileSync(oldPath)
+
+    restoreBackup(oldDir, live)
+
+    const restored = createDatabase(live)
+    try {
+      expect(restored.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
+      expect(books.listBooks(restored)[0]).toMatchObject({
+        title: 'From an older build',
+        rating: 4
+      })
+      expect(readFileSync(oldPath)).toEqual(original)
+    } finally {
+      restored.close()
+    }
+  })
+
+  it('keeps the installed database and previous recovery copy if publishing a restore fails', () => {
+    const db = seed()
+    const { dir } = exportBackup(db, parent)
+    books.createBook(db, { title: 'Not in the backup' })
+    db.close()
+    const before = readFileSync(live)
+    const priorRecovery = `${live}.previous.bak`
+    writeFileSync(priorRecovery, before)
+    vi.mocked(renameSync).mockImplementationOnce(() => {
+      throw new Error('File locked')
+    })
+
+    expect(() => restoreBackup(dir, live)).toThrow(/File locked/)
+    expect(readFileSync(live)).toEqual(before)
+    expect(readFileSync(priorRecovery)).toEqual(before)
+    expect(
+      readdirSync(join(parent, 'library')).filter((name) => name.startsWith('.restore-'))
+    ).toEqual([])
+  })
+
   it('puts the library back, with its ratings and its dates', () => {
     const db = seed()
     const { dir } = exportBackup(db, parent)
@@ -269,5 +352,20 @@ describe('restoring a backup', () => {
     } finally {
       untouched.close()
     }
+  })
+
+  it('checks that an older backup can be upgraded before replacing the library', () => {
+    const db = seed()
+    db.close()
+    const oldDir = join(parent, 'broken-old-backup')
+    mkdirSync(oldDir)
+    const old = createDatabase(join(oldDir, 'interleaf.db'), 18)
+    old.exec('DROP TABLE calibre_book')
+    old.close()
+    const before = readFileSync(live)
+
+    expect(() => restoreBackup(oldDir, live)).toThrow()
+    expect(readFileSync(live)).toEqual(before)
+    expect(readdirSync(join(parent, 'library')).filter((name) => name.endsWith('.bak'))).toEqual([])
   })
 })

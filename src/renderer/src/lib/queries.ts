@@ -67,13 +67,21 @@ const keys = {
 }
 
 // Anything a note write can affect.
-function invalidateNotes(client: QueryClient): void {
-  void client.invalidateQueries({ queryKey: keys.notes })
-  void client.invalidateQueries({ queryKey: ['note'] })
+async function invalidateNotes(client: QueryClient): Promise<void> {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: keys.notes }),
+    client.invalidateQueries({ queryKey: ['note'] }),
+    client.invalidateQueries({ queryKey: ['search'] }),
+    client.invalidateQueries({ queryKey: keys.dataCounts })
+  ])
 }
 
-function invalidateBooks(client: QueryClient): void {
-  void client.invalidateQueries({ queryKey: keys.books })
+async function invalidateBooks(client: QueryClient): Promise<void> {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: keys.books }),
+    client.invalidateQueries({ queryKey: ['search'] }),
+    client.invalidateQueries({ queryKey: keys.dataCounts })
+  ])
 }
 
 // The list and the tree are one scoring; they go stale together.
@@ -201,7 +209,10 @@ export function useCreateBook(): UseMutationResult<Book, Error, NewBook> {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (input: NewBook) => api().createBook(input),
-    onSuccess: () => invalidateBooks(client)
+    onSuccess: () => {
+      invalidateRecommendations(client)
+      return invalidateBooks(client)
+    }
   })
 }
 
@@ -209,7 +220,10 @@ export function useAddFromOpenLibrary(): UseMutationResult<Book, Error, OlBookDt
   const client = useQueryClient()
   return useMutation({
     mutationFn: (dto: OlBookDto) => api().addBookFromOpenLibrary(dto),
-    onSuccess: () => invalidateBooks(client)
+    onSuccess: () => {
+      invalidateRecommendations(client)
+      return invalidateBooks(client)
+    }
   })
 }
 
@@ -245,6 +259,7 @@ export function useDeleteBook(): UseMutationResult<void, Error, number> {
     onSuccess: () => {
       invalidateBooks(client)
       invalidateNotes(client)
+      invalidateRecommendations(client)
     }
   })
 }
@@ -271,6 +286,7 @@ export function useEnrichBook(): UseMutationResult<Book | null, Error, number> {
     onSuccess: (_book, bookId) => {
       invalidateBooks(client)
       void client.invalidateQueries({ queryKey: keys.metadata(bookId) })
+      invalidateRecommendations(client)
     }
   })
 }
@@ -399,7 +415,11 @@ export function useDismissRecommendation(): UseMutationResult<void, Error, strin
   const client = useQueryClient()
   return useMutation({
     mutationFn: (olid: string) => api().dismissRecommendation(olid),
-    onSuccess: () => invalidateRecommendations(client)
+    onSuccess: () => {
+      invalidateRecommendations(client)
+      void client.invalidateQueries({ queryKey: keys.dismissed })
+      void client.invalidateQueries({ queryKey: keys.dataCounts })
+    }
   })
 }
 

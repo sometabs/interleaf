@@ -57,6 +57,8 @@ async function enrichSelectedBook(
   if (!book) return null
 
   const workResult = book.olid ? await fetchWork(book.olid) : null
+  // The reader can edit or delete the row while the request is in flight.
+  if (!books.getBook(db, bookId)) return null
   const work = workResult?.kind === 'ok' ? workResult.work : null
   const subjects = knownSubjects.length > 0 ? [...knownSubjects] : (work?.subjects ?? [])
   const description = work?.description ?? knownDescription
@@ -68,9 +70,12 @@ async function enrichSelectedBook(
     })
   }
 
-  if (knownCoverId !== null && !book.coverPath) {
+  if (knownCoverId !== null && !books.getBook(db, bookId)?.coverPath) {
     const fileName = await cacheCover(bookId, knownCoverId)
-    if (fileName) books.updateBook(db, bookId, { coverPath: fileName })
+    const current = books.getBook(db, bookId)
+    if (fileName && current && !current.coverPath) {
+      books.updateBook(db, bookId, { coverPath: fileName })
+    }
   }
 
   return books.getBook(db, bookId)
@@ -104,6 +109,14 @@ async function refreshKnownBook(db: Database, book: Book): Promise<RefreshOneRes
     return { kind: 'failed', reason: 'Open Library no longer has this Work ID.' }
   }
   const work = workResult.work
+  const current = books.getBook(db, book.id)
+  if (!current) return { kind: 'failed', reason: 'This book was deleted during the refresh.' }
+  if (current.olid !== book.olid) {
+    return {
+      kind: 'failed',
+      reason: 'This book’s Open Library Work ID changed during the refresh.'
+    }
+  }
   const existingMetadata = getBookMetadata(db, book.id)
   const subjects =
     refreshedWork.subjects.length > 0
@@ -116,8 +129,8 @@ async function refreshKnownBook(db: Database, book: Book): Promise<RefreshOneRes
 
   db.transaction(() => {
     books.updateBook(db, book.id, {
-      pageCount: book.pageCount ?? refreshedWork.pageCount,
-      publishedYear: book.publishedYear ?? refreshedWork.publishedYear
+      pageCount: current.pageCount ?? refreshedWork.pageCount,
+      publishedYear: current.publishedYear ?? refreshedWork.publishedYear
     })
     saveBookMetadata(db, book.id, { subjects, description, raw: work.raw })
   })()

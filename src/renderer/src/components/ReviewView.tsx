@@ -89,7 +89,7 @@ export default function ReviewView({ noteId }: Props): ReactNode {
           key={review.id}
           value={review.bodyMd}
           placeholder="What did you make of it?"
-          onSave={(text) => updateNote.mutate({ id: review.id, patch: { bodyMd: text } })}
+          onSave={(text) => updateNote.mutateAsync({ id: review.id, patch: { bodyMd: text } })}
         />
       </div>
     </div>

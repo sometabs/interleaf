@@ -305,7 +305,7 @@ export default function Quotes(): ReactNode {
                 quote={quote}
                 open={openId === quote.id}
                 onToggle={() => toggle(quote)}
-                onSave={(text) => updateNote.mutate({ id: quote.id, patch: { bodyMd: text } })}
+                onSave={(text) => updateNote.mutateAsync({ id: quote.id, patch: { bodyMd: text } })}
                 onDelete={() => void remove(quote)}
                 source={
                   openId === quote.id ? (

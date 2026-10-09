@@ -57,15 +57,21 @@ function registerFunctions(db: Database.Database): void {
 export function createDatabase(filePath: string, upTo = MIGRATIONS.length): Database.Database {
   const db = new Database(filePath)
 
-  // WAL reads alongside a write and survives crashes better than the default
-  // rollback journal. A no-op for :memory:.
-  db.pragma('journal_mode = WAL')
-  db.pragma('synchronous = NORMAL')
-  db.pragma('foreign_keys = ON')
+  try {
+    // WAL reads alongside a write and survives crashes better than the default
+    // rollback journal. A no-op for :memory:.
+    db.pragma('journal_mode = WAL')
+    db.pragma('synchronous = NORMAL')
+    db.pragma('foreign_keys = ON')
 
-  registerFunctions(db)
-  applyMigrations(db, upTo)
-  return db
+    registerFunctions(db)
+    applyMigrations(db, upTo)
+    return db
+  } catch (err) {
+    // Failed opens must not leave the file locked, especially during restore.
+    db.close()
+    throw err
+  }
 }
 
 function applyMigrations(db: Database.Database, upTo: number): void {

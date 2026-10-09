@@ -43,6 +43,49 @@ async function type(dom: HTMLElement, text: string): Promise<void> {
 }
 
 describe('Editor lifecycle', () => {
+  it('does not replace newer text with an older save result while writes are pending', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    installBridge()
+    let finishSave!: () => void
+    const saved = new Promise<void>((resolve) => {
+      finishSave = resolve
+    })
+    const onSave = vi.fn(() => saved)
+    const view = renderApp(<Editor value="Original" onSave={onSave} />)
+    try {
+      const dom = domAt(0)
+      await type(dom, 'First save')
+      await type(dom, 'Newest writing')
+      view.rerender(<Editor value="First save" onSave={onSave} />)
+      expect(dom.textContent).toBe('Newest writing')
+      await act(async () => {
+        finishSave()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('retains a failed save for the final flush when leaving the editor', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    installBridge()
+    const onSave = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Disk full'))
+      .mockResolvedValue(undefined)
+    const view = renderApp(<Editor value="Original" onSave={onSave} />)
+    try {
+      await type(domAt(0), 'Keep this writing')
+      await act(async () => {
+        view.unmount()
+      })
+      expect(onSave).toHaveBeenCalledTimes(2)
+      expect(onSave).toHaveBeenLastCalledWith('Keep this writing')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('mounts exactly one editor under StrictMode', async () => {
     installBridge()
     renderApp(

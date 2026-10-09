@@ -262,6 +262,26 @@ describe('importing highlights', () => {
     expect(notes.listNotes(db)).toHaveLength(0)
   })
 
+  it('rolls back highlights and remembered matches if a later highlight cannot be saved', () => {
+    const book = books.createBook(db, { title: 'Frankenstein' })
+    db.exec(`CREATE TRIGGER fail_second_import BEFORE INSERT ON note
+      WHEN new.body_md = 'Rejected passage'
+      BEGIN SELECT RAISE(ABORT, 'Simulated write failure'); END`)
+    const file = exportFile([
+      annotation(),
+      annotation({ uuid: 'second', highlighted_text: 'Rejected passage' })
+    ])
+
+    expect(() => runImport(db, file, [{ sourceKey: '42', bookId: book.id }])).toThrow(
+      /Simulated write failure/
+    )
+    expect(notes.listNotes(db)).toHaveLength(0)
+    expect(planImport(db, file).books[0].bookId).toBeNull()
+
+    db.exec('DROP TRIGGER fail_second_import')
+    expect(runImport(db, file, [{ sourceKey: '42', bookId: book.id }]).imported).toBe(2)
+  })
+
   it('forgets the match when the book is deleted', () => {
     const book = books.createBook(db, { title: 'Frankenstein' })
     runImport(db, exportFile([annotation()]), [{ sourceKey: '42', bookId: book.id }])

@@ -9,7 +9,7 @@ interface Props {
   quote: Note
   open: boolean
   onToggle: () => void
-  onSave: (text: string) => void
+  onSave: (text: string) => void | Promise<unknown>
   onChange?: (text: string) => void
   onDelete: () => void
   // Where the quote came from: a book name, or a control for choosing one.

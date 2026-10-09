@@ -10,7 +10,7 @@ interface Props {
   value: string
   placeholder?: string
   // Called after the debounce settles, and immediately on unmount.
-  onSave: (value: string) => void
+  onSave: (value: string) => void | Promise<unknown>
   // Unlike onSave, this reports every edit immediately. Draft screens use it
   // to decide whether Done has something worth storing.
   onChange?: (value: string) => void
@@ -36,6 +36,7 @@ export default function Editor({
   const fontSize = useNoteFontSize()
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingRef = useRef<string | null>(null)
+  const savingRef = useRef(0)
 
   // A save round-trips through the database and returns as a new `value`,
   // which without this reads as an outside edit.
@@ -57,7 +58,21 @@ export default function Editor({
     if (pendingRef.current !== null) {
       const text = pendingRef.current
       pendingRef.current = null
-      onSaveRef.current(text)
+      const save = onSaveRef.current(text)
+      if (save) {
+        savingRef.current++
+        void save
+          .catch(() => {
+            // The mutation reports the error. Keep the latest failed text so
+            // leaving the editor can flush it again, without losing newer edits.
+            if (emittedRef.current === text && pendingRef.current === null) {
+              pendingRef.current = text
+            }
+          })
+          .finally(() => {
+            savingRef.current--
+          })
+      }
     }
   }, [])
 
@@ -90,7 +105,7 @@ export default function Editor({
   // Never over unsaved keystrokes, and never when the markdown is what this
   // editor produced, which is what a save round-trip looks like.
   useEffect(() => {
-    if (!editor || pendingRef.current !== null) return
+    if (!editor || pendingRef.current !== null || savingRef.current > 0) return
     if (value === emittedRef.current) return
     emittedRef.current = value
     editor.commands.setContent(markdownToHtml(value), { emitUpdate: false })

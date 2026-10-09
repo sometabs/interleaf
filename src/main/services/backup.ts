@@ -1,8 +1,18 @@
 import Database from 'better-sqlite3'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs'
+import { randomUUID } from 'crypto'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync
+} from 'fs'
 import { basename, dirname, join } from 'path'
 
-import { MIGRATIONS } from '../db/database'
+import { createDatabase, MIGRATIONS } from '../db/database'
 import { writeVault } from './vault'
 
 const BACKUP_DIR = 'interleaf-backup'
@@ -93,20 +103,22 @@ export function exportBackup(
   const dir = join(parent, BACKUP_DIR)
   mkdirSync(dir, { recursive: true })
 
-  const target = join(dir, DB_NAME)
-  // VACUUM INTO refuses an existing file, and a backup replaces its predecessor.
-  rmSync(target, { force: true })
-
+  const pendingDir = mkdtempSync(join(dir, '.pending-'))
   try {
     // A snapshot, not a file copy: WAL keeps recent writes outside the .db.
+    const target = join(pendingDir, DB_NAME)
     db.prepare('VACUUM INTO ?').run(target)
+    const covers = copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db))
+    const files = writeVault(db, dir, coversDir)
+    const result = { dir, ...counts(db), covers, files }
+    // Only replace the restorable database after the new export has finished.
+    renameSync(target, join(dir, DB_NAME))
+    return result
   } catch (err) {
     throw new BackupError(`The backup could not be written. ${(err as Error).message}`)
+  } finally {
+    rmSync(pendingDir, { recursive: true, force: true })
   }
-
-  const covers = copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db))
-  const files = writeVault(db, dir, coversDir)
-  return { dir, ...counts(db), covers, files }
 }
 
 // The backup folder, or the folder it was written into.
@@ -179,23 +191,43 @@ export function restoreBackup(
   }
 
   const source = join(root, DB_NAME)
-  const found = assertRestorable(source)
+  assertRestorable(source)
+  const pendingDir = mkdtempSync(join(dirname(dbPath), '.restore-'))
+  try {
+    const target = join(pendingDir, DB_NAME)
+    // Capture WAL too if the chosen folder contains an uncheckpointed database.
+    const sourceDb = readable(source)
+    try {
+      sourceDb.prepare('VACUUM INTO ?').run(target)
+    } finally {
+      sourceDb.close()
+    }
+    // Test upgrades on the staged copy, never on the installed library or backup.
+    const staged = createDatabase(target)
+    try {
+      if (staged.pragma('quick_check', { simple: true }) !== 'ok') {
+        throw new BackupError('That backup contains a damaged database.')
+      }
+    } finally {
+      staged.close()
+    }
+    const found = assertRestorable(target)
 
-  let replaced: string | null = null
-  if (existsSync(dbPath)) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    replaced = `${dbPath}.${stamp}.bak`
-    copyFileSync(dbPath, replaced)
-    // Only the newest is an undo. Older ones are copies of libraries that were
-    // themselves already replaced, and they never stop accumulating.
-    dropOlderCopies(dbPath, replaced)
+    let replaced: string | null = null
+    if (existsSync(dbPath)) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      replaced = `${dbPath}.${stamp}-${randomUUID()}.bak`
+      copyFileSync(dbPath, replaced)
+    }
+
+    const covers = copyCovers(join(root, COVERS_DIR), coversDir ?? join(root, COVERS_DIR))
+    // The caller has closed the live connection, so these are stale sidecars.
+    for (const suffix of ['-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true })
+    renameSync(target, dbPath)
+    if (replaced) dropOlderCopies(dbPath, replaced)
+
+    return { ...found, covers, replaced }
+  } finally {
+    rmSync(pendingDir, { recursive: true, force: true })
   }
-
-  // The sidecars belong to the database being replaced: left behind, SQLite
-  // would replay them over the restored file.
-  for (const suffix of ['-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true })
-  copyFileSync(source, dbPath)
-
-  const covers = copyCovers(join(root, COVERS_DIR), coversDir ?? join(root, COVERS_DIR))
-  return { ...found, covers, replaced }
 }

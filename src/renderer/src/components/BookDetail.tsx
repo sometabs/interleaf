@@ -1,5 +1,5 @@
 import { BOOK_STATUSES, STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/api'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
@@ -48,6 +48,8 @@ export default function BookDetail({ book }: Props): ReactNode {
   const [openQuoteId, setOpenQuoteId] = useState<number | null>(null)
   const [noteDraft, setNoteDraft] = useState(false)
   const [quoteDraft, setQuoteDraft] = useState(false)
+  const reviewIdRef = useRef<number | null>(null)
+  const reviewSaveRef = useRef<Promise<void>>(Promise.resolve())
 
   const review = notes.find((note) => note.kind === 'review') ?? null
   const thoughts = notes.filter((note) => note.kind !== 'review' && !isQuote(note))
@@ -57,17 +59,27 @@ export default function BookDetail({ book }: Props): ReactNode {
     updateBook.mutate({ id: book.id, patch: statusPatch(status) })
   }
 
-  function saveReview(text: string): void {
-    if (review) {
-      updateNote.mutate({ id: review.id, patch: { bodyMd: text } })
-    } else if (text.trim()) {
-      createNote.mutate({
-        bookId: book.id,
-        kind: 'review',
-        title: `Review of ${book.title}`,
-        bodyMd: text
+  function saveReview(text: string): Promise<void> {
+    // A new review needs its ID before later autosaves can update it. Queue
+    // those writes, including the final flush when the reader leaves the page.
+    const save = reviewSaveRef.current
+      .catch(() => {})
+      .then(async () => {
+        const id = reviewIdRef.current ?? review?.id
+        if (id !== undefined && id !== null) {
+          await updateNote.mutateAsync({ id, patch: { bodyMd: text } })
+        } else if (text.trim()) {
+          const created = await createNote.mutateAsync({
+            bookId: book.id,
+            kind: 'review',
+            title: `Review of ${book.title}`,
+            bodyMd: text
+          })
+          reviewIdRef.current = created.id
+        }
       })
-    }
+    reviewSaveRef.current = save
+    return save
   }
 
   // The row expands into an editor in place, so the book stays in view.
@@ -425,7 +437,7 @@ export default function BookDetail({ book }: Props): ReactNode {
                       open={openQuoteId === quote.id}
                       onToggle={() => toggleQuote(quote)}
                       onSave={(text) =>
-                        updateNote.mutate({ id: quote.id, patch: { bodyMd: text } })
+                        updateNote.mutateAsync({ id: quote.id, patch: { bodyMd: text } })
                       }
                       onDelete={() => void removeQuote(quote)}
                     />
@@ -469,7 +481,7 @@ export default function BookDetail({ book }: Props): ReactNode {
                         onToggle={() => toggleNote(note)}
                         onRename={(title) => updateNote.mutate({ id: note.id, patch: { title } })}
                         onSave={(text) =>
-                          updateNote.mutate({ id: note.id, patch: { bodyMd: text } })
+                          updateNote.mutateAsync({ id: note.id, patch: { bodyMd: text } })
                         }
                         onOpenPage={() => navigate({ kind: 'note', id: note.id })}
                         onDelete={() => void removeNote(note)}
@@ -613,7 +625,7 @@ function NoteCard({
   bookTitle: string
   onToggle: () => void
   onRename: (title: string) => void
-  onSave: (text: string) => void
+  onSave: (text: string) => void | Promise<unknown>
   onOpenPage: () => void
   onDelete: () => void
 }): ReactNode {

@@ -5,6 +5,8 @@ import { createDatabase } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
 import { getBookMetadata, saveBookMetadata } from '../src/main/repos/metadata'
 
+vi.mock('../src/main/services/covers', () => ({ cacheCover: vi.fn(async () => null) }))
+
 let db: Database
 
 function response(body: unknown, status = 200): Response {
@@ -25,11 +27,37 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  db.close()
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
 describe('adding from Open Library', () => {
+  it('keeps a manual cover chosen while the selected cover is downloading', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ subjects: ['Fiction'] }))
+    )
+    const { cacheCover } = await import('../src/main/services/covers')
+    vi.mocked(cacheCover).mockImplementationOnce(async (bookId) => {
+      books.updateBook(db, bookId, { coverPath: 'book-manual.jpg' })
+      return `book-${bookId}-123.jpg`
+    })
+    const { addFromOpenLibrary } = await import('../src/main/services/library')
+    const pending = addFromOpenLibrary(db, {
+      olid: 'OL1W',
+      editionOlid: 'OL10M',
+      title: 'Selected title',
+      author: 'Selected Author',
+      publishedYear: 1984,
+      coverId: 123,
+      isbn: null,
+      pageCount: 321
+    })
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect((await pending).coverPath).toBe('book-manual.jpg')
+  })
+
   it('saves the selected result without searching for another edition', async () => {
     const fetchMock = vi.fn(async (input: string | URL) => {
       void input
@@ -143,6 +171,76 @@ describe('adding from Open Library', () => {
 })
 
 describe('refreshing the whole library', () => {
+  it('does not attach a response for an old Work ID to a changed book', async () => {
+    const original = books.createBook(db, { title: 'A book', olid: 'OL1W' })
+    saveBookMetadata(db, original.id, { subjects: ['Keep this subject'], description: null })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        if (String(input).includes('/works/')) {
+          books.updateBook(db, original.id, { olid: 'OL2W' })
+          return response({ subjects: ['Wrong work subject'] })
+        }
+        return response({ docs: [{ key: '/works/OL1W', number_of_pages_median: 123 }] })
+      })
+    )
+    const { refreshAllBookMetadata } = await import('../src/main/services/library')
+    const pending = refreshAllBookMetadata(db)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect((await pending).refreshed).toBe(0)
+    expect(getBookMetadata(db, original.id)?.subjects).toEqual(['Keep this subject'])
+    expect(books.getBook(db, original.id)).toMatchObject({ olid: 'OL2W', pageCount: null })
+  })
+
+  it('preserves page counts and years edited while the network request is pending', async () => {
+    const original = books.createBook(db, { title: 'A book', olid: 'OL1W' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        if (String(input).includes('/works/')) {
+          books.updateBook(db, original.id, { pageCount: 456, publishedYear: 1987 })
+          return response({ subjects: ['Updated subject'] })
+        }
+        return response({
+          docs: [{ key: '/works/OL1W', number_of_pages_median: 123, first_publish_year: 2000 }]
+        })
+      })
+    )
+    const { refreshAllBookMetadata } = await import('../src/main/services/library')
+    const pending = refreshAllBookMetadata(db)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect((await pending).refreshed).toBe(1)
+    expect(books.getBook(db, original.id)).toMatchObject({ pageCount: 456, publishedYear: 1987 })
+  })
+
+  it('continues the bulk refresh when a book is deleted during a request', async () => {
+    const deleted = books.createBook(db, { title: 'Deleted during refresh', olid: 'OL1W' })
+    const kept = books.createBook(db, { title: 'Still here', olid: 'OL2W' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = String(input)
+        if (url.includes('/works/')) {
+          if (url.includes('OL1W')) books.deleteBook(db, deleted.id)
+          return response({ subjects: ['Fiction'] })
+        }
+        const id = new URL(url).searchParams.get('q')?.split('/').at(-1)
+        return response({ docs: [{ key: `/works/${id}`, number_of_pages_median: 123 }] })
+      })
+    )
+    const { refreshAllBookMetadata } = await import('../src/main/services/library')
+    const pending = refreshAllBookMetadata(db)
+    const resultPromise = pending.then(
+      (result) => ({ result }),
+      (error: unknown) => ({ error })
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    const outcome = await resultPromise
+    expect(outcome).toMatchObject({ result: { refreshed: 1, offline: false } })
+    expect(books.getBook(db, deleted.id)).toBeNull()
+    expect(books.getBook(db, kept.id)?.pageCount).toBe(123)
+  })
+
   it('reports a missing Work without treating Open Library as offline', async () => {
     vi.stubGlobal(
       'fetch',

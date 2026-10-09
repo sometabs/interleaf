@@ -99,7 +99,7 @@ export default function NoteView({ noteId }: Props): ReactNode {
           placeholder="Write freely."
           tag={note.tag}
           onTagChange={(tag) => updateNote.mutate({ id: noteId, patch: { tag } })}
-          onSave={(text) => updateNote.mutate({ id: note.id, patch: { bodyMd: text } })}
+          onSave={(text) => updateNote.mutateAsync({ id: note.id, patch: { bodyMd: text } })}
         />
       </div>
     </div>
