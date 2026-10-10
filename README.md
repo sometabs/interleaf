@@ -104,10 +104,12 @@ Candidates remain cached for offline ranking, and can be dismissed or added to y
 cached pool against that book alone. You can use those results immediately or run a targeted online
 search for more candidates.
 
-**Stats.** See all-time books and pages read, this year's completed books by month, library status,
+**Stats.** See all-time books and pages read, completed books by month for a selected year, library status,
 ratings, top authors, and review, note and quote totals. Statistics are calculated locally from the
 library you already maintain, including manually added books. Page totals count only read books
-with a known page count; the monthly chart requires a finished date in the current year.
+with a known page count. The year selector defaults to the current year and includes earlier years
+with completed books. Choose All time for totals across all read books and completions by year.
+Charts require a finished date; undated read books still count in all-time totals.
 
 **Highlights from Calibre or Kindle.** Read a Calibre annotations export or Kindle My Clippings file
 straight into Interleaf, preserving dates when they can be parsed. Match each source book to your

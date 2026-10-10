@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { calculateStats } from '../src/renderer/src/lib/stats'
+import { calculateStats, readingYears } from '../src/renderer/src/lib/stats'
 import { makeBook, makeNote } from './helpers/render'
 
 function date(year: number, month: number, day: number): number {
@@ -8,6 +8,44 @@ function date(year: number, month: number, day: number): number {
 }
 
 describe('library statistics', () => {
+  it('groups dated read books by year while keeping undated books in all-time totals', () => {
+    const stats = calculateStats(
+      [
+        makeBook({ status: 'read', pageCount: 100, finishedAt: date(2026, 0, 1) }),
+        makeBook({ status: 'read', pageCount: 200, finishedAt: date(2024, 5, 1) }),
+        makeBook({ status: 'read', pageCount: null, finishedAt: date(2024, 8, 1) }),
+        makeBook({ status: 'read', pageCount: 300, finishedAt: null }),
+        makeBook({ status: 'read', finishedAt: NaN }),
+        makeBook({ status: 'reading', pageCount: 500, finishedAt: date(2023, 0, 1) })
+      ],
+      [],
+      2026
+    )
+    expect(stats.yearlyCompletions).toEqual([
+      { label: '2024', count: 2 },
+      { label: '2026', count: 1 }
+    ])
+    expect(stats).toMatchObject({ readBooks: 5, pagesRead: 600, pageCountsKnown: 3 })
+    expect(calculateStats([], [], 2026).yearlyCompletions).toEqual([])
+  })
+
+  it('offers the current year and distinct dated reading years, newest first', () => {
+    expect(
+      readingYears(
+        [
+          makeBook({ status: 'read', finishedAt: date(2024, 0, 1) }),
+          makeBook({ status: 'read', finishedAt: date(2024, 5, 1) }),
+          makeBook({ status: 'read', finishedAt: date(2025, 0, 1) }),
+          makeBook({ status: 'reading', finishedAt: date(2023, 0, 1) }),
+          makeBook({ status: 'read', finishedAt: null }),
+          makeBook({ status: 'read', finishedAt: NaN })
+        ],
+        2026
+      )
+    ).toEqual([2026, 2025, 2024])
+    expect(readingYears([], 2027)).toEqual([2027])
+  })
+
   it('summarizes the shelf, current year and journal without inventing missing pages', () => {
     const books = [
       makeBook({

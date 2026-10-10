@@ -1,14 +1,23 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { useBooks, useNotes } from '../lib/queries'
-import { calculateStats, type CountedLabel } from '../lib/stats'
+import { calculateStats, readingYears, type CountedLabel } from '../lib/stats'
 
 const number = new Intl.NumberFormat()
 
 export default function Stats(): ReactNode {
   const { data: books = [], isPending: booksPending } = useBooks()
   const { data: notes = [], isPending: notesPending } = useNotes()
-  const stats = calculateStats(books, notes, new Date().getFullYear())
+  const currentYear = new Date().getFullYear()
+  const [selectedYear, setSelectedYear] = useState<number | 'all' | null>(null)
+  const years = readingYears(books, currentYear)
+  const allTime = selectedYear === 'all'
+  const year =
+    typeof selectedYear === 'number' && years.includes(selectedYear) ? selectedYear : currentYear
+  const stats = calculateStats(books, notes, year)
+  const periodBooks = allTime ? stats.readBooks : stats.yearBooks
+  const periodPages = allTime ? stats.pagesRead : stats.yearPages
+  const periodPageCountsKnown = allTime ? stats.pageCountsKnown : stats.yearPageCountsKnown
 
   if (booksPending || notesPending) return <div className="h-full" />
 
@@ -47,19 +56,48 @@ export default function Stats(): ReactNode {
         </section>
 
         <section aria-labelledby="year-heading" className="mt-8">
-          <h2 id="year-heading" className="eyebrow mb-2">
-            {stats.year}
-          </h2>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 id="year-heading" className="eyebrow">
+              Reading by year
+            </h2>
+            <select
+              aria-label="Statistics year"
+              value={allTime ? 'all' : year}
+              onChange={(event) =>
+                setSelectedYear(event.target.value === 'all' ? 'all' : Number(event.target.value))
+              }
+              className="rounded-control border border-hairline-strong bg-surface px-2 py-1 text-[13px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <option value="all">All time</option>
+              {years.map((availableYear) => (
+                <option key={availableYear} value={availableYear}>
+                  {availableYear}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="card grid gap-6 p-5 md:grid-cols-[180px_1fr]">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
-              <SmallMetric label="Books finished" value={number.format(stats.yearBooks)} />
+              <SmallMetric label="Books finished" value={number.format(periodBooks)} />
               <SmallMetric
                 label="Pages read"
-                value={number.format(stats.yearPages)}
-                detail={pageCoverage(stats.yearPageCountsKnown, stats.yearBooks)}
+                value={number.format(periodPages)}
+                detail={pageCoverage(periodPageCountsKnown, periodBooks)}
               />
             </div>
-            <MonthlyChart months={stats.months} />
+            <div className="min-w-0">
+              <CompletionChart
+                rows={allTime ? stats.yearlyCompletions : stats.months}
+                period={allTime ? 'year' : 'month'}
+              />
+              {allTime &&
+                stats.readBooks >
+                  stats.yearlyCompletions.reduce((total, row) => total + row.count, 0) && (
+                  <p className="mt-3 text-[11px] text-ink-faint">
+                    Books without a finished date are included in totals, but not the chart.
+                  </p>
+                )}
+            </div>
           </div>
         </section>
 
@@ -170,43 +208,60 @@ function SmallMetric({
   )
 }
 
-function MonthlyChart({ months }: { months: CountedLabel[] }): ReactNode {
-  const maximum = Math.max(0, ...months.map((month) => month.count))
+function CompletionChart({
+  rows,
+  period
+}: {
+  rows: CountedLabel[]
+  period: 'month' | 'year'
+}): ReactNode {
+  const maximum = Math.max(0, ...rows.map((row) => row.count))
 
   return (
     <div>
-      <p className="mb-3 text-[12px] text-ink-muted">Books finished by month</p>
-      <div className="flex h-40 items-end gap-2 border-b border-hairline-strong px-1">
-        {months.map((month) => {
-          const height = maximum === 0 ? 0 : Math.max(7, (month.count / maximum) * 128)
-          return (
-            <div
-              key={month.label}
-              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
-              aria-label={`${month.label}: ${month.count} ${month.count === 1 ? 'book' : 'books'}`}
-            >
-              {month.count > 0 && (
-                <span className="mb-1 text-[10px] tabular-nums text-ink-muted">{month.count}</span>
-              )}
+      <p className="mb-3 text-[12px] text-ink-muted">Books finished by {period}</p>
+      <div className="overflow-x-auto">
+        <div style={period === 'year' ? { minWidth: rows.length * 48 } : undefined}>
+          <div className="flex h-40 items-end gap-2 border-b border-hairline-strong px-1">
+            {rows.map((row) => {
+              const height = row.count === 0 ? 0 : Math.max(7, (row.count / maximum) * 128)
+              return (
+                <div
+                  key={row.label}
+                  className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+                  aria-label={`${row.label}: ${row.count} ${row.count === 1 ? 'book' : 'books'}`}
+                >
+                  {row.count > 0 && (
+                    <span className="mb-1 text-[10px] tabular-nums text-ink-muted">
+                      {row.count}
+                    </span>
+                  )}
+                  <span
+                    className="w-full max-w-8 rounded-t-[2px] bg-accent"
+                    style={{ height }}
+                    aria-hidden="true"
+                  />
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-1 flex gap-2 px-1" aria-hidden="true">
+            {rows.map((row) => (
               <span
-                className="w-full max-w-8 rounded-t-[2px] bg-accent"
-                style={{ height }}
-                aria-hidden="true"
-              />
-            </div>
-          )
-        })}
-      </div>
-      <div className="mt-1 flex gap-2 px-1" aria-hidden="true">
-        {months.map((month) => (
-          <span key={month.label} className="min-w-0 flex-1 text-center text-[9px] text-ink-faint">
-            {month.label.slice(0, 1)}
-          </span>
-        ))}
+                key={row.label}
+                className="min-w-0 flex-1 text-center text-[9px] text-ink-faint"
+              >
+                {period === 'year' ? row.label : row.label.slice(0, 1)}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
       {maximum === 0 && (
         <p className="mt-3 text-center text-[11px] text-ink-faint">
-          No books with completion dates this year.
+          {period === 'year'
+            ? 'No books with completion dates yet.'
+            : 'No books with completion dates for the selected year.'}
         </p>
       )}
     </div>

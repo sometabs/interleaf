@@ -18,6 +18,7 @@ export interface LibraryStats {
   yearPages: number
   yearPageCountsKnown: number
   months: CountedLabel[]
+  yearlyCompletions: CountedLabel[]
   statuses: (CountedLabel & { status: BookStatus })[]
   ratings: (CountedLabel & { rating: number })[]
   topAuthors: CountedLabel[]
@@ -29,6 +30,16 @@ export interface LibraryStats {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+export function readingYears(books: readonly Book[], currentYear: number): number[] {
+  const years = new Set([currentYear])
+  for (const book of books) {
+    if (book.status !== 'read' || book.finishedAt === null) continue
+    const year = new Date(book.finishedAt * 1000).getFullYear()
+    if (Number.isFinite(year)) years.add(year)
+  }
+  return [...years].sort((left, right) => right - left)
+}
 
 export function calculateStats(
   books: readonly Book[],
@@ -47,6 +58,17 @@ export function calculateStats(
   for (const book of finishedThisYear) {
     months[new Date((book.finishedAt as number) * 1000).getMonth()].count += 1
   }
+
+  const completionsByYear = new Map<number, number>()
+  for (const book of read) {
+    if (book.finishedAt === null) continue
+    const finishedYear = new Date(book.finishedAt * 1000).getFullYear()
+    if (!Number.isFinite(finishedYear)) continue
+    completionsByYear.set(finishedYear, (completionsByYear.get(finishedYear) ?? 0) + 1)
+  }
+  const yearlyCompletions = [...completionsByYear]
+    .sort(([left], [right]) => left - right)
+    .map(([finishedYear, count]) => ({ label: String(finishedYear), count }))
 
   const statusOrder: BookStatus[] = ['reading', 'want', 'read', 'abandoned']
   const statuses = statusOrder.map((status) => ({
@@ -90,6 +112,7 @@ export function calculateStats(
     yearPages: yearWithPages.reduce((total, book) => total + (book.pageCount as number), 0),
     yearPageCountsKnown: yearWithPages.length,
     months,
+    yearlyCompletions,
     statuses,
     ratings,
     topAuthors,
