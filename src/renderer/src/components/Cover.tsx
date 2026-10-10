@@ -119,7 +119,7 @@ export default function Cover({
           ) : (
             <div className="relative ml-[8%] flex h-full flex-col items-center justify-center px-[12%] py-[14%] text-center">
               <span
-                className="line-clamp-4 font-semibold leading-tight"
+                className="line-clamp-4 min-w-0 w-full wrap-anywhere font-semibold leading-tight"
                 style={{
                   fontFamily: 'var(--font-read)',
                   fontSize: 'clamp(10px, 11cqw, 17px)'
@@ -134,7 +134,7 @@ export default function Cover({
                     style={{ backgroundColor: palette.detail }}
                   />
                   <span
-                    className="line-clamp-2 leading-tight opacity-85"
+                    className="line-clamp-2 min-w-0 w-full wrap-anywhere leading-tight opacity-85"
                     style={{ fontSize: 'clamp(7px, 7.5cqw, 11px)' }}
                   >
                     {author}

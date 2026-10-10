@@ -10,7 +10,7 @@ searches, metadata refreshes, availability checks and the optional Advanced mode
 are downloaded and cached as needed when books are added or displayed. Recommendation ranking
 itself runs locally.
 
-<img src="docs/screenshots/01-library.png" width="700" alt="The library, grouped by reading status, with covers and ratings">
+<img src="docs/screenshots/01-library.png" width="700" alt="The library showing Reading and Want to read books with their covers">
 
 **Discover** ranks cached Open Library books against your shelf and says which of your books each
 one resembles. Standard ranking uses local keyword similarity; Advanced uses a local embedding
@@ -19,9 +19,9 @@ model for meaning-based matching.
 <img src="docs/screenshots/03-discover.png" width="700" alt="Discover, showing recommendations with a because-you-liked line and Open Library subject chips">
 
 Explore recommendations as a tree. Zoom and pan to see how suggestions relate to one another;
-this close-up shows a single branch.
+this view shows part of the tree at 100% zoom.
 
-<img src="docs/screenshots/04-tree.png" width="700" alt="A close-up of a recommendation tree branch, with readable book cards and resemblance percentages">
+<img src="docs/screenshots/04-tree.png" width="700" alt="The recommendation tree at 100% zoom, starting with The Picture of Dorian Gray on the left">
 
 A book page: reading details on the left, with the review, quotes and notes edited in place. The
 sample entries below show a reading journal for _Project Hail Mary_.
@@ -34,7 +34,7 @@ sample entries below show a reading journal for _Project Hail Mary_.
 
 Stats bring your reading progress, ratings and journal activity together in one local overview.
 
-<img src="docs/screenshots/06-stats.png" width="700" alt="Local reading statistics with yearly progress, ratings and journal activity">
+<img src="docs/screenshots/06-stats.png" width="700" alt="Local reading statistics with all-time totals, yearly progress, library status and ratings">
 
 ## Install
 
