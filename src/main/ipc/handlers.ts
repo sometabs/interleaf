@@ -14,6 +14,7 @@ import {
   type SemanticProgress
 } from '../../shared/api'
 import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
+import { assertTrustedIpcSender } from '../security'
 import * as books from '../repos/books'
 import * as data from '../repos/data'
 import * as meta from '../repos/metadata'
@@ -39,6 +40,7 @@ import { stopSemanticWorker } from '../services/semanticWorkerClient'
 
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
+let selectedHighlightExport: string | null = null
 
 function sendMetadataProgress(progress: MetadataRefreshProgress): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -273,6 +275,8 @@ const api: InterleafApi = {
   },
 
   async readHighlightExport() {
+    // A cancelled or invalid new selection must not leave an older file approved.
+    selectedHighlightExport = null
     const file = await pickFile('Choose a highlights export', 'Read this file', [
       {
         name: 'Calibre or Kindle highlights',
@@ -280,10 +284,21 @@ const api: InterleafApi = {
       }
     ])
     if (!file) return null
-    return highlights.planImport(getDb(), file)
+    const plan = highlights.planImport(getDb(), file)
+    selectedHighlightExport = file
+    return plan
   },
   async importHighlights(filePath, links) {
-    return highlights.runImport(getDb(), filePath, links)
+    if (
+      typeof filePath !== 'string' ||
+      !selectedHighlightExport ||
+      filePath !== selectedHighlightExport
+    ) {
+      throw new Error('Choose a highlights export before importing it.')
+    }
+    const result = highlights.runImport(getDb(), selectedHighlightExport, links)
+    selectedHighlightExport = null
+    return result
   },
 
   async getAppDiagnostics() {
@@ -360,7 +375,8 @@ async function pickDirectory(title: string, buttonLabel: string): Promise<string
 
 export function registerIpcHandlers(): void {
   for (const channel of IPC_CHANNELS) {
-    ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      assertTrustedIpcSender(event)
       const handler = api[channel] as (...a: unknown[]) => Promise<unknown>
       try {
         const result = await handler(...args)

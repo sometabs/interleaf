@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, net, protocol } from 'electron'
+import { app, shell, BrowserWindow, net, protocol, session } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -9,6 +9,7 @@ import { referencedCovers } from './services/backup'
 import { resolveUserDataDir } from './db/userdata'
 import { registerIpcHandlers } from './ipc/handlers'
 import { isAppUrl, isExternalLink } from './navigation'
+import { restrictPermissions, trustRenderer } from './security'
 import { coverForId, coversDir, pruneOrphanCovers, resolveCoverPath } from './services/covers'
 
 // Must run before anything touches disk.
@@ -69,6 +70,7 @@ function createWindow(): void {
   const rendererUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
   const indexHtml = join(__dirname, '../renderer/index.html')
   const appUrl = rendererUrl ?? pathToFileURL(indexHtml).toString()
+  trustRenderer(mainWindow.webContents, appUrl)
 
   // No new windows; web links go to the browser.
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -95,6 +97,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.interleaf.app')
+  restrictPermissions(session.defaultSession)
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
