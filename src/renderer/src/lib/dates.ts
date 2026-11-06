@@ -29,6 +29,30 @@ export function fromDateInput(value: string): number | null {
   return Number.isNaN(date.getTime()) ? null : Math.floor(date.getTime() / 1000)
 }
 
+/** Elapsed local-calendar days, not active reading time or 24-hour blocks. */
+export function readingDurationDays(
+  startedAt: number | null,
+  finishedAt: number | null
+): number | null {
+  if (startedAt === null || finishedAt === null || finishedAt < startedAt) return null
+  const start = new Date(startedAt * 1000)
+  const finish = new Date(finishedAt * 1000)
+  // Compare UTC midnights so daylight-saving changes do not alter a day.
+  // setUTCFullYear also avoids Date.UTC's special handling of years below 100.
+  const startDay = new Date(0).setUTCFullYear(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate()
+  )
+  const finishDay = new Date(0).setUTCFullYear(
+    finish.getFullYear(),
+    finish.getMonth(),
+    finish.getDate()
+  )
+  const days = (finishDay - startDay) / 86400000
+  return Number.isFinite(days) ? days : null
+}
+
 /** Recent timestamps read better as a distance than as a date. */
 export function relativeDate(unix: number): string {
   const days = (Date.now() / 1000 - unix) / 86400

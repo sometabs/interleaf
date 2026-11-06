@@ -2,7 +2,7 @@ import { BOOK_STATUSES, STATUS_LABELS, type Book, type BookStatus, type Note } f
 import { useRef, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
-import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
+import { fromDateInput, readingDurationDays, relativeDate, toDateInput } from '../lib/dates'
 import { notify } from '../lib/feedback'
 import {
   useBookMetadata,
@@ -195,6 +195,7 @@ export default function BookDetail({ book }: Props): ReactNode {
   // says so rather than refusing it.
   const backwards =
     book.startedAt !== null && book.finishedAt !== null && book.finishedAt < book.startedAt
+  const duration = readingDurationDays(book.startedAt, book.finishedAt)
 
   return (
     <div className="h-full overflow-y-auto px-8 pt-6 pb-16">
@@ -282,6 +283,19 @@ export default function BookDetail({ book }: Props): ReactNode {
                 </label>
               ))}
             </div>
+
+            {duration !== null && (
+              <p
+                data-testid="reading-duration"
+                aria-live="polite"
+                className="mt-1.5 text-[12px] text-ink-muted"
+                title="Calendar time between the start and finish dates, including breaks. Not active reading time."
+              >
+                {duration === 0
+                  ? 'Finished the same day'
+                  : `Reading duration: ${duration} ${duration === 1 ? 'day' : 'days'}`}
+              </p>
+            )}
 
             {backwards && (
               <p role="status" className="mt-1.5 text-[12px] text-danger">

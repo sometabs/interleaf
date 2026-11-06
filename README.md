@@ -72,6 +72,8 @@ available cover, edition identity and subjects. Page counts use Open Library's w
 falling back to the selected edition's count when available. Nothing found, or offline? Add the book
 manually. Each book is marked _want to read_, _reading_, _read_ or _set aside_, and can be rated out
 of five. Books without usable cover art receive a generated clothbound cover instead of a blank box.
+The book page shows reading duration when both start and finish dates are set. This counts elapsed
+calendar days, including breaks, not active reading time.
 
 **Reading queue.** Every _want to read_ book appears in one ordered list. Drag books or use the
 arrow controls to put them in the order you intend to read them.

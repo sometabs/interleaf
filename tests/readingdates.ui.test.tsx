@@ -138,6 +138,76 @@ describe('typing the reading dates', () => {
   })
 })
 
+describe('reading duration on the book page', () => {
+  it('shows the duration for a manually added book', async () => {
+    const bridge = installBridge({
+      books: [
+        makeBook({
+          id: 1,
+          startedAt: fromDateInput('2026-11-01'),
+          finishedAt: fromDateInput('2026-11-13')
+        })
+      ]
+    })
+    await open(bridge)
+    expect(screen.getByTestId('reading-duration').textContent).toBe('Reading duration: 12 days')
+  })
+
+  it.each([
+    ['2026-11-01', 'Finished the same day'],
+    ['2026-11-02', 'Reading duration: 1 day']
+  ])('handles finishing on %s', async (finish, label) => {
+    const bridge = installBridge({
+      books: [
+        makeBook({
+          id: 1,
+          startedAt: fromDateInput('2026-11-01'),
+          finishedAt: fromDateInput(finish)
+        })
+      ]
+    })
+    await open(bridge)
+    expect(screen.getByTestId('reading-duration').textContent).toBe(label)
+  })
+
+  it('recalculates after either date changes, and hides after a date is cleared', async () => {
+    const bridge = installBridge({
+      books: [
+        makeBook({
+          id: 1,
+          startedAt: fromDateInput('2026-11-01'),
+          finishedAt: fromDateInput('2026-11-13')
+        })
+      ]
+    })
+    await open(bridge)
+    await type('Finished reading', '2026-11-15')
+    await waitFor(() =>
+      expect(screen.getByTestId('reading-duration').textContent).toBe('Reading duration: 14 days')
+    )
+    await type('Started reading', '2026-11-05')
+    await waitFor(() =>
+      expect(screen.getByTestId('reading-duration').textContent).toBe('Reading duration: 10 days')
+    )
+    await type('Finished reading', '')
+    await waitFor(() => expect(screen.queryByTestId('reading-duration')).toBeNull())
+  })
+
+  it.each([
+    [null, null],
+    [fromDateInput('2026-11-01'), null],
+    [null, fromDateInput('2026-11-13')],
+    [fromDateInput('2026-11-13'), fromDateInput('2026-11-01')]
+  ])(
+    'hides the duration for incomplete or backwards dates (%s, %s)',
+    async (startedAt, finishedAt) => {
+      const bridge = installBridge({ books: [makeBook({ id: 1, startedAt, finishedAt })] })
+      await open(bridge)
+      expect(screen.queryByTestId('reading-duration')).toBeNull()
+    }
+  )
+})
+
 // `new Date('2026-08-09')` is UTC midnight, which west of Greenwich is the 8th,
 // so both directions go through the local calendar.
 describe('the date conversion itself', () => {
