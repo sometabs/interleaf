@@ -164,20 +164,20 @@ export default function Data(): ReactNode {
 
   async function onRemoveModel(): Promise<void> {
     const ok = await confirm({
-      title: 'Remove the Advanced model?',
-      body: 'Advanced recommendations will require downloading the model again. Standard recommendations and your library are unaffected.',
+      title: 'Remove the recommendation model?',
+      body: 'Recommendations will use keyword matching until you enable Hybrid again. Your library is unaffected.',
       confirmLabel: 'Remove model',
       destructive: true
     })
     if (!ok) return
     await removeModel.mutateAsync()
-    notify('Advanced model removed')
+    notify('Recommendation model removed')
   }
 
   async function onDeleteEverything(): Promise<void> {
     const ok = await confirm({
       title: 'Delete all library data?',
-      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted. The downloaded Advanced model is kept. This cannot be undone.',
+      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted. The downloaded recommendation model is kept. This cannot be undone.',
       confirmLabel: 'Delete everything',
       destructive: true
     })
@@ -339,7 +339,7 @@ export default function Data(): ReactNode {
             disabled={busy || (counts?.candidates ?? 0) === 0}
           />
           <Row
-            label="Advanced recommendation model"
+            label="Recommendation model"
             detail={
               diagnostics?.advancedModelInstalled
                 ? 'Downloaded locally; it can be downloaded again later'

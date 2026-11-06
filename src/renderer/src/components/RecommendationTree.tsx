@@ -477,7 +477,16 @@ function NodeCard({
         <span className="chip max-w-full truncate text-[10px]">{node.subjects[0]}</span>
       )}
 
-      <span className="text-[10px] tabular-nums text-ink-faint">{percent(node.score)} match</span>
+      <span
+        className="text-[10px] tabular-nums text-ink-faint"
+        title={
+          node.scoreKind === 'fusion'
+            ? 'Combined keyword and meaning-based ranking, not a similarity percentage'
+            : undefined
+        }
+      >
+        {node.scoreKind === 'fusion' ? 'Hybrid match' : `${percent(node.score)} match`}
+      </span>
 
       {/* Icon buttons, so a node stays narrow enough for a wide tree to fit. */}
       <div className="flex h-7 items-center gap-1 pt-0.5">

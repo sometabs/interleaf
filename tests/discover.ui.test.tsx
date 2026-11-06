@@ -80,20 +80,35 @@ describe('author filter removal', () => {
   })
 })
 
-describe('ranking mode', () => {
-  it('starts with cached Standard results and switches locally to Semantic', async () => {
-    const semanticResult = rec({ olid: 'SEM', title: 'A Contextual Match', score: 0.81 })
-    const getSemanticRecommendations = vi.fn(async () => [semanticResult])
-    const getSemanticRecommendationTree = vi.fn(async () => [
-      { ...semanticResult, similarityToParent: null, depth: 0, children: [] }
-    ])
+describe('automatic Hybrid ranking', () => {
+  it('keeps keyword results before first-use consent and exposes no ranking selector', async () => {
+    const getHybridRecommendations = vi.fn(async () => [])
     installBridge(
-      { books: [makeBook({ id: 1, status: 'read', rating: 5 })] },
+      { books: [makeBook()] },
       {
         getRecommendations: async () => ALL,
-        getSemanticRecommendations,
-        getSemanticRecommendationTree,
-        getRecommendationTree: async () => []
+        getHybridRecommendations
+      }
+    )
+    renderApp(<Discover />)
+    await card(ALL[0].title)
+    expect(screen.queryByRole('group', { name: 'Ranking' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Standard' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Advanced' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Enable Hybrid' })).toBeTruthy()
+    expect(getHybridRecommendations).not.toHaveBeenCalled()
+  })
+
+  it('requires download confirmation, then uses Hybrid automatically', async () => {
+    const match = rec({ olid: 'HYB', title: 'A Hybrid Match', scoreKind: 'fusion' })
+    const getHybridRecommendations = vi.fn(async () => [match])
+    const refreshRecommendations = vi.fn()
+    installBridge(
+      { books: [makeBook()] },
+      {
+        getRecommendations: async () => ALL,
+        getHybridRecommendations,
+        refreshRecommendations
       }
     )
     renderApp(
@@ -103,60 +118,170 @@ describe('ranking mode', () => {
       </>
     )
     const user = userEvent.setup()
-
-    expect(await card('The Left Hand of Darkness')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Standard' }).getAttribute('aria-pressed')).toBe(
-      'true'
-    )
-    expect(getSemanticRecommendations).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: 'Advanced' }))
-    expect(screen.getByText('Enable Advanced recommendations?')).toBeTruthy()
-    expect(getSemanticRecommendations).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: 'Enable Advanced' }))
-
-    expect(await card('A Contextual Match')).toBeTruthy()
-    expect(getSemanticRecommendations).toHaveBeenCalledWith({ limit: MIN_SHOWN })
-    expect(screen.getByText(/advanced ranking/)).toBeTruthy()
+    await card(ALL[0].title)
+    await user.click(screen.getByRole('button', { name: 'Enable Hybrid' }))
+    expect(getHybridRecommendations).not.toHaveBeenCalled()
+    expect(screen.getByText(/35 MB/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Enable Hybrid' }))
+    await card(match.title)
+    expect(getHybridRecommendations).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBe('true')
-
-    await user.click(screen.getByRole('button', { name: 'tree' }))
-    await waitFor(() =>
-      expect(getSemanticRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
-    )
+    expect(refreshRecommendations).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Enable Hybrid' })).toBeNull()
   })
 
-  it('remembers Advanced ranking and the tree layout', async () => {
-    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
-    const getSemanticRecommendations = vi.fn(async () => [])
-    const getSemanticRecommendationTree = vi.fn(async () => [])
+  it('keeps keyword results if the download is declined', async () => {
+    const getHybridRecommendations = vi.fn(async () => [])
     installBridge(
-      { books: [makeBook({ id: 1, status: 'read', rating: 5 })] },
+      { books: [makeBook()] },
       {
         getRecommendations: async () => ALL,
-        getRecommendationTree: async () => [],
-        getSemanticRecommendations,
-        getSemanticRecommendationTree
+        getHybridRecommendations
+      }
+    )
+    renderApp(
+      <>
+        <Discover />
+        <ConfirmDialog />
+      </>
+    )
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Enable Hybrid' }))
+    await user.click(screen.getByRole('button', { name: 'Not now' }))
+    await card(ALL[0].title)
+    expect(getHybridRecommendations).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBeNull()
+  })
+
+  it.each(['standard', 'semantic', 'hybrid'])(
+    'ignores the old %s mode choice once the model was approved',
+    async (previous) => {
+      window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+      window.localStorage.setItem('interleaf.recommendationRanking', JSON.stringify(previous))
+      const getHybridRecommendations = vi.fn(async () => ALL)
+      installBridge({ books: [makeBook()] }, { getHybridRecommendations })
+      renderApp(<Discover />)
+      await card(ALL[0].title)
+      expect(getHybridRecommendations).toHaveBeenCalledOnce()
+      expect(screen.getByText(/hybrid ranking/)).toBeTruthy()
+      expect(screen.queryByRole('group', { name: 'Ranking' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Enable Hybrid' })).toBeNull()
+    }
+  )
+
+  it('does not treat an old mode choice as download consent', async () => {
+    window.localStorage.setItem('interleaf.recommendationRanking', '"semantic"')
+    const getHybridRecommendations = vi.fn(async () => [])
+    installBridge(
+      { books: [makeBook()] },
+      {
+        getRecommendations: async () => ALL,
+        getHybridRecommendations
+      }
+    )
+    renderApp(<Discover />)
+    await card(ALL[0].title)
+    expect(getHybridRecommendations).not.toHaveBeenCalled()
+  })
+
+  it('automatically falls back on error and can retry Hybrid', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    const getHybridRecommendations = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('The model could not load'))
+      .mockResolvedValue([rec({ olid: 'HYB', title: 'A Hybrid Match', scoreKind: 'fusion' })])
+    installBridge(
+      { books: [makeBook()] },
+      {
+        getRecommendations: async () => ALL,
+        getHybridRecommendations
+      }
+    )
+    renderApp(<Discover />)
+    await screen.findByText('Hybrid ranking is unavailable. Showing keyword results.')
+    await card(ALL[0].title)
+    await userEvent.click(screen.getByRole('button', { name: 'Retry Hybrid' }))
+    await card('A Hybrid Match')
+    expect(screen.queryByText('Hybrid ranking is unavailable. Showing keyword results.')).toBeNull()
+  })
+
+  it('uses the keyword tree automatically if the model fails', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    window.localStorage.setItem('interleaf.recommendationLayout', '"tree"')
+    installBridge(
+      { books: [makeBook()] },
+      {
+        getRecommendationTree: async () => [
+          { ...ALL[0], similarityToParent: null, depth: 0, children: [] }
+        ],
+        getHybridRecommendationTree: async () => {
+          throw new Error('Model unavailable')
+        }
+      }
+    )
+    renderApp(<Discover />)
+    await screen.findByText('Hybrid ranking is unavailable. Showing keyword results.')
+    await card(ALL[0].title)
+  })
+
+  it('remembers the layout without persisting a ranking-mode choice', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    const getHybridRecommendationTree = vi.fn(async () => [])
+    installBridge(
+      { books: [makeBook()] },
+      {
+        getHybridRecommendations: async () => [],
+        getHybridRecommendationTree
       }
     )
     const first = renderApp(<Discover />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('button', { name: 'Advanced' }))
-    await user.click(screen.getByRole('button', { name: 'tree' }))
-    expect(window.localStorage.getItem('interleaf.recommendationRanking')).toBe('"semantic"')
-    expect(window.localStorage.getItem('interleaf.recommendationLayout')).toBe('"tree"')
-    first.unmount()
-
-    renderApp(<Discover />)
-    expect(
-      (await screen.findByRole('button', { name: 'Advanced' })).getAttribute('aria-pressed')
-    ).toBe('true')
-    expect(screen.getByRole('button', { name: 'tree' }).getAttribute('aria-pressed')).toBe('true')
+    await userEvent.click(await screen.findByRole('button', { name: 'tree' }))
     await waitFor(() =>
-      expect(getSemanticRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
+      expect(getHybridRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     )
+    first.unmount()
+    renderApp(<Discover />)
+    expect(screen.getByRole('button', { name: 'tree' }).getAttribute('aria-pressed')).toBe('true')
+    expect(window.localStorage.getItem('interleaf.recommendationRanking')).toBeNull()
+  })
+
+  it('labels a fused rank without inventing a similarity percentage', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    window.localStorage.setItem('interleaf.recommendationLayout', '"tree"')
+    const hybrid = rec({
+      olid: 'TREE',
+      title: 'Hybrid Tree Match',
+      score: 0.0327,
+      scoreKind: 'fusion'
+    })
+    installBridge(
+      { books: [makeBook()] },
+      {
+        getHybridRecommendationTree: async () => [
+          { ...hybrid, similarityToParent: null, depth: 0, children: [] }
+        ]
+      }
+    )
+    renderApp(<Discover />)
+    expect(await screen.findByText('Hybrid match')).toBeTruthy()
+    expect(screen.queryByText('3% match')).toBeNull()
+  })
+
+  it('uses the selected book without starting an online search', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    const getHybridRecommendations = vi.fn(async () => ALL)
+    const refreshRecommendations = vi.fn()
+    installBridge(
+      { books: [makeBook({ id: 7 })] },
+      {
+        getHybridRecommendations,
+        refreshRecommendations
+      }
+    )
+    renderApp(<Discover />, { kind: 'discover', likeBookId: 7 })
+    await card(ALL[0].title)
+    expect(getHybridRecommendations).toHaveBeenLastCalledWith({ limit: MIN_SHOWN, likeBookId: 7 })
+    expect(refreshRecommendations).not.toHaveBeenCalled()
   })
 })
 

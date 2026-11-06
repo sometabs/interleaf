@@ -51,12 +51,12 @@ const keys = {
   metadata: (bookId: number) => ['metadata', bookId] as const,
   recommendations: ['recommendations'] as const,
   recommendationsFor: (query: RecommendationQuery) => ['recommendations', query] as const,
-  semanticRecommendations: ['semantic-recommendations'] as const,
-  semanticRecommendationsFor: (query: RecommendationQuery) =>
-    ['semantic-recommendations', query] as const,
-  semanticRecommendationTrees: ['semantic-recommendation-trees'] as const,
-  semanticRecommendationTreeFor: (query: RecommendationQuery) =>
-    ['semantic-recommendation-trees', query] as const,
+  hybridRecommendations: ['hybrid-recommendations'] as const,
+  hybridRecommendationsFor: (query: RecommendationQuery) =>
+    ['hybrid-recommendations', query] as const,
+  hybridRecommendationTrees: ['hybrid-recommendation-trees'] as const,
+  hybridRecommendationTreeFor: (query: RecommendationQuery) =>
+    ['hybrid-recommendation-trees', query] as const,
   recommendationTree: ['recommendation-tree'] as const,
   recommendationTreeFor: (query: RecommendationQuery) => ['recommendation-tree', query] as const,
   dismissed: ['dismissed'] as const,
@@ -87,8 +87,8 @@ async function invalidateBooks(client: QueryClient): Promise<void> {
 // The list and the tree are one scoring; they go stale together.
 function invalidateRecommendations(client: QueryClient): void {
   void client.invalidateQueries({ queryKey: keys.recommendations })
-  void client.invalidateQueries({ queryKey: keys.semanticRecommendations })
-  void client.invalidateQueries({ queryKey: keys.semanticRecommendationTrees })
+  void client.invalidateQueries({ queryKey: keys.hybridRecommendations })
+  void client.invalidateQueries({ queryKey: keys.hybridRecommendationTrees })
   void client.invalidateQueries({ queryKey: keys.recommendationTree })
 }
 
@@ -165,25 +165,25 @@ export function useRecommendationTree(
   })
 }
 
-export function useSemanticRecommendations(
+export function useHybridRecommendations(
   query: RecommendationQuery = {},
   enabled = true
 ): UseQueryResult<Recommendation[]> {
   return useQuery({
-    queryKey: keys.semanticRecommendationsFor(query),
-    queryFn: () => api().getSemanticRecommendations(query),
+    queryKey: keys.hybridRecommendationsFor(query),
+    queryFn: () => api().getHybridRecommendations(query),
     enabled,
     retry: false
   })
 }
 
-export function useSemanticRecommendationTree(
+export function useHybridRecommendationTree(
   query: RecommendationQuery = {},
   enabled = true
 ): UseQueryResult<RecommendationNode[]> {
   return useQuery({
-    queryKey: keys.semanticRecommendationTreeFor(query),
-    queryFn: () => api().getSemanticRecommendationTree(query),
+    queryKey: keys.hybridRecommendationTreeFor(query),
+    queryFn: () => api().getHybridRecommendationTree(query),
     enabled,
     retry: false
   })
@@ -510,7 +510,15 @@ export function useRemoveAdvancedModel(): UseMutationResult<boolean, Error, void
   const client = useQueryClient()
   return useMutation({
     mutationFn: () => api().removeAdvancedModel(),
-    onSuccess: () => invalidateEverything(client)
+    onSuccess: () => {
+      // Removing the model must not trigger an automatic re-download later.
+      try {
+        window.localStorage.removeItem('interleaf.advancedDownloadAcknowledged')
+      } catch {
+        // Preference storage may be unavailable; removal must still succeed.
+      }
+      return invalidateEverything(client)
+    }
   })
 }
 

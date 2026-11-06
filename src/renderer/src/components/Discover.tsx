@@ -13,8 +13,8 @@ import {
   useRecommendationTree,
   useRefreshRecommendations,
   useSaveRecommendation,
-  useSemanticRecommendationTree,
-  useSemanticRecommendations,
+  useHybridRecommendationTree,
+  useHybridRecommendations,
   useSemanticProgress
 } from '../lib/queries'
 import { shownFor } from '../lib/shown'
@@ -24,20 +24,14 @@ import Empty from './Empty'
 import RecommendationTree from './RecommendationTree'
 
 type Layout = 'grid' | 'tree'
-type RankingMode = 'standard' | 'semantic'
-
 export default function Discover(): ReactNode {
   const [layout, setLayout] = usePersistentState<Layout>(
     'interleaf.recommendationLayout',
     'grid',
     parseLayout
   )
-  const [rankingMode, setRankingMode] = usePersistentState<RankingMode>(
-    'interleaf.recommendationRanking',
-    'standard',
-    parseRankingMode
-  )
-  const [advancedAcknowledged, setAdvancedAcknowledged] = usePersistentState(
+  // Reuse existing model consent, not the obsolete comparison-mode choice.
+  const [hybridEnabled, setHybridEnabled] = usePersistentState(
     'interleaf.advancedDownloadAcknowledged',
     false,
     (raw) => (typeof raw === 'boolean' ? raw : null)
@@ -56,34 +50,28 @@ export default function Discover(): ReactNode {
 
   const { data: standardRecommendations = [], isPending: standardPending } =
     useRecommendations(query)
-  const semanticRecommendations = useSemanticRecommendations(
-    query,
-    rankingMode === 'semantic' && layout === 'grid'
-  )
-  const standardTree = useRecommendationTree(query, rankingMode === 'standard' && layout === 'tree')
-  const semanticTree = useSemanticRecommendationTree(
-    query,
-    rankingMode === 'semantic' && layout === 'tree'
-  )
+  const hybridRecommendations = useHybridRecommendations(query, hybridEnabled && layout === 'grid')
+  const hybridTree = useHybridRecommendationTree(query, hybridEnabled && layout === 'tree')
+  const activeModelQuery = layout === 'tree' ? hybridTree : hybridRecommendations
+  const modelFailed = hybridEnabled && activeModelQuery.isError
+  const usingModel = hybridEnabled && !modelFailed
+  const standardTree = useRecommendationTree(query, !usingModel && layout === 'tree')
 
   const refresh = useRefreshRecommendations()
   const progress = useHarvestProgress(refresh.isPending)
   const dismiss = useDismissRecommendation()
   const save = useSaveRecommendation()
-  const semanticActive = semanticRecommendations.isFetching || semanticTree.isFetching
-  const semanticProgress = useSemanticProgress(semanticActive)
-  const activeSemanticQuery = layout === 'tree' ? semanticTree : semanticRecommendations
-  const semanticFailed = rankingMode === 'semantic' && activeSemanticQuery.isError
-  const recommendations =
-    rankingMode === 'semantic' ? (semanticRecommendations.data ?? []) : standardRecommendations
-  const tree = rankingMode === 'semantic' ? (semanticTree.data ?? []) : (standardTree.data ?? [])
+  const modelActive = hybridRecommendations.isFetching || hybridTree.isFetching
+  const semanticProgress = useSemanticProgress(modelActive)
+  const recommendations = usingModel ? (hybridRecommendations.data ?? []) : standardRecommendations
+  const tree = usingModel ? (hybridTree.data ?? []) : (standardTree.data ?? [])
   const isPending =
     layout === 'tree'
-      ? rankingMode === 'semantic'
-        ? semanticTree.isPending
+      ? usingModel
+        ? hybridTree.isPending
         : standardTree.isPending
-      : rankingMode === 'semantic'
-        ? semanticRecommendations.isPending
+      : usingModel
+        ? hybridRecommendations.isPending
         : standardPending
   const hasResults = layout === 'tree' ? tree.length > 0 : recommendations.length > 0
 
@@ -106,24 +94,14 @@ export default function Discover(): ReactNode {
     dismiss.mutate(olid)
   }
 
-  async function selectRankingMode(option: RankingMode): Promise<void> {
-    if (option === 'standard') {
-      setRankingMode(option)
-      return
-    }
-
-    if (!advancedAcknowledged) {
-      const accepted = await confirm({
-        title: 'Enable Advanced recommendations?',
-        body: 'This may require a one-time model download of about 35 MB from Hugging Face and an internet connection. Afterward, recommendation matching runs locally.',
-        confirmLabel: 'Enable Advanced',
-        cancelLabel: 'Not now'
-      })
-      if (!accepted) return
-      setAdvancedAcknowledged(true)
-    }
-
-    setRankingMode(option)
+  async function enableHybrid(): Promise<void> {
+    const accepted = await confirm({
+      title: 'Enable Hybrid recommendations?',
+      body: 'Hybrid combines keyword and meaning-based rankings. This may require a one-time model download of about 35 MB from Hugging Face and an internet connection. Afterward, recommendation matching runs locally.',
+      confirmLabel: 'Enable Hybrid',
+      cancelLabel: 'Not now'
+    })
+    if (accepted) setHybridEnabled(true)
   }
 
   function findMore(): void {
@@ -147,37 +125,15 @@ export default function Discover(): ReactNode {
         <div>
           <h1 className="text-[22px]">Discover</h1>
           <p className="mt-1 text-[12px] text-ink-muted">
-            Cached Open Library books ·{' '}
-            {rankingMode === 'semantic' ? 'advanced ranking' : 'standard ranking'}
+            Cached Open Library books · {usingModel ? 'hybrid ranking' : 'keyword ranking'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <div
-            role="group"
-            aria-label="Ranking"
-            className="inline-flex rounded-control bg-sunken p-0.5"
-          >
-            {(['standard', 'semantic'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={rankingMode === option}
-                onClick={() => void selectRankingMode(option)}
-                title={
-                  option === 'semantic'
-                    ? 'Meaning-based matching that runs locally; downloads a roughly 35 MB model on first use'
-                    : 'Fast local keyword similarity'
-                }
-                className={`rounded-control px-2.5 py-1 text-[12px] capitalize transition-colors ${
-                  rankingMode === option
-                    ? 'bg-surface font-medium text-ink shadow-card'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                {option === 'standard' ? 'Standard' : 'Advanced'}
-              </button>
-            ))}
-          </div>
+          {!hybridEnabled && (
+            <button type="button" className="btn btn-outline" onClick={() => void enableHybrid()}>
+              Enable Hybrid
+            </button>
+          )}
 
           <div
             role="group"
@@ -230,23 +186,31 @@ export default function Discover(): ReactNode {
 
       {refresh.isPending && <HarvestProgressPanel progress={progress} />}
 
-      {semanticActive && semanticProgress && <SemanticProgressPanel progress={semanticProgress} />}
+      {modelActive && semanticProgress && <SemanticProgressPanel progress={semanticProgress} />}
 
-      {semanticFailed ? (
-        <section className="card flex items-center justify-between gap-4 px-5 py-4">
+      {modelFailed && (
+        <section
+          role="status"
+          className="card mb-6 flex items-center justify-between gap-4 px-5 py-4"
+        >
           <div>
-            <p className="text-[13px] text-ink">Advanced ranking could not start.</p>
-            <p className="mt-1 text-[12px] text-ink-muted">{activeSemanticQuery.error.message}</p>
+            <p className="text-[13px] text-ink">
+              Hybrid ranking is unavailable. Showing keyword results.
+            </p>
+            <p className="mt-1 text-[12px] text-ink-muted">{activeModelQuery.error?.message}</p>
           </div>
           <button
             type="button"
             className="btn btn-outline shrink-0"
-            onClick={() => setRankingMode('standard')}
+            disabled={activeModelQuery.isFetching}
+            onClick={() => void activeModelQuery.refetch()}
           >
-            Use Standard
+            Retry Hybrid
           </button>
         </section>
-      ) : isPending || (!hasResults && refresh.isPending) ? (
+      )}
+
+      {isPending || (!hasResults && refresh.isPending) ? (
         <div className="h-full" />
       ) : !hasResults ? (
         <Empty
@@ -339,10 +303,6 @@ function recommendationBook(recommendation: Recommendation): OlBookDto {
 
 function parseLayout(raw: unknown): Layout | null {
   return raw === 'grid' || raw === 'tree' ? raw : null
-}
-
-function parseRankingMode(raw: unknown): RankingMode | null {
-  return raw === 'standard' || raw === 'semantic' ? raw : null
 }
 
 function SemanticProgressPanel({

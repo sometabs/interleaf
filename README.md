@@ -6,15 +6,15 @@ A local-first desktop reading journal. Keep a shelf, arrange what to read next, 
 notes, collect the passages worth keeping, and get recommendations ranked against your own library.
 
 Your library and writing are stored on your machine. Internet access is needed for Open Library
-searches, metadata refreshes, availability checks and the optional Advanced model download. Covers
+searches, metadata refreshes, availability checks and the optional model download. Covers
 are downloaded and cached as needed when books are added or displayed. Recommendation ranking
 itself runs locally.
 
 <img src="docs/screenshots/01-library.png" width="700" alt="The library showing Reading and Want to read books with their covers">
 
 **Discover** ranks cached Open Library books against your shelf and says which of your books each
-one resembles. Standard ranking uses local keyword similarity; Advanced uses a local embedding
-model for meaning-based matching.
+one resembles. Hybrid combines local keyword and meaning-based rankings over the same cached
+candidate pool, with keyword-only matching as the automatic fallback.
 
 <img src="docs/screenshots/03-discover.png" width="700" alt="Discover, showing recommendations with a because-you-liked line and Open Library subject chips">
 
@@ -92,9 +92,11 @@ quotes. It does not search the contents of the books themselves.
 **Discover.** Recommendations built from your own shelf: Interleaf uses books you finished and rated
 4 or 5 stars to search Open Library using their subjects and author names, then ranks the cached
 pool locally using subjects and descriptions. Finished 3-star books provide a weaker positive
-signal; 1–2-star ratings count against similar candidates. Standard mode uses TF-IDF keyword
-similarity. Advanced mode asks for confirmation before a roughly 35 MB BGE Small model download
-from Hugging Face, then uses local semantic embeddings. Suggestions identify a library book behind
+signal; 1–2-star ratings count against similar candidates. Hybrid combines TF-IDF keyword and
+semantic rankings using reciprocal rank fusion. Enabling it asks for confirmation before downloading
+a roughly 35 MB BGE Small model from Hugging Face. Matching then runs locally.
+Until enabled, or if the model fails, keyword-only results are shown automatically. There is no
+ranking-mode selector. Suggestions identify a library book behind
 the match. Your reviews, notes and quotes are not sent to either service.
 
 **Grid or tree.** Browse the ranked list as cards, or explore the same pool as a similarity tree.
@@ -127,7 +129,7 @@ Git: each book with its status and rating, its review, its notes and its quotes,
 written for reading rather than for restoring, which the database beside it does.
 
 **Data controls.** Delete individual entries from their own screens, remove one book's notes or
-quotes, clear whole categories, reset the recommendation cache, remove the downloaded Advanced
+quotes, clear whole categories, reset the recommendation cache, remove the downloaded embedding
 model, and undo **Not for me** dismissals.
 
 ## Getting around
@@ -153,7 +155,7 @@ Runs from source and preview builds use a separate `Interleaf Dev` directory und
 platform-specific application-data folder, so development cannot modify the installed library.
 
 That folder holds `interleaf.db` and the `covers/` directory, plus the local model and embedding cache
-after Advanced is enabled. Use **Data → Back up** for a portable library backup. Do not treat
+after Hybrid is enabled. Use **Data → Back up** for a portable library backup. Do not treat
 `covers/` as disposable: manually chosen covers may not be recoverable from Open Library.
 
 ## Notes and limits
@@ -165,8 +167,9 @@ Work ID. It updates subjects and descriptions and fills missing page counts and 
 without changing saved titles, authors, edition IDs, ISBNs or covers.
 
 An online Discover search makes up to eight catalogue queries, spaced to respect Open Library's
-request rate. It can take a minute or longer depending on response times and retries. Both ranking
-modes work against the same cached candidate pool. Advanced matching uses an English-focused
+request rate. It can take a minute or longer depending on response times and retries. Hybrid and its
+keyword fallback use the same cached candidate pool, without extra catalogue requests for ranking.
+Meaning-based matching uses an English-focused
 embedding model, so non-English metadata may rank less reliably.
 
 ## Development

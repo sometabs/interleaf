@@ -29,7 +29,7 @@ interface PipelineProgress {
 }
 
 const port = parentPort
-if (!port) throw new Error('Advanced ranking worker requires a parent process.')
+if (!port) throw new Error('Recommendation model worker requires a parent process.')
 
 let extractorPromise: Promise<Extractor> | null = null
 let embeddingCacheState: {

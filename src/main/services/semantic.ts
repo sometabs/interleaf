@@ -1,4 +1,4 @@
-// Loaded only when Semantic ranking is selected. The runtime ships with the
+// Meaning-based scoring for Hybrid. The runtime ships with the
 // app, while the model remains an on-demand download in the user's data folder.
 
 import type {
@@ -7,14 +7,7 @@ import type {
   RecommendationQuery,
   SemanticProgress
 } from '../../shared/api'
-import { booksWithMetadata, scorableCandidates } from '../repos/metadata'
-import {
-  prepareRecommendationRun,
-  tasteWeight,
-  type CandidateInput,
-  type ProfileBook
-} from './recommender'
-import type { Database } from 'better-sqlite3'
+import { tasteWeight, type ProfileBook, type RecommendationRun } from './recommender'
 
 type DenseVector = number[]
 type Progress = (progress: SemanticProgress) => void
@@ -68,12 +61,12 @@ interface SemanticScored {
   recommendation: Recommendation
 }
 
-interface SemanticRun {
-  recommendations: Recommendation[]
+interface SemanticScores {
+  scored: SemanticScored[]
   vectorsByOlid: Map<string, DenseVector>
 }
 
-function diversify(
+export function diversify(
   scored: SemanticScored[],
   limit: number,
   lambda: number,
@@ -133,15 +126,13 @@ function diversify(
   return chosen.map((item) => item.recommendation)
 }
 
-async function runSemanticRecommendation(
-  library: ProfileBook[],
-  candidates: CandidateInput[],
+export async function scoreSemanticCandidates(
+  run: RecommendationRun,
   query: RecommendationQuery,
   cacheDir: string,
   progress: Progress,
   embedder: SemanticEmbedder = embed
-): Promise<SemanticRun> {
-  const run = prepareRecommendationRun(library, candidates, query)
+): Promise<SemanticScores> {
   const profileEntries = run.profile.flatMap((book) => {
     const text = textOf(book)
     return text ? [{ book, text }] : []
@@ -152,7 +143,7 @@ async function runSemanticRecommendation(
   })
 
   if (profileEntries.length === 0 || candidateEntries.length === 0) {
-    return { recommendations: [], vectorsByOlid: new Map() }
+    return { scored: [], vectorsByOlid: new Map() }
   }
 
   const weightedProfile = profileEntries.map((entry) => ({
@@ -162,7 +153,7 @@ async function runSemanticRecommendation(
   const positiveProfile = weightedProfile.filter(({ weight }) => weight > 0)
   const negativeProfile = weightedProfile.filter(({ weight }) => weight < 0)
   if (positiveProfile.length === 0) {
-    return { recommendations: [], vectorsByOlid: new Map() }
+    return { scored: [], vectorsByOlid: new Map() }
   }
 
   const vectors = await embedder(
@@ -173,7 +164,7 @@ async function runSemanticRecommendation(
 
   const strongestPositiveWeight = Math.max(...positiveProfile.map(({ weight }) => weight))
 
-  progress({ phase: 'ranking', done: 0, total: 1, label: 'Ranking advanced matches…' })
+  progress({ phase: 'ranking', done: 0, total: 1, label: 'Ranking meaning-based matches…' })
   const matchedCandidates = candidateEntries.map(({ candidate, text }) => {
     const vector = vectors.get(text)!
     const matches = positiveProfile.map((profile) => ({
@@ -264,23 +255,15 @@ async function runSemanticRecommendation(
     .filter(({ recommendation }) => recommendation.score > 0)
     .sort((left, right) => right.recommendation.score - left.recommendation.score)
 
-  const recommendations = diversify(
-    scored,
-    run.limit,
-    run.diversity,
-    run.maxPerAuthor,
-    query.likeBookId === undefined ? 1 : 0
-  )
-  progress({ phase: 'ranking', done: 1, total: 1, label: 'Advanced ranking is ready' })
   return {
-    recommendations,
+    scored,
     vectorsByOlid: new Map(
       matchedCandidates.map(({ candidate, vector }) => [candidate.olid, vector])
     )
   }
 }
 
-function buildSemanticTree(
+export function buildSemanticTree(
   recommendations: Recommendation[],
   vectorsByOlid: Map<string, DenseVector>
 ): RecommendationNode[] {
@@ -317,59 +300,4 @@ function buildSemanticTree(
   }
 
   return roots
-}
-
-export async function semanticRecommend(
-  library: ProfileBook[],
-  candidates: CandidateInput[],
-  query: RecommendationQuery,
-  cacheDir: string,
-  progress: Progress,
-  embedder: SemanticEmbedder = embed
-): Promise<Recommendation[]> {
-  return (await runSemanticRecommendation(library, candidates, query, cacheDir, progress, embedder))
-    .recommendations
-}
-
-export async function semanticRecommendTree(
-  library: ProfileBook[],
-  candidates: CandidateInput[],
-  query: RecommendationQuery,
-  cacheDir: string,
-  progress: Progress,
-  embedder: SemanticEmbedder = embed
-): Promise<RecommendationNode[]> {
-  const run = await runSemanticRecommendation(
-    library,
-    candidates,
-    query,
-    cacheDir,
-    progress,
-    embedder
-  )
-  return buildSemanticTree(run.recommendations, run.vectorsByOlid)
-}
-
-export async function suggestSemanticRecommendations(
-  db: Database,
-  query: RecommendationQuery = {},
-  cacheDir: string,
-  progress: Progress
-): Promise<Recommendation[]> {
-  return semanticRecommend(booksWithMetadata(db), scorableCandidates(db), query, cacheDir, progress)
-}
-
-export async function suggestSemanticRecommendationTree(
-  db: Database,
-  query: RecommendationQuery = {},
-  cacheDir: string,
-  progress: Progress
-): Promise<RecommendationNode[]> {
-  return semanticRecommendTree(
-    booksWithMetadata(db),
-    scorableCandidates(db),
-    query,
-    cacheDir,
-    progress
-  )
 }

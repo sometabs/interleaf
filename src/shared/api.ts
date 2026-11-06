@@ -144,8 +144,9 @@ export interface Recommendation {
   pageCount: number | null
   publishedYear: number | null
   description: string | null
-  // Cosine similarity to the taste profile; higher is closer.
+  // Relevance score; higher is better. Fusion scores are not similarities.
   score: number
+  scoreKind?: 'fusion'
   // The library book this most resembles.
   becauseOf: { bookId: number; title: string } | null
   // Preserved Open Library subjects. The renderer may show a compact subset,
@@ -312,10 +313,10 @@ export interface InterleafApi {
   getBookMetadata(bookId: number): Promise<BookMetadata | null>
   refreshRecommendations(query?: RecommendationRefreshQuery): Promise<HarvestResult>
   getRecommendations(query?: RecommendationQuery): Promise<Recommendation[]>
-  getSemanticRecommendations(query?: RecommendationQuery): Promise<Recommendation[]>
+  getHybridRecommendations(query?: RecommendationQuery): Promise<Recommendation[]>
   // Returns the roots.
   getRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
-  getSemanticRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
+  getHybridRecommendationTree(query?: RecommendationQuery): Promise<RecommendationNode[]>
   dismissRecommendation(olid: string): Promise<void>
   saveRecommendation(book: OlBookDto): Promise<Book>
 
@@ -379,9 +380,9 @@ export const IPC_CHANNELS = [
   'getBookMetadata',
   'refreshRecommendations',
   'getRecommendations',
-  'getSemanticRecommendations',
+  'getHybridRecommendations',
   'getRecommendationTree',
-  'getSemanticRecommendationTree',
+  'getHybridRecommendationTree',
   'dismissRecommendation',
   'saveRecommendation',
   'exportBackup',

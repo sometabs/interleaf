@@ -32,9 +32,9 @@ vi.mock('../src/main/db/connection', () => ({
   getDbPath: vi.fn(),
   initDb: vi.fn()
 }))
-vi.mock('../src/main/services/semantic', () => ({
-  suggestSemanticRecommendations: vi.fn(),
-  suggestSemanticRecommendationTree: vi.fn()
+vi.mock('../src/main/services/hybrid', () => ({
+  suggestHybridRecommendations: vi.fn(),
+  suggestHybridRecommendationTree: vi.fn()
 }))
 vi.mock('../src/main/services/semanticWorkerClient', () => ({ stopSemanticWorker: vi.fn() }))
 

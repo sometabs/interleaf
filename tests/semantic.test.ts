@@ -2,11 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { RecommendationNode } from '../src/shared/api'
 import type { CandidateInput, ProfileBook } from '../src/main/services/recommender'
-import {
-  semanticRecommend,
-  semanticRecommendTree,
-  type SemanticEmbedder
-} from '../src/main/services/semantic'
+import { hybridRecommend, hybridRecommendTree } from '../src/main/services/hybrid'
+import type { SemanticEmbedder } from '../src/main/services/semantic'
 
 function libraryBook(overrides: Partial<ProfileBook> = {}): ProfileBook {
   return {
@@ -54,9 +51,9 @@ const conceptualEmbedder: SemanticEmbedder = async (texts) =>
 
 const noProgress = (): void => {}
 
-describe('semantic recommendations', () => {
+describe('meaning-based matching in Hybrid', () => {
   it('can match related meaning without sharing the same words', async () => {
-    const found = await semanticRecommend(
+    const found = await hybridRecommend(
       [libraryBook()],
       [
         candidate({
@@ -82,7 +79,7 @@ describe('semantic recommendations', () => {
   })
 
   it('uses one selected book instead of the whole shelf when requested', async () => {
-    const found = await semanticRecommend(
+    const found = await hybridRecommend(
       [
         libraryBook({ bookId: 1, subjects: ['philosophy'] }),
         libraryBook({ bookId: 2, subjects: ['science fiction'] })
@@ -101,7 +98,7 @@ describe('semantic recommendations', () => {
   })
 
   it('keeps separate library interests instead of preferring their midpoint', async () => {
-    const found = await semanticRecommend(
+    const found = await hybridRecommend(
       [
         libraryBook({ bookId: 1, subjects: ['philosophy'] }),
         libraryBook({ bookId: 2, subjects: ['science fiction'] })
@@ -121,7 +118,7 @@ describe('semantic recommendations', () => {
   })
 
   it('prevents one library book from explaining most whole-library results', async () => {
-    const found = await semanticRecommend(
+    const found = await hybridRecommend(
       [
         libraryBook({ bookId: 1, title: 'Philosophy', subjects: ['philosophy'] }),
         libraryBook({ bookId: 2, title: 'Science fiction', subjects: ['science fiction'] })
@@ -157,7 +154,7 @@ describe('semantic recommendations', () => {
   })
 
   it('penalises a candidate that resembles a disliked book more than a liked one', async () => {
-    const found = await semanticRecommend(
+    const found = await hybridRecommend(
       [
         libraryBook({ bookId: 1, subjects: ['philosophy'], rating: 5 }),
         libraryBook({ bookId: 2, subjects: ['science fiction'], rating: 1 })
@@ -177,7 +174,7 @@ describe('semantic recommendations', () => {
 
   it('does not load the model when there is no useful metadata', async () => {
     const embedder = vi.fn(conceptualEmbedder)
-    const found = await semanticRecommend(
+    const found = await hybridRecommend(
       [libraryBook({ subjects: [], description: null })],
       [candidate()],
       {},
@@ -191,7 +188,7 @@ describe('semantic recommendations', () => {
   })
 
   it('builds tree branches from semantic similarity', async () => {
-    const roots = await semanticRecommendTree(
+    const roots = await hybridRecommendTree(
       [
         libraryBook({ bookId: 1, title: 'Philosophy', subjects: ['philosophy'] }),
         libraryBook({ bookId: 2, title: 'Science fiction', subjects: ['science fiction'] })

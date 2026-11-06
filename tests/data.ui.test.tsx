@@ -84,6 +84,25 @@ async function press(name: RegExp | string): Promise<void> {
 }
 
 describe('the Data screen', () => {
+  it('requires consent again after the recommendation model is removed', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    const spies = setup({}, [], {
+      getAppDiagnostics: async () => ({
+        version: 'test',
+        dataDirectory: 'C:/data',
+        schemaVersion: 19,
+        advancedModelInstalled: true
+      })
+    })
+    await press('Remove model')
+    await screen.findByText('Remove the recommendation model?')
+    await press('Remove model')
+    await waitFor(() => expect(spies.removeAdvancedModel).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBeNull()
+    )
+  })
+
   it('shows how much there is before you delete it', async () => {
     setup({ books: 47, notes: 12, quotes: 8, reviews: 3 })
 

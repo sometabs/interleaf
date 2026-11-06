@@ -349,7 +349,7 @@ interface Scored {
 
 // Shared by `recommend` and `recommendTree` so the ranking cannot drift, and
 // each vector is kept so callers can compare candidates to each other.
-function scoreCandidates(
+export function scoreCandidates(
   library: ProfileBook[],
   candidates: CandidateInput[],
   now: number

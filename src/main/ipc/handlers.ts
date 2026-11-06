@@ -32,10 +32,7 @@ import {
 import { coversDir, importCoverFile } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
-import {
-  suggestSemanticRecommendations,
-  suggestSemanticRecommendationTree
-} from '../services/semantic'
+import { suggestHybridRecommendations, suggestHybridRecommendationTree } from '../services/hybrid'
 import { stopSemanticWorker } from '../services/semanticWorkerClient'
 
 let metadataRefreshActive = false
@@ -212,14 +209,14 @@ const api: InterleafApi = {
   async getRecommendations(query) {
     return suggest(getDb(), query)
   },
-  async getSemanticRecommendations(query) {
-    return suggestSemanticRecommendations(getDb(), query, semanticModelsDir(), sendSemanticProgress)
+  async getHybridRecommendations(query) {
+    return suggestHybridRecommendations(getDb(), query, semanticModelsDir(), sendSemanticProgress)
   },
   async getRecommendationTree(query) {
     return suggestTree(getDb(), query)
   },
-  async getSemanticRecommendationTree(query) {
-    return suggestSemanticRecommendationTree(
+  async getHybridRecommendationTree(query) {
+    return suggestHybridRecommendationTree(
       getDb(),
       query,
       semanticModelsDir(),

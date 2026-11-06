@@ -47,7 +47,7 @@ function semanticWorker(): Worker {
   created.on('exit', (code) => {
     if (worker !== created) return
     worker = null
-    if (pending.size > 0) rejectPending(new Error(`Advanced ranking worker stopped (${code}).`))
+    if (pending.size > 0) rejectPending(new Error(`Recommendation model worker stopped (${code}).`))
   })
 
   return created
@@ -78,6 +78,6 @@ export async function stopSemanticWorker(): Promise<void> {
   if (!current) return
 
   worker = null
-  rejectPending(new Error('Advanced ranking model was removed.'))
+  rejectPending(new Error('Recommendation model was removed.'))
   await current.terminate()
 }
