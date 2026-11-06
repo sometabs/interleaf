@@ -16,12 +16,12 @@ itself runs locally.
 one resembles. Hybrid combines local keyword and meaning-based rankings over the same cached
 candidate pool, with keyword-only matching as the automatic fallback.
 
-<img src="docs/screenshots/03-discover.png" width="700" alt="Discover, showing recommendations with a because-you-liked line and Open Library subject chips">
+<img src="docs/screenshots/03-discover.png" width="700" alt="Discover with Hybrid ranking, because-you-liked explanations and Open Library subject chips">
 
 Explore recommendations as a tree. Zoom and pan to see how suggestions relate to one another;
-this view shows part of the tree at 100% zoom.
+this view shows the Wuthering Heights branch at 80% zoom.
 
-<img src="docs/screenshots/04-tree.png" width="700" alt="The recommendation tree at 100% zoom, starting with The Picture of Dorian Gray on the left">
+<img src="docs/screenshots/04-tree.png" width="700" alt="Hybrid recommendation tree showing Wuthering Heights above three branching paths at 80% zoom">
 
 A book page: reading details on the left, with the review, quotes and notes edited in place. The
 sample entries below show a reading journal for _Project Hail Mary_.
