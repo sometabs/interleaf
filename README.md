@@ -78,6 +78,10 @@ calendar days, including breaks, not active reading time.
 **Reading queue.** Every _want to read_ book appears in one ordered list. Drag books or use the
 arrow controls to put them in the order you intend to read them.
 
+**Reading history.** Finished books appear newest first, grouped by finish month and year, with
+their ratings and reading duration when available. Books without a finish date are listed last
+under Date unknown. Open a row to view or edit that book.
+
 **Reviews.** One per book, at the top of its page. Start typing; it saves itself.
 
 **Notes.** What you thought. Attach them to a book, or write one that belongs to nowhere in

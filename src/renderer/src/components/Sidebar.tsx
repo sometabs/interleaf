@@ -74,6 +74,17 @@ export default function Sidebar({
       )
     },
     {
+      label: 'Reading history',
+      view: { kind: 'history' },
+      matches: ['history'],
+      count: books?.filter((book) => book.status === 'read').length,
+      icon: (
+        <Icon>
+          <path d="M3 11a9 9 0 1 1 2.6 7.4M3 5v6h6M12 7v5l3 2" />
+        </Icon>
+      )
+    },
+    {
       label: 'Reviews',
       view: { kind: 'reviews' },
       matches: ['reviews', 'review'],

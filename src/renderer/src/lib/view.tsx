@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 export type View =
   | { kind: 'library' }
   | { kind: 'queue' }
+  | { kind: 'history' }
   | { kind: 'book'; id: number }
   | { kind: 'note'; id: number }
   | { kind: 'new-note' }
@@ -24,6 +25,7 @@ export type View =
 export const SCREEN_NAMES: Record<View['kind'], string> = {
   library: 'Library',
   queue: 'Reading queue',
+  history: 'Reading history',
   book: 'Back',
   note: 'Back',
   'new-note': 'New note',

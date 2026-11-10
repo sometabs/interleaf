@@ -37,6 +37,7 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
     },
     { id: 'library', label: 'Go to Library', run: () => navigate({ kind: 'library' }) },
     { id: 'queue', label: 'Go to Reading queue', run: () => navigate({ kind: 'queue' }) },
+    { id: 'history', label: 'Go to Reading history', run: () => navigate({ kind: 'history' }) },
     { id: 'reviews', label: 'Go to Reviews', run: () => navigate({ kind: 'reviews' }) },
     { id: 'notes', label: 'Go to Notes', run: () => navigate({ kind: 'notes' }) },
     { id: 'quotes', label: 'Go to Quotes', run: () => navigate({ kind: 'quotes' }) },
