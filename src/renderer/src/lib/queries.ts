@@ -142,11 +142,13 @@ export function useOpenLibrarySearch(query: string): UseQueryResult<OlBookDto[]>
 // The limit goes to the recommender rather than being applied here: it widens
 // the MMR pool as well as the list.
 export function useRecommendations(
-  query: RecommendationQuery = {}
+  query: RecommendationQuery = {},
+  enabled = true
 ): UseQueryResult<Recommendation[]> {
   return useQuery({
     queryKey: keys.recommendationsFor(query),
     queryFn: () => api().getRecommendations(query),
+    enabled,
     // A changed filter changes the key, and the grid would otherwise flash its
     // empty state while the rescore runs.
     placeholderData: (previous) => previous

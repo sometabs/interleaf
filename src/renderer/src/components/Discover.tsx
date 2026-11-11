@@ -48,13 +48,15 @@ export default function Discover(): ReactNode {
   const limit = shownFor(books.length)
   const query = likeBook ? { likeBookId: likeBook.id, limit } : { limit }
 
-  const { data: standardRecommendations = [], isPending: standardPending } =
-    useRecommendations(query)
   const hybridRecommendations = useHybridRecommendations(query, hybridEnabled && layout === 'grid')
   const hybridTree = useHybridRecommendationTree(query, hybridEnabled && layout === 'tree')
   const activeModelQuery = layout === 'tree' ? hybridTree : hybridRecommendations
   const modelFailed = hybridEnabled && activeModelQuery.isError
   const usingModel = hybridEnabled && !modelFailed
+  const { data: standardRecommendations = [], isPending: standardPending } = useRecommendations(
+    query,
+    !usingModel && layout === 'grid'
+  )
   const standardTree = useRecommendationTree(query, !usingModel && layout === 'tree')
 
   const refresh = useRefreshRecommendations()

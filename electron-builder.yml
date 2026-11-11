@@ -23,6 +23,11 @@ files:
   - '!node_modules/better-sqlite3/prebuilds/linuxmusl-*'
   - '!node_modules/better-sqlite3/prebuilds/linux-arm64.node'
   - '!node_modules/better-sqlite3/prebuilds/win32-arm64.node'
+  # The builder's win macro matches ONNX's win32 folder. Linux uses linux in both.
+  - '!node_modules/onnxruntime-node/bin/napi-v6/!(${os}*)/**'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/*/!(${arch})/**'
+  # Transformers runs in the Node worker with the native ONNX backend.
+  - '!node_modules/onnxruntime-web/**'
 asarUnpack:
   - resources/**
   # Native bindings cannot be loaded from inside an asar archive.

@@ -331,8 +331,7 @@ const api: InterleafApi = {
   async removeAdvancedModel() {
     const dir = semanticModelsDir()
     if (!existsSync(dir)) return false
-    await stopSemanticWorker()
-    rmSync(dir, { recursive: true, force: true })
+    await stopSemanticWorker(() => rmSync(dir, { recursive: true, force: true }))
     return true
   },
   async deleteEverything() {

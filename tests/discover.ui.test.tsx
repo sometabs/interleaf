@@ -159,10 +159,12 @@ describe('automatic Hybrid ranking', () => {
       window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
       window.localStorage.setItem('interleaf.recommendationRanking', JSON.stringify(previous))
       const getHybridRecommendations = vi.fn(async () => ALL)
-      installBridge({ books: [makeBook()] }, { getHybridRecommendations })
+      const getRecommendations = vi.fn(async () => ALL)
+      installBridge({ books: [makeBook()] }, { getHybridRecommendations, getRecommendations })
       renderApp(<Discover />)
       await card(ALL[0].title)
       expect(getHybridRecommendations).toHaveBeenCalledOnce()
+      expect(getRecommendations).not.toHaveBeenCalled()
       expect(screen.getByText(/hybrid ranking/)).toBeTruthy()
       expect(screen.queryByRole('group', { name: 'Ranking' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Enable Hybrid' })).toBeNull()
@@ -190,10 +192,11 @@ describe('automatic Hybrid ranking', () => {
       .fn()
       .mockRejectedValueOnce(new Error('The model could not load'))
       .mockResolvedValue([rec({ olid: 'HYB', title: 'A Hybrid Match', scoreKind: 'fusion' })])
+    const getRecommendations = vi.fn(async () => ALL)
     installBridge(
       { books: [makeBook()] },
       {
-        getRecommendations: async () => ALL,
+        getRecommendations,
         getHybridRecommendations
       }
     )
@@ -202,6 +205,7 @@ describe('automatic Hybrid ranking', () => {
     await card(ALL[0].title)
     await userEvent.click(screen.getByRole('button', { name: 'Retry Hybrid' }))
     await card('A Hybrid Match')
+    expect(getRecommendations).toHaveBeenCalledOnce()
     expect(screen.queryByText('Hybrid ranking is unavailable. Showing keyword results.')).toBeNull()
   })
 

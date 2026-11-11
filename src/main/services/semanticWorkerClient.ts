@@ -11,12 +11,30 @@ interface PendingRequest {
 }
 
 let worker: Worker | null = null
+let stopping: Promise<void> | null = null
 let nextRequestId = 1
 const pending = new Map<number, PendingRequest>()
 
 function rejectPending(error: Error): void {
   for (const request of pending.values()) request.reject(error)
   pending.clear()
+}
+
+function stopWorker(afterStop?: () => void): Promise<void> {
+  const current = worker
+  worker = null
+  const completion = Promise.resolve(current ? current.terminate() : stopping)
+    .then(() => afterStop?.())
+    .finally(() => {
+      if (stopping === completion) stopping = null
+    })
+  stopping = completion
+  return completion
+}
+
+function stopWhenDrained(): void {
+  if (pending.size > 0) return
+  void stopWorker().catch((error) => console.warn('[semantic] could not stop worker:', error))
 }
 
 function semanticWorker(): Worker {
@@ -26,6 +44,7 @@ function semanticWorker(): Worker {
   worker = created
 
   created.on('message', (message: SemanticWorkerResponse) => {
+    if (worker !== created) return
     const request = pending.get(message.id)
     if (!request) return
 
@@ -37,47 +56,50 @@ function semanticWorker(): Worker {
     pending.delete(message.id)
     if (message.type === 'result') request.resolve(message.vectors)
     else request.reject(new Error(message.message))
+    // The worker sends its result after finishing the embedding cache write.
+    stopWhenDrained()
   })
 
   created.on('error', (error) => {
-    if (worker === created) worker = null
+    if (worker !== created) return
+    worker = null
     rejectPending(error)
   })
 
   created.on('exit', (code) => {
     if (worker !== created) return
     worker = null
-    if (pending.size > 0) rejectPending(new Error(`Recommendation model worker stopped (${code}).`))
+    rejectPending(new Error(`Recommendation model worker stopped (${code}).`))
   })
 
   return created
 }
 
-export function embedInSemanticWorker(
+export async function embedInSemanticWorker(
   texts: string[],
   cacheDir: string,
   progress: (progress: SemanticProgress) => void
 ): Promise<number[][]> {
+  // Wait for the previous worker to release its files before starting a new one.
+  while (stopping) await stopping
+  const current = semanticWorker()
   const id = nextRequestId++
 
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject, progress })
     const request: SemanticWorkerRequest = { id, texts, cacheDir }
     try {
-      semanticWorker().postMessage(request)
+      current.postMessage(request)
     } catch (error) {
       pending.delete(id)
       reject(error instanceof Error ? error : new Error(String(error)))
+      stopWhenDrained()
     }
   })
 }
 
-/** Releases model files before the user removes the on-demand download. */
-export async function stopSemanticWorker(): Promise<void> {
-  const current = worker
-  if (!current) return
-
-  worker = null
+/** Stops the worker and allows the model files to be removed before any restart. */
+export function stopSemanticWorker(removeModel: () => void): Promise<void> {
   rejectPending(new Error('Recommendation model was removed.'))
-  await current.terminate()
+  return stopWorker(removeModel)
 }
