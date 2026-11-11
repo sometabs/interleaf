@@ -165,7 +165,7 @@ export default function Data(): ReactNode {
   async function onRemoveModel(): Promise<void> {
     const ok = await confirm({
       title: 'Remove the recommendation model?',
-      body: 'Recommendations will use keyword matching until you enable Hybrid again. Your library is unaffected.',
+      body: 'Discover will use keyword matching until you turn on advanced recommendations again.',
       confirmLabel: 'Remove model',
       destructive: true
     })

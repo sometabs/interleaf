@@ -1,3 +1,4 @@
+import * as Dialog from '@radix-ui/react-dialog'
 import type { HarvestProgress, OlBookDto, Recommendation } from '@shared/api'
 import type { ReactNode } from 'react'
 
@@ -24,18 +25,27 @@ import Empty from './Empty'
 import RecommendationTree from './RecommendationTree'
 
 type Layout = 'grid' | 'tree'
+const parseBoolean = (raw: unknown): boolean | null => (typeof raw === 'boolean' ? raw : null)
+const ADVANCED_RECOMMENDATIONS_DESCRIPTION =
+  'Combines keyword matching with AI to find books with similar themes. It runs on your device and uses more RAM while analyzing new books.'
+
 export default function Discover(): ReactNode {
   const [layout, setLayout] = usePersistentState<Layout>(
     'interleaf.recommendationLayout',
     'grid',
     parseLayout
   )
-  // Reuse existing model consent, not the obsolete comparison-mode choice.
-  const [hybridEnabled, setHybridEnabled] = usePersistentState(
+  const [downloadAcknowledged, setDownloadAcknowledged] = usePersistentState(
     'interleaf.advancedDownloadAcknowledged',
     false,
-    (raw) => (typeof raw === 'boolean' ? raw : null)
+    parseBoolean
   )
+  const [hybridDisabled, setHybridDisabled] = usePersistentState(
+    'interleaf.hybridDisabled',
+    false,
+    parseBoolean
+  )
+  const hybridEnabled = downloadAcknowledged && !hybridDisabled
   const { view, navigate } = useView()
 
   const { data: books = [] } = useBooks()
@@ -63,7 +73,7 @@ export default function Discover(): ReactNode {
   const progress = useHarvestProgress(refresh.isPending)
   const dismiss = useDismissRecommendation()
   const save = useSaveRecommendation()
-  const modelActive = hybridRecommendations.isFetching || hybridTree.isFetching
+  const modelActive = hybridEnabled && (hybridRecommendations.isFetching || hybridTree.isFetching)
   const semanticProgress = useSemanticProgress(modelActive)
   const recommendations = usingModel ? (hybridRecommendations.data ?? []) : standardRecommendations
   const tree = usingModel ? (hybridTree.data ?? []) : (standardTree.data ?? [])
@@ -96,14 +106,22 @@ export default function Discover(): ReactNode {
     dismiss.mutate(olid)
   }
 
-  async function enableHybrid(): Promise<void> {
+  async function toggleAdvancedRecommendations(): Promise<void> {
+    if (downloadAcknowledged) {
+      setHybridDisabled(hybridEnabled)
+      return
+    }
+
     const accepted = await confirm({
-      title: 'Enable Hybrid recommendations?',
-      body: 'Hybrid combines keyword and meaning-based rankings. This may require a one-time model download of about 35 MB from Hugging Face and an internet connection. Afterward, recommendation matching runs locally.',
-      confirmLabel: 'Enable Hybrid',
+      title: 'Turn on advanced recommendations?',
+      body: `${ADVANCED_RECOMMENDATIONS_DESCRIPTION} The first run may need an internet connection to download the 35 MB model from Hugging Face.`,
+      confirmLabel: 'Turn on',
       cancelLabel: 'Not now'
     })
-    if (accepted) setHybridEnabled(true)
+    if (accepted) {
+      setDownloadAcknowledged(true)
+      setHybridDisabled(false)
+    }
   }
 
   function findMore(): void {
@@ -123,19 +141,58 @@ export default function Discover(): ReactNode {
 
   return (
     <div className="h-full overflow-y-auto px-8 pt-7 pb-16">
-      <header className="mb-6 flex items-start justify-between gap-4">
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
           <h1 className="text-[22px]">Discover</h1>
-          <p className="mt-1 text-[12px] text-ink-muted">
-            Cached Open Library books · {usingModel ? 'hybrid ranking' : 'keyword ranking'}
-          </p>
+          <p className="mt-1 text-[12px] text-ink-muted">Cached Open Library books</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {!hybridEnabled && (
-            <button type="button" className="btn btn-outline" onClick={() => void enableHybrid()}>
-              Enable Hybrid
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          <div className="relative flex items-center">
+            <Dialog.Root modal={false}>
+              <Dialog.Trigger asChild>
+                <button
+                  type="button"
+                  aria-label="About advanced recommendations"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-ink-muted hover:bg-hover hover:text-ink"
+                >
+                  <span className="inline-flex size-4 items-center justify-center rounded-full border border-hairline-strong">
+                    ?
+                  </span>
+                </button>
+              </Dialog.Trigger>
+              <Dialog.Content
+                className="absolute top-full left-0 z-30 mt-2 w-64 rounded-card border border-hairline-strong bg-surface p-3 shadow-pop"
+                onEscapeKeyDown={(event) => event.stopPropagation()}
+              >
+                <Dialog.Title className="sr-only">About advanced recommendations</Dialog.Title>
+                <Dialog.Description className="text-[13px] leading-relaxed text-ink-muted">
+                  {ADVANCED_RECOMMENDATIONS_DESCRIPTION}
+                </Dialog.Description>
+              </Dialog.Content>
+            </Dialog.Root>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hybridEnabled}
+              className="btn btn-ghost gap-2 pl-1 whitespace-nowrap"
+              onClick={() => void toggleAdvancedRecommendations()}
+            >
+              Advanced recommendations
+              <span
+                aria-hidden="true"
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                  hybridEnabled ? 'bg-action' : 'bg-hairline-strong'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-card transition-transform ${
+                    hybridEnabled ? 'translate-x-4' : ''
+                  }`}
+                />
+              </span>
             </button>
-          )}
+          </div>
 
           <div
             role="group"
@@ -197,7 +254,7 @@ export default function Discover(): ReactNode {
         >
           <div>
             <p className="text-[13px] text-ink">
-              Hybrid ranking is unavailable. Showing keyword results.
+              Advanced recommendations are unavailable. Showing keyword results.
             </p>
             <p className="mt-1 text-[12px] text-ink-muted">{activeModelQuery.error?.message}</p>
           </div>
@@ -207,7 +264,7 @@ export default function Discover(): ReactNode {
             disabled={activeModelQuery.isFetching}
             onClick={() => void activeModelQuery.refetch()}
           >
-            Retry Hybrid
+            Try again
           </button>
         </section>
       )}

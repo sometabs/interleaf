@@ -47,6 +47,10 @@ function lastQuery(spy: Spy): RecommendationQuery {
   return spy.mock.calls[spy.mock.calls.length - 1][0] as RecommendationQuery
 }
 
+function advancedSwitch(checked: boolean): HTMLElement {
+  return screen.getByRole('switch', { name: 'Advanced recommendations', checked })
+}
+
 describe('what the screen asks for', () => {
   it('sends the count and nothing else', async () => {
     const { getRecommendations } = show()
@@ -80,7 +84,7 @@ describe('author filter removal', () => {
   })
 })
 
-describe('automatic Hybrid ranking', () => {
+describe('advanced recommendations', () => {
   it('keeps keyword results before first-use consent and exposes no ranking selector', async () => {
     const getHybridRecommendations = vi.fn(async () => [])
     installBridge(
@@ -95,11 +99,32 @@ describe('automatic Hybrid ranking', () => {
     expect(screen.queryByRole('group', { name: 'Ranking' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Standard' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Advanced' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Enable Hybrid' })).toBeTruthy()
+    expect(screen.getByText('Cached Open Library books')).toBeTruthy()
+    expect(advancedSwitch(false)).toBeTruthy()
     expect(getHybridRecommendations).not.toHaveBeenCalled()
   })
 
-  it('requires download confirmation, then uses Hybrid automatically', async () => {
+  it('opens and closes the help without changing the recommendation mode', async () => {
+    const getHybridRecommendations = vi.fn(async () => [])
+    installBridge(
+      { books: [makeBook()] },
+      { getRecommendations: async () => ALL, getHybridRecommendations }
+    )
+    renderApp(<Discover />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'About advanced recommendations' }))
+    expect(
+      screen.getByRole('dialog', { name: 'About advanced recommendations' }).textContent
+    ).toContain('Combines keyword matching with AI')
+    expect(screen.getByText(/uses more RAM/i)).toBeTruthy()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(advancedSwitch(false)).toBeTruthy()
+    expect(getHybridRecommendations).not.toHaveBeenCalled()
+  })
+
+  it('explains memory use and requests download consent before using advanced ranking', async () => {
     const match = rec({ olid: 'HYB', title: 'A Hybrid Match', scoreKind: 'fusion' })
     const getHybridRecommendations = vi.fn(async () => [match])
     const refreshRecommendations = vi.fn()
@@ -119,15 +144,49 @@ describe('automatic Hybrid ranking', () => {
     )
     const user = userEvent.setup()
     await card(ALL[0].title)
-    await user.click(screen.getByRole('button', { name: 'Enable Hybrid' }))
+    await user.click(advancedSwitch(false))
     expect(getHybridRecommendations).not.toHaveBeenCalled()
+    expect(screen.getByText(/uses more RAM/i)).toBeTruthy()
     expect(screen.getByText(/35 MB/)).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Enable Hybrid' }))
+    await user.click(screen.getByRole('button', { name: 'Turn on' }))
     await card(match.title)
     expect(getHybridRecommendations).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBe('true')
     expect(refreshRecommendations).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Enable Hybrid' })).toBeNull()
+    expect(advancedSwitch(true)).toBeTruthy()
+  })
+
+  it('remembers when advanced recommendations are off and turns them back on with prior consent', async () => {
+    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
+    const match = rec({ olid: 'HYB', title: 'A Hybrid Match', scoreKind: 'fusion' })
+    const getHybridRecommendations = vi.fn(async () => [match])
+    installBridge(
+      { books: [makeBook()] },
+      { getRecommendations: async () => ALL, getHybridRecommendations }
+    )
+    const user = userEvent.setup()
+    const ui = (
+      <>
+        <Discover />
+        <ConfirmDialog />
+      </>
+    )
+    const first = renderApp(ui)
+    await card(match.title)
+    advancedSwitch(true).focus()
+    await user.keyboard('[Space]')
+    await card(ALL[0].title)
+    expect(advancedSwitch(false)).toBeTruthy()
+    expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBe('true')
+
+    first.unmount()
+    renderApp(ui)
+    await card(ALL[0].title)
+    expect(getHybridRecommendations).toHaveBeenCalledOnce()
+    await user.click(advancedSwitch(false))
+    await card(match.title)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(advancedSwitch(true)).toBeTruthy()
   })
 
   it('keeps keyword results if the download is declined', async () => {
@@ -146,7 +205,7 @@ describe('automatic Hybrid ranking', () => {
       </>
     )
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Enable Hybrid' }))
+    await user.click(advancedSwitch(false))
     await user.click(screen.getByRole('button', { name: 'Not now' }))
     await card(ALL[0].title)
     expect(getHybridRecommendations).not.toHaveBeenCalled()
@@ -165,9 +224,8 @@ describe('automatic Hybrid ranking', () => {
       await card(ALL[0].title)
       expect(getHybridRecommendations).toHaveBeenCalledOnce()
       expect(getRecommendations).not.toHaveBeenCalled()
-      expect(screen.getByText(/hybrid ranking/)).toBeTruthy()
       expect(screen.queryByRole('group', { name: 'Ranking' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Enable Hybrid' })).toBeNull()
+      expect(advancedSwitch(true)).toBeTruthy()
     }
   )
 
@@ -201,12 +259,14 @@ describe('automatic Hybrid ranking', () => {
       }
     )
     renderApp(<Discover />)
-    await screen.findByText('Hybrid ranking is unavailable. Showing keyword results.')
+    await screen.findByText('Advanced recommendations are unavailable. Showing keyword results.')
     await card(ALL[0].title)
-    await userEvent.click(screen.getByRole('button', { name: 'Retry Hybrid' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await card('A Hybrid Match')
     expect(getRecommendations).toHaveBeenCalledOnce()
-    expect(screen.queryByText('Hybrid ranking is unavailable. Showing keyword results.')).toBeNull()
+    expect(
+      screen.queryByText('Advanced recommendations are unavailable. Showing keyword results.')
+    ).toBeNull()
   })
 
   it('uses the keyword tree automatically if the model fails', async () => {
@@ -224,11 +284,11 @@ describe('automatic Hybrid ranking', () => {
       }
     )
     renderApp(<Discover />)
-    await screen.findByText('Hybrid ranking is unavailable. Showing keyword results.')
+    await screen.findByText('Advanced recommendations are unavailable. Showing keyword results.')
     await card(ALL[0].title)
   })
 
-  it('remembers the layout without persisting a ranking-mode choice', async () => {
+  it('remembers the layout without writing the legacy ranking mode', async () => {
     window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
     const getHybridRecommendationTree = vi.fn(async () => [])
     installBridge(
@@ -267,7 +327,7 @@ describe('automatic Hybrid ranking', () => {
       }
     )
     renderApp(<Discover />)
-    expect(await screen.findByText('Hybrid match')).toBeTruthy()
+    expect(await screen.findByText('Advanced match')).toBeTruthy()
     expect(screen.queryByText('3% match')).toBeNull()
   })
 

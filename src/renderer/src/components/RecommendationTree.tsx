@@ -485,7 +485,7 @@ function NodeCard({
             : undefined
         }
       >
-        {node.scoreKind === 'fusion' ? 'Hybrid match' : `${percent(node.score)} match`}
+        {node.scoreKind === 'fusion' ? 'Advanced match' : `${percent(node.score)} match`}
       </span>
 
       {/* Icon buttons, so a node stays narrow enough for a wide tree to fit. */}

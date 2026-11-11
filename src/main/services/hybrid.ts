@@ -79,7 +79,7 @@ async function runHybrid(
     run.maxPerAuthor,
     query.likeBookId === undefined ? 1 : 0
   )
-  progress({ phase: 'ranking', done: 1, total: 1, label: 'Hybrid ranking is ready' })
+  progress({ phase: 'ranking', done: 1, total: 1, label: 'Recommendations are ready' })
   return { recommendations, vectorsByOlid: semantic.vectorsByOlid }
 }
 
