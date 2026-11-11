@@ -18,19 +18,19 @@ candidate pool, with keyword-only matching as the automatic fallback.
 
 <img src="docs/screenshots/03-discover.png" width="700" alt="Discover with Hybrid ranking, because-you-liked explanations and Open Library subject chips">
 
-Explore recommendations as a tree. Zoom and pan to see how suggestions relate to one another;
-this view shows the Wuthering Heights branch at 80% zoom.
+Explore recommendations as a tree. Zoom and pan to see how suggestions relate to one another.
+This view shows the Wuthering Heights branch at 80% zoom.
 
 <img src="docs/screenshots/04-tree.png" width="700" alt="Hybrid recommendation tree showing Wuthering Heights above three branching paths at 80% zoom">
 
-A book page: reading details on the left, with the review, quotes and notes edited in place. The
-sample entries below show a reading journal for _Project Hail Mary_.
+The book page puts reading details beside the review, quotes and notes. This example shows a
+reading journal for _Project Hail Mary_.
 
 <img src="docs/screenshots/02-book.png" width="700" alt="Project Hail Mary with a full review, a saved quote and two reading notes">
 
-`Ctrl + K` searches every book, review, note and quote at once.
+Press `Ctrl + K` to search your books, reviews, notes and quotes or run a command.
 
-<img src="docs/screenshots/05-palette.png" width="700" alt="The command palette searching for Dune and matching the book in the library">
+<img src="docs/screenshots/05-palette.png" width="700" alt="Searching for Hail Mary in the command palette returns Project Hail Mary and its written review">
 
 Stats bring your reading progress, ratings and journal activity together in one local overview.
 
@@ -82,15 +82,17 @@ arrow controls to put them in the order you intend to read them.
 their ratings and reading duration when available. Books without a finish date are listed last
 under Date unknown. Open a row to view or edit that book.
 
-**Reviews.** One per book, at the top of its page. Start typing; it saves itself.
+**Reviews.** Books appear in Reviews as soon as you rate them or write a review. Open a row to
+write or edit the review and change the star rating. Review text saves automatically from either
+the book page or the review editor.
 
 **Notes.** What you thought. Attach them to a book, or write one that belongs to nowhere in
-particular. Each can carry a label, and long ones open as a full page. The Notes screen can search
-and filter by book or label.
+particular. Each can carry a label, and long ones open as a full page. Search your notes or narrow
+the list by book or label. The book picker only lists books with notes.
 
 **Quotes.** What the book said. They get their own section on each book and their own searchable
-screen, filterable by book or author. Every quote belongs to a book; a thought that belongs to no
-single book is a note.
+screen, filterable by book or author. The pickers only list books and authors with saved quotes.
+Every quote belongs to a book.
 
 **Search.** One box searches book titles and authors, plus the titles and text of reviews, notes and
 quotes. It does not search the contents of the books themselves.
@@ -149,8 +151,8 @@ machine; System follows your operating system's colour preference.
 | `Ctrl + N` | Add a book                                 |
 | `Esc`      | Back one step                              |
 
-The command palette also offers shortcuts to the main screens, adding a book or note, and backing
-up your library.
+The command palette can open the main screens, add a book or note, and back up your library. It
+shows the keyboard shortcut next to commands that have one.
 
 Reviews and edits to existing notes and quotes save shortly after you stop typing. A new note or
 quote remains a draft until you press **Done**; an empty draft is discarded.
