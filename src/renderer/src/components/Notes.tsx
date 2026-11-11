@@ -7,6 +7,7 @@ import { relativeDate } from '../lib/dates'
 import { useBooks, useNotes } from '../lib/queries'
 import { useView } from '../lib/view'
 import Empty from './Empty'
+import FilterPicker from './FilterPicker'
 
 /** The filter value standing for "has none of these" rather than "any". */
 const NONE = 'none'
@@ -89,35 +90,34 @@ export default function Notes(): ReactNode {
 
         {notes.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <select
-              aria-label="Filter by book"
-              className="field w-auto max-w-56 py-1.5 text-[13px]"
+            <FilterPicker
+              label="Filter by book"
+              searchLabel="Search books"
               value={bookFilter}
-              onChange={(event) => setBookFilter(event.target.value)}
-            >
-              <option value="">All books</option>
-              <option value={NONE}>No book</option>
-              {filterBooks.map((book) => (
-                <option key={book.id} value={book.id}>
-                  {book.title}
-                </option>
-              ))}
-            </select>
+              onChange={setBookFilter}
+              active={bookFilter !== ''}
+              options={[
+                { value: '', label: 'All books' },
+                { value: NONE, label: 'No book' },
+                ...filterBooks.map((book) => ({
+                  value: String(book.id),
+                  label: book.title,
+                  detail: book.author
+                }))
+              ]}
+            />
 
-            <select
-              aria-label="Filter by tag"
-              className="field w-auto py-1.5 text-[13px]"
+            <FilterPicker
+              label="Filter by tag"
               value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
-            >
-              <option value="">All tags</option>
-              <option value={NONE}>Untagged</option>
-              {NOTE_TAGS.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+              onChange={setTagFilter}
+              active={tagFilter !== ''}
+              options={[
+                { value: '', label: 'All tags' },
+                { value: NONE, label: 'Untagged' },
+                ...NOTE_TAGS.map((name) => ({ value: name, label: name }))
+              ]}
+            />
 
             {narrowed && (
               <button

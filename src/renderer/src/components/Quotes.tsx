@@ -8,6 +8,7 @@ import { useBooks, useCreateNote, useDeleteNote, useNotes, useUpdateNote } from 
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
 import { authorKey } from '../lib/shelves'
 import Empty from './Empty'
+import FilterPicker from './FilterPicker'
 import QuoteCard from './QuoteCard'
 
 const UNKNOWN_AUTHOR_FILTER = '__unknown_author__'
@@ -185,48 +186,65 @@ export default function Quotes(): ReactNode {
 
         {quotes.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="text-[13px] text-ink-muted">Filter by</span>
-            <select
+            <div
+              role="group"
               aria-label="Filter quotes by"
-              className="field w-auto py-1.5 text-[13px]"
-              value={filterMode}
-              onChange={(event) => {
-                setFilterMode(event.target.value as 'book' | 'author')
-                setFilterValue('')
-              }}
+              className="inline-flex rounded-control bg-sunken p-0.5"
             >
-              <option value="book">Books</option>
-              <option value="author">Authors</option>
-            </select>
+              {(['book', 'author'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={filterMode === mode}
+                  onClick={() => {
+                    if (filterMode === mode) return
+                    setFilterMode(mode)
+                    setFilterValue('')
+                  }}
+                  className={`rounded-control px-2.5 py-1 text-[12px] transition-colors ${
+                    filterMode === mode
+                      ? 'bg-surface font-medium text-ink shadow-card'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {mode === 'book' ? 'Books' : 'Authors'}
+                </button>
+              ))}
+            </div>
 
             {filterMode === 'book' ? (
-              <select
-                aria-label="Filter by book"
-                className="field w-auto max-w-56 py-1.5 text-[13px]"
+              <FilterPicker
+                key="book"
+                label="Filter by book"
+                searchLabel="Search books"
                 value={filterValue}
-                onChange={(event) => setFilterValue(event.target.value)}
-              >
-                <option value="">All books</option>
-                {filterBooks.map((book) => (
-                  <option key={book.id} value={book.id}>
-                    {book.title}
-                  </option>
-                ))}
-              </select>
+                onChange={setFilterValue}
+                active={filterValue !== ''}
+                options={[
+                  { value: '', label: 'All books' },
+                  ...filterBooks.map((book) => ({
+                    value: String(book.id),
+                    label: book.title,
+                    detail: book.author
+                  }))
+                ]}
+              />
             ) : (
-              <select
-                aria-label="Filter by author"
-                className="field w-auto max-w-56 py-1.5 text-[13px]"
+              <FilterPicker
+                key="author"
+                label="Filter by author"
+                searchLabel="Search authors"
                 value={filterValue}
-                onChange={(event) => setFilterValue(event.target.value)}
-              >
-                <option value="">All authors</option>
-                {authorOptions.map(([key, author]) => (
-                  <option key={key || 'unknown'} value={key || UNKNOWN_AUTHOR_FILTER}>
-                    {author}
-                  </option>
-                ))}
-              </select>
+                onChange={setFilterValue}
+                active={filterValue !== ''}
+                options={[
+                  { value: '', label: 'All authors' },
+                  ...authorOptions.map(([key, author]) => ({
+                    value: key || UNKNOWN_AUTHOR_FILTER,
+                    label: author
+                  }))
+                ]}
+              />
             )}
 
             {narrowed && (

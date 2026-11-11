@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 
 import { useBooks, useNotes } from '../lib/queries'
 import { calculateStats, readingYears, type CountedLabel } from '../lib/stats'
+import FilterPicker from './FilterPicker'
 
 const number = new Intl.NumberFormat()
 
@@ -60,21 +61,19 @@ export default function Stats(): ReactNode {
             <h2 id="year-heading" className="eyebrow">
               Reading by year
             </h2>
-            <select
-              aria-label="Statistics year"
-              value={allTime ? 'all' : year}
-              onChange={(event) =>
-                setSelectedYear(event.target.value === 'all' ? 'all' : Number(event.target.value))
-              }
-              className="rounded-control border border-hairline-strong bg-surface px-2 py-1 text-[13px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <option value="all">All time</option>
-              {years.map((availableYear) => (
-                <option key={availableYear} value={availableYear}>
-                  {availableYear}
-                </option>
-              ))}
-            </select>
+            <FilterPicker
+              label="Statistics year"
+              align="end"
+              value={allTime ? 'all' : String(year)}
+              onChange={(next) => setSelectedYear(next === 'all' ? 'all' : Number(next))}
+              options={[
+                { value: 'all', label: 'All time' },
+                ...years.map((availableYear) => ({
+                  value: String(availableYear),
+                  label: String(availableYear)
+                }))
+              ]}
+            />
           </div>
           <div className="card grid gap-6 p-5 md:grid-cols-[180px_1fr]">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-1">

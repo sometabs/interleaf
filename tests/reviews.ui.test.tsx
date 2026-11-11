@@ -6,6 +6,7 @@ import App from '../src/renderer/src/App'
 import Notes from '../src/renderer/src/components/Notes'
 import Reviews from '../src/renderer/src/components/Reviews'
 import Sidebar from '../src/renderer/src/components/Sidebar'
+import { pickOption } from './helpers/filterPicker'
 import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 
 // A review is a note of kind `review`, shown apart from the rest.
@@ -81,7 +82,7 @@ describe('the Reviews screen', () => {
     renderApp(<Reviews />, { kind: 'reviews' })
     const user = userEvent.setup()
 
-    await user.selectOptions(await screen.findByLabelText('Filter by rating'), '5')
+    await pickOption(user, 'Filter by rating', '5 stars')
 
     expect(screen.getByText(/One\./)).toBeTruthy()
     expect(screen.queryByText(/Two\./)).toBeNull()

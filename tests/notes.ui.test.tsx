@@ -7,6 +7,7 @@ import App from '../src/renderer/src/App'
 import BookDetail from '../src/renderer/src/components/BookDetail'
 import Notes from '../src/renderer/src/components/Notes'
 import { useBook } from '../src/renderer/src/lib/queries'
+import { openPicker, pickOption } from './helpers/filterPicker'
 import { installBridge, makeBook, makeNote, renderApp, type FakeBridge } from './helpers/render'
 
 function BookRoute({ id }: { id: number }): ReactNode {
@@ -326,7 +327,10 @@ describe('filtering the notes index', () => {
   async function setup(): Promise<ReturnType<typeof userEvent.setup>> {
     const user = userEvent.setup()
     installBridge({
-      books: [makeBook({ id: 1, title: 'The Dispossessed' }), makeBook({ id: 2, title: 'Dune' })],
+      books: [
+        makeBook({ id: 1, title: 'The Dispossessed', author: 'Ursula K. Le Guin' }),
+        makeBook({ id: 2, title: 'Dune', author: 'Frank Herbert' })
+      ],
       notes: [
         makeNote({ id: 1, bookId: 1, title: 'On walls', tag: 'THEORY' }),
         makeNote({ id: 2, bookId: 1, title: 'Shevek', tag: 'SUMMARY' }),
@@ -339,21 +343,18 @@ describe('filtering the notes index', () => {
     return user
   }
 
-  async function pick(
-    user: Awaited<ReturnType<typeof setup>>,
-    label: string,
-    value: string
-  ): Promise<void> {
-    await user.selectOptions(screen.getByLabelText(label), value)
-  }
-
   function titles(): string[] {
     return screen.getAllByTestId('note-row').map((row) => row.textContent ?? '')
   }
 
-  it('narrows to one book', async () => {
+  it('finds a book by author and applies the filter with Enter', async () => {
     const user = await setup()
-    await pick(user, 'Filter by book', '1')
+    const panel = await openPicker(user, 'Filter by book')
+    const search = within(panel).getByRole('combobox', { name: 'Search books' })
+    expect(document.activeElement).toBe(search)
+    await user.type(search, 'le guin')
+    expect(within(panel).getAllByRole('option')).toHaveLength(1)
+    await user.keyboard('{Enter}')
 
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(2))
     expect(titles().join(' ')).toContain('On walls')
@@ -374,17 +375,15 @@ describe('filtering the notes index', () => {
     })
     renderApp(<Notes />, { kind: 'notes' })
 
-    const options = Array.from(
-      (await screen.findByLabelText('Filter by book')).querySelectorAll('option')
-    ).map((option) => option.textContent)
-    expect(options).toContain('The Dispossessed')
-    expect(options).not.toContain('Dune')
-    expect(options).not.toContain('The Left Hand of Darkness')
+    const options = within(await openPicker(userEvent.setup(), 'Filter by book'))
+    expect(options.getByRole('option', { name: /^The Dispossessed/ })).toBeDefined()
+    expect(options.queryByRole('option', { name: /^Dune/ })).toBeNull()
+    expect(options.queryByRole('option', { name: /^The Left Hand of Darkness/ })).toBeNull()
   })
 
   it('narrows to one tag', async () => {
     const user = await setup()
-    await pick(user, 'Filter by tag', 'THEORY')
+    await pickOption(user, 'Filter by tag', 'THEORY')
 
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(2))
     expect(titles().join(' ')).toContain('Spice')
@@ -393,8 +392,8 @@ describe('filtering the notes index', () => {
 
   it('combines the two rather than replacing one with the other', async () => {
     const user = await setup()
-    await pick(user, 'Filter by book', '1')
-    await pick(user, 'Filter by tag', 'THEORY')
+    await pickOption(user, 'Filter by book', /^The Dispossessed/)
+    await pickOption(user, 'Filter by tag', 'THEORY')
 
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(1))
     expect(titles()[0]).toContain('On walls')
@@ -402,7 +401,7 @@ describe('filtering the notes index', () => {
 
   it('finds the notes that belong to no book', async () => {
     const user = await setup()
-    await pick(user, 'Filter by book', 'none')
+    await pickOption(user, 'Filter by book', 'No book')
 
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(1))
     expect(titles()[0]).toContain('Groceries')
@@ -410,7 +409,7 @@ describe('filtering the notes index', () => {
 
   it('finds the notes with no tag', async () => {
     const user = await setup()
-    await pick(user, 'Filter by tag', 'none')
+    await pickOption(user, 'Filter by tag', 'Untagged')
 
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(1))
     expect(titles()[0]).toContain('Groceries')
@@ -418,7 +417,7 @@ describe('filtering the notes index', () => {
 
   it('narrows alongside the search box', async () => {
     const user = await setup()
-    await pick(user, 'Filter by tag', 'THEORY')
+    await pickOption(user, 'Filter by tag', 'THEORY')
     await user.type(screen.getByLabelText('Search notes'), 'spice')
 
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(1))
@@ -429,15 +428,15 @@ describe('filtering the notes index', () => {
     const user = await setup()
     expect(screen.getByText(/4 notes across your library/)).toBeDefined()
 
-    await pick(user, 'Filter by tag', 'THEORY')
+    await pickOption(user, 'Filter by tag', 'THEORY')
 
     await waitFor(() => expect(screen.getByText('2 of 4 notes')).toBeDefined())
   })
 
   it('clears every filter at once', async () => {
     const user = await setup()
-    await pick(user, 'Filter by book', '2')
-    await pick(user, 'Filter by tag', 'THEORY')
+    await pickOption(user, 'Filter by book', /^Dune/)
+    await pickOption(user, 'Filter by tag', 'THEORY')
     await user.type(screen.getByLabelText('Search notes'), 'spice')
     await waitFor(() => expect(screen.getAllByTestId('note-row')).toHaveLength(1))
 
@@ -449,8 +448,8 @@ describe('filtering the notes index', () => {
 
   it('says so when the filters match nothing', async () => {
     const user = await setup()
-    await pick(user, 'Filter by book', '2')
-    await pick(user, 'Filter by tag', 'SUMMARY')
+    await pickOption(user, 'Filter by book', /^Dune/)
+    await pickOption(user, 'Filter by tag', 'SUMMARY')
 
     await waitFor(() => expect(screen.getByText(/No notes match these filters/)).toBeDefined())
     expect(screen.queryAllByTestId('note-row')).toHaveLength(0)
@@ -460,7 +459,7 @@ describe('filtering the notes index', () => {
     installBridge({ books: [], notes: [] })
     renderApp(<Notes />, { kind: 'notes' })
 
-    expect(screen.queryByLabelText('Filter by book')).toBeNull()
-    expect(screen.queryByLabelText('Filter by tag')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Filter by book,/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Filter by tag,/ })).toBeNull()
   })
 })

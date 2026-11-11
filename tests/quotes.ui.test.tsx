@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -9,6 +9,7 @@ import Quotes from '../src/renderer/src/components/Quotes'
 import Toasts from '../src/renderer/src/components/Toasts'
 import Sidebar from '../src/renderer/src/components/Sidebar'
 import { resetConfirm } from '../src/renderer/src/lib/confirm'
+import { openPicker, pickOption } from './helpers/filterPicker'
 import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 
 // Quotes are notes of kind `highlight`, shown apart from the rest.
@@ -148,7 +149,7 @@ describe('the Quotes screen', () => {
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
 
-    await user.selectOptions(await screen.findByLabelText('Filter by book'), '7')
+    await pickOption(user, 'Filter by book', /^The Dispossessed/)
     await user.click(screen.getByRole('button', { name: 'New quote' }))
     await enterPassage('There was a wall.')
     await user.click(screen.getByTestId('quote-done'))
@@ -199,7 +200,7 @@ describe('the Quotes screen', () => {
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
 
-    await user.selectOptions(await screen.findByLabelText('Filter by book'), '7')
+    await pickOption(user, 'Filter by book', /^The Dispossessed/)
     await user.click(screen.getByRole('button', { name: 'New quote' }))
     await enterPassage('There was a wall.')
     await user.click(screen.getByTestId('quote-done'))
@@ -234,22 +235,21 @@ describe('the Quotes screen', () => {
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
 
-    const mode = await screen.findByLabelText('Filter quotes by')
-    expect(screen.queryByLabelText('Filter by author')).toBeNull()
-    expect(screen.getByLabelText('Filter by book')).toBeTruthy()
+    const mode = within(await screen.findByRole('group', { name: 'Filter quotes by' }))
+    expect(screen.queryByRole('button', { name: /^Filter by author,/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Filter by book, All books' })).toBeTruthy()
 
-    await user.selectOptions(mode, 'author')
-    expect(screen.queryByLabelText('Filter by book')).toBeNull()
-    const author = await screen.findByLabelText('Filter by author')
-    await user.selectOptions(author, 'ursula k. le guin')
+    await user.click(mode.getByRole('button', { name: 'Authors' }))
+    expect(screen.queryByRole('button', { name: /^Filter by book,/ })).toBeNull()
+    await pickOption(user, 'Filter by author', 'Ursula K. Le Guin')
     await screen.findByText(/Anarres/)
     expect(screen.getAllByTestId('quote-body').map((row) => row.textContent)).toEqual([
       expect.stringContaining('Anarres'),
       expect.stringContaining('Earthsea')
     ])
 
-    await user.selectOptions(mode, 'book')
-    await user.selectOptions(await screen.findByLabelText('Filter by book'), '9')
+    await user.click(mode.getByRole('button', { name: 'Books' }))
+    await pickOption(user, 'Filter by book', /^Dune/)
     await screen.findByText(/Arrakis/)
     expect(screen.getAllByTestId('quote-body').map((row) => row.textContent)).toEqual([
       expect.stringContaining('Arrakis')
@@ -268,19 +268,15 @@ describe('the Quotes screen', () => {
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
 
-    const bookOptions = Array.from(
-      (await screen.findByLabelText('Filter by book')).querySelectorAll('option')
-    ).map((option) => option.textContent)
-    expect(bookOptions).toContain('The Dispossessed')
-    expect(bookOptions).not.toContain('Dune')
-    expect(bookOptions).not.toContain('The Left Hand of Darkness')
+    const bookOptions = within(await openPicker(user, 'Filter by book'))
+    expect(bookOptions.getByRole('option', { name: /^The Dispossessed/ })).toBeDefined()
+    expect(bookOptions.queryByRole('option', { name: /^Dune/ })).toBeNull()
+    expect(bookOptions.queryByRole('option', { name: /^The Left Hand of Darkness/ })).toBeNull()
 
-    await user.selectOptions(screen.getByLabelText('Filter quotes by'), 'author')
-    const authorOptions = Array.from(
-      (await screen.findByLabelText('Filter by author')).querySelectorAll('option')
-    ).map((option) => option.textContent)
-    expect(authorOptions).toContain('Ursula K. Le Guin')
-    expect(authorOptions).not.toContain('Frank Herbert')
+    await user.click(screen.getByRole('button', { name: 'Authors' }))
+    const authorOptions = within(await openPicker(user, 'Filter by author'))
+    expect(authorOptions.getByRole('option', { name: 'Ursula K. Le Guin' })).toBeDefined()
+    expect(authorOptions.queryByRole('option', { name: 'Frank Herbert' })).toBeNull()
   })
 
   it('limits a new quote’s book choices when an author is selected', async () => {
@@ -295,8 +291,8 @@ describe('the Quotes screen', () => {
     renderApp(<Quotes />, { kind: 'quotes' })
     const user = userEvent.setup()
 
-    await user.selectOptions(await screen.findByLabelText('Filter quotes by'), 'author')
-    await user.selectOptions(await screen.findByLabelText('Filter by author'), 'ursula k. le guin')
+    await user.click(await screen.findByRole('button', { name: 'Authors' }))
+    await pickOption(user, 'Filter by author', 'Ursula K. Le Guin')
     await user.click(screen.getByRole('button', { name: 'New quote' }))
 
     const picker = await screen.findByLabelText('Book this quote is from')

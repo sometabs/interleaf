@@ -7,6 +7,7 @@ import { useBooks, useNotes } from '../lib/queries'
 import { useView } from '../lib/view'
 import Cover from './Cover'
 import Empty from './Empty'
+import FilterPicker from './FilterPicker'
 import Rating from './Rating'
 
 const ANY = ''
@@ -71,19 +72,19 @@ export default function Reviews(): ReactNode {
 
         {reviews.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <select
-              aria-label="Filter by rating"
-              className="field w-auto py-1.5 text-[13px]"
+            <FilterPicker
+              label="Filter by rating"
               value={ratingFilter}
-              onChange={(event) => setRatingFilter(event.target.value)}
-            >
-              <option value={ANY}>All ratings</option>
-              {[5, 4, 3, 2, 1].map((stars) => (
-                <option key={stars} value={stars}>
-                  {'★'.repeat(stars)}
-                </option>
-              ))}
-            </select>
+              onChange={setRatingFilter}
+              active={ratingFilter !== ANY}
+              options={[
+                { value: ANY, label: 'All ratings' },
+                ...[5, 4, 3, 2, 1].map((stars) => ({
+                  value: String(stars),
+                  label: `${stars} ${stars === 1 ? 'star' : 'stars'}`
+                }))
+              ]}
+            />
 
             {narrowed && (
               <button

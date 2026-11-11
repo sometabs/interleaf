@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import Stats from '../src/renderer/src/components/Stats'
+import { findPicker, openPicker, pickOption } from './helpers/filterPicker'
 import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 
 describe('Stats', () => {
@@ -33,9 +34,8 @@ describe('Stats', () => {
       ]
     })
     renderApp(<Stats />)
-    const selector = await screen.findByRole('combobox', { name: 'Statistics year' })
     const user = userEvent.setup()
-    await user.selectOptions(selector, 'all')
+    await pickOption(user, 'Statistics year', 'All time')
 
     const section = screen.getByRole('heading', { name: 'Reading by year' }).closest('section')!
     expect(within(section).getByText('Books finished by year')).toBeDefined()
@@ -51,7 +51,7 @@ describe('Stats', () => {
     ).toBeDefined()
     expect(screen.queryByLabelText('Jan: 1 book')).toBeNull()
 
-    await user.selectOptions(selector, String(year))
+    await pickOption(user, 'Statistics year', String(year))
     expect(within(section).getByText('Books finished by month')).toBeDefined()
     expect(within(section).getByLabelText('Jan: 1 book')).toBeDefined()
     expect(within(section).getByText('100')).toBeDefined()
@@ -87,13 +87,18 @@ describe('Stats', () => {
       ]
     })
     renderApp(<Stats />)
-    const selector = await screen.findByRole('combobox', { name: 'Statistics year' })
-    expect((selector as HTMLSelectElement).value).toBe(String(currentYear))
+    const user = userEvent.setup()
+    const selector = await findPicker('Statistics year')
+    expect(selector.textContent).toBe(String(currentYear))
     expect(screen.getByLabelText('Jan: 1 book')).toBeDefined()
     const allTime = screen.getByRole('heading', { name: 'All time' }).closest('section')!
     const allTimeBefore = allTime.textContent
 
-    await userEvent.setup().selectOptions(selector, String(currentYear - 1))
+    const panel = await openPicker(user, 'Statistics year')
+    expect(document.activeElement).toBe(
+      within(panel).getByRole('button', { name: String(currentYear) })
+    )
+    await user.keyboard('{ArrowDown}{Enter}')
 
     expect(screen.getByLabelText('Jan: 0 books')).toBeDefined()
     expect(screen.getByLabelText('Jun: 2 books')).toBeDefined()
@@ -103,7 +108,7 @@ describe('Stats', () => {
     expect(within(finished).getByText('2')).toBeDefined()
     expect(allTime.textContent).toBe(allTimeBefore)
 
-    await userEvent.setup().selectOptions(selector, String(currentYear))
+    await pickOption(user, 'Statistics year', String(currentYear))
     expect(screen.getByLabelText('Jan: 1 book')).toBeDefined()
     expect(within(yearly).getByText('100')).toBeDefined()
   })
@@ -118,18 +123,19 @@ describe('Stats', () => {
         ]
       })
       renderApp(<Stats />)
-      const selector = await screen.findByRole('combobox', { name: 'Statistics year' })
-      expect((selector as HTMLSelectElement).value).toBe('2027')
-      expect(
-        within(selector)
-          .getAllByRole('option')
-          .map((option) => option.textContent)
-      ).toEqual(['All time', '2027', '2026'])
+      const user = userEvent.setup()
+      expect((await findPicker('Statistics year')).textContent).toBe('2027')
+      const panel = within(await openPicker(user, 'Statistics year'))
+      expect(panel.getAllByRole('button').map((option) => option.textContent)).toEqual([
+        'All time',
+        '2027',
+        '2026'
+      ])
       expect(
         screen.getByText('No books with completion dates for the selected year.')
       ).toBeDefined()
 
-      await userEvent.setup().selectOptions(selector, '2026')
+      await user.click(panel.getByRole('button', { name: '2026' }))
 
       expect(screen.getByLabelText('Dec: 1 book')).toBeDefined()
       expect(screen.queryByText('No books with completion dates for the selected year.')).toBeNull()
@@ -141,10 +147,11 @@ describe('Stats', () => {
   it('offers the current year for an empty library', async () => {
     installBridge()
     renderApp(<Stats />)
-    const selector = await screen.findByRole('combobox', { name: 'Statistics year' })
-    expect(within(selector).getAllByRole('option')).toHaveLength(2)
-    expect((selector as HTMLSelectElement).value).toBe(String(new Date().getFullYear()))
-    await userEvent.setup().selectOptions(selector, 'all')
+    const user = userEvent.setup()
+    expect((await findPicker('Statistics year')).textContent).toBe(String(new Date().getFullYear()))
+    const panel = within(await openPicker(user, 'Statistics year'))
+    expect(panel.getAllByRole('button')).toHaveLength(2)
+    await user.click(panel.getByRole('button', { name: 'All time' }))
     expect(screen.getByText('No books with completion dates yet.')).toBeDefined()
     expect(
       screen.queryByText('Books without a finished date are included in totals, but not the chart.')
