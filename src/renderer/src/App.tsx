@@ -49,6 +49,7 @@ export default function App(): ReactNode {
       }
       if (mod && event.key.toLowerCase() === 'n') {
         event.preventDefault()
+        setPaletteOpen(false)
         setAddOpen(true)
         return
       }

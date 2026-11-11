@@ -46,6 +46,22 @@ describe('Typing in the add-book search', () => {
     expect((field as HTMLInputElement).value).toBe('walls')
   })
 
+  it('opens Add a book from the palette with the displayed shortcut', async () => {
+    const user = userEvent.setup()
+    shell()
+
+    await user.keyboard('{Control>}k{/Control}')
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' })
+    const addBook = within(palette).getByRole('option', { name: 'Add a book' })
+    expect(within(addBook).getByText('Ctrl+N')).toBeDefined()
+    expect(addBook.getAttribute('aria-keyshortcuts')).toBe('Control+N')
+    expect(within(palette).getByRole('option', { name: 'New note' })).toBeDefined()
+
+    await user.keyboard('{Control>}n{/Control}')
+    expect(await screen.findByRole('dialog', { name: 'Add a book' })).toBeDefined()
+    expect(palette.isConnected).toBe(false)
+  })
+
   it('accepts characters when reached through the command palette', async () => {
     const user = userEvent.setup()
     shell()

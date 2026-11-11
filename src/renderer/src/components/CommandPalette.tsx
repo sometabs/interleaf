@@ -14,6 +14,9 @@ interface Props {
   onAddBook: () => void
 }
 
+const shortcutClass =
+  'shrink-0 rounded-control border border-hairline-strong bg-surface px-1.5 py-0.5 text-[11px] text-ink-muted'
+
 export default function CommandPalette({ open, onOpenChange, onAddBook }: Props): ReactNode {
   const { navigate } = useView()
   const [query, setQuery] = useState('')
@@ -28,11 +31,10 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
   }
 
   const commands = [
-    { id: 'add', label: 'Add a book', hint: 'Search Open Library', run: onAddBook },
+    { id: 'add', label: 'Add a book', shortcut: 'Control+N', run: onAddBook },
     {
       id: 'note',
       label: 'New note',
-      hint: 'A page not tied to a book',
       run: () => navigate({ kind: 'new-note' })
     },
     { id: 'library', label: 'Go to Library', run: () => navigate({ kind: 'library' }) },
@@ -48,7 +50,6 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
       // which is not something to reach by typing three letters.
       id: 'backup',
       label: 'Back up the library',
-      hint: 'The database, its covers and a Markdown copy',
       run: () =>
         exportBackup.mutate(undefined, {
           onSuccess: (result) =>
@@ -87,11 +88,12 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
                     command.label.toLowerCase().includes(query.trim().toLowerCase())
                   )
                   .map((command) => (
-                    <Item key={command.id} kind="cmd" onSelect={() => run(command.run)}>
+                    <Item
+                      key={command.id}
+                      shortcut={command.shortcut}
+                      onSelect={() => run(command.run)}
+                    >
                       <span className="flex-1">{command.label}</span>
-                      {command.hint && (
-                        <span className="shrink-0 text-[11px] text-ink-faint">{command.hint}</span>
-                      )}
                     </Item>
                   ))}
               </Command.Group>
@@ -131,6 +133,10 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
               )}
             </Command.List>
           </Command>
+          <footer className="flex items-center justify-end gap-2 border-t border-hairline px-4 py-2 text-[11px] text-ink-muted">
+            Open or close palette
+            <kbd className={shortcutClass}>Ctrl+K</kbd>
+          </footer>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -139,22 +145,32 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
 
 function Item({
   kind,
+  shortcut,
   onSelect,
   children
 }: {
-  kind: string
+  kind?: 'book' | 'note'
+  shortcut?: string
   onSelect: () => void
   children: ReactNode
 }): ReactNode {
   return (
     <Command.Item
       onSelect={onSelect}
+      aria-keyshortcuts={shortcut}
       className="flex cursor-pointer items-baseline gap-3 rounded-control px-3 py-2 data-[selected=true]:bg-accent-soft"
     >
-      <span className="w-10 shrink-0 text-[10px] uppercase tracking-wider text-ink-faint">
-        {kind}
-      </span>
+      {kind && (
+        <span className="w-10 shrink-0 text-[10px] uppercase tracking-wider text-ink-faint">
+          {kind}
+        </span>
+      )}
       {children}
+      {shortcut && (
+        <kbd aria-hidden="true" className={shortcutClass}>
+          {shortcut.replace('Control+', 'Ctrl+')}
+        </kbd>
+      )}
     </Command.Item>
   )
 }
