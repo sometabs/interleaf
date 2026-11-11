@@ -131,7 +131,7 @@ describe('the Reviews screen', () => {
     await pickOption(user, 'Filter by rating', '4 stars')
     const row = await screen.findByTestId('review-row')
     expect(within(row).getByRole('img', { name: 'Rated 4 of 5' })).toBeTruthy()
-    expect(within(row).getByText('Empty review')).toBeTruthy()
+    expect(within(row).getByText('No review')).toBeTruthy()
     await user.click(row)
 
     const editor = await screen.findByTestId('editor')
@@ -155,6 +155,25 @@ describe('the Reviews screen', () => {
     await user.click(screen.getByRole('button', { name: '← Reviews' }))
     expect(await screen.findByText('Worth rereading.')).toBeTruthy()
     expect(screen.getAllByTestId('review-row')).toHaveLength(1)
+  })
+
+  it('removes a book with a saved blank review when its rating is cleared', async () => {
+    const state = installBridge({ books: [BOOK], notes: [{ ...REVIEW, bodyMd: '' }] })
+    renderApp(<App />, { kind: 'reviews' })
+    const user = userEvent.setup()
+
+    const row = await screen.findByTestId('review-row')
+    expect(within(row).getByRole('img', { name: 'Rated 5 of 5' })).toBeTruthy()
+    expect(within(row).getByText('No review')).toBeTruthy()
+    await user.click(row)
+    await user.click(await screen.findByRole('button', { name: '5 stars' }))
+    await screen.findByRole('radiogroup', { name: 'Not rated' })
+    await user.click(screen.getByRole('button', { name: '← Reviews' }))
+
+    expect(await screen.findByText('No reviews yet')).toBeTruthy()
+    expect(screen.queryByTestId('review-row')).toBeNull()
+    expect(screen.getByRole('button', { name: /^Reviews\s*0$/ })).toBeTruthy()
+    expect(state.notes).toHaveLength(1)
   })
 })
 
@@ -250,7 +269,7 @@ describe('the review screen', () => {
     expect(state.books).toHaveLength(1)
     const row = await screen.findByTestId('review-row')
     expect(within(row).getByRole('img', { name: 'Rated 5 of 5' })).toBeTruthy()
-    expect(within(row).getByText('Empty review')).toBeTruthy()
+    expect(within(row).getByText('No review')).toBeTruthy()
   })
 
   it('says so when the book has been deleted underneath it', async () => {

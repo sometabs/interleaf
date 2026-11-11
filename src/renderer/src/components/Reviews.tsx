@@ -145,7 +145,7 @@ export default function Reviews(): ReactNode {
                         excerpt ? 'text-ink-muted' : 'italic text-ink-faint'
                       }`}
                     >
-                      {excerpt || 'Empty review'}
+                      {excerpt || 'No review'}
                     </span>
                   </span>
                 </button>
