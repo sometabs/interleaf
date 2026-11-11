@@ -50,6 +50,12 @@ export interface NewBook {
 
 export type BookPatch = Partial<Omit<Book, 'id' | 'createdAt' | 'updatedAt' | 'priorityPosition'>>
 
+export interface SpineColors {
+  cover: string
+  ink: string
+  detail: string
+}
+
 export interface Note {
   id: number
   bookId: number | null
@@ -285,6 +291,7 @@ export interface AppDiagnostics {
 // is synchronous.
 export interface InterleafApi {
   listBooks(): Promise<Book[]>
+  getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
   reorderPriority(bookIds: number[]): Promise<void>
@@ -358,6 +365,7 @@ export interface InterleafBridge extends InterleafApi {
 // Derived from the interface so the two cannot drift.
 export const IPC_CHANNELS = [
   'listBooks',
+  'getSpineColors',
   'createBook',
   'updateBook',
   'reorderPriority',

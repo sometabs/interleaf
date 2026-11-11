@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -109,6 +109,45 @@ describe('filtering inside a grouping', () => {
     await user.type(await screen.findByLabelText('Filter library'), 'zzz')
 
     expect(await screen.findByText(/Nothing matches/)).toBeTruthy()
+  })
+})
+
+describe('arranging the bookshelf', () => {
+  it('saves the shelf order after dragging a book', async () => {
+    const coverPath = 'book-1-test.jpg'
+    const getSpineColors = vi.fn(async () => ({
+      [coverPath]: { cover: '#2672ad', ink: '#ffffff', detail: '#f3cd50' }
+    }))
+    installBridge({ books: [{ ...SOLARIS, coverPath }, PICNIC, HALL] }, { getSpineColors })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('radio', { name: 'Shelf' }))
+    const shelf = screen.getByRole('region', { name: 'Bookshelf' })
+    const titles = (): string[] =>
+      within(shelf)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? '')
+    const wolf = within(shelf).getByRole('button', { name: 'Wolf Hall by Hilary Mantel' })
+    const solaris = within(shelf).getByRole('button', { name: 'Solaris by Stanisław Lem' })
+    await waitFor(() => expect(solaris.style.backgroundColor).toBe('rgb(38, 114, 173)'))
+    expect(getSpineColors).toHaveBeenCalledWith([coverPath])
+    expect(wolf.style.backgroundColor).toBeTruthy()
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+
+    fireEvent.dragStart(wolf, { dataTransfer })
+    fireEvent.drop(solaris, { dataTransfer, clientX: -1 })
+    expect(titles()).toEqual([
+      'Wolf Hall by Hilary Mantel',
+      'Solaris by Stanisław Lem',
+      'Roadside Picnic by Strugatsky'
+    ])
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const restored = await screen.findByRole('region', { name: 'Bookshelf' })
+    expect(within(restored).getAllByRole('button')[0].getAttribute('aria-label')).toBe(
+      'Wolf Hall by Hilary Mantel'
+    )
   })
 })
 

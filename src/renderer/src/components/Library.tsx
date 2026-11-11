@@ -13,6 +13,7 @@ import {
 } from '../lib/queries'
 import { groupBooks, GROUPINGS, type Grouping, type Shelf } from '../lib/shelves'
 import { useView } from '../lib/view'
+import Bookshelf from './Bookshelf'
 import Cover from './Cover'
 import Empty from './Empty'
 import Rating from './Rating'
@@ -20,6 +21,11 @@ import Rating from './Rating'
 interface Props {
   onAdd: () => void
 }
+
+const LIBRARY_LAYOUTS = [
+  { value: 'grid', label: 'Grid' },
+  { value: 'shelf', label: 'Shelf' }
+] as const
 
 export default function Library({ onAdd }: Props): ReactNode {
   const { navigate } = useView()
@@ -31,6 +37,11 @@ export default function Library({ onAdd }: Props): ReactNode {
   const progress = useMetadataRefreshProgress(refreshing)
 
   const [filter, setFilter] = useState('')
+  const [layout, setLayout] = usePersistentState<'grid' | 'shelf'>(
+    'interleaf.libraryLayout',
+    'grid',
+    (raw) => (raw === 'grid' || raw === 'shelf' ? raw : null)
+  )
   const [grouping, setGrouping] = usePersistentState<Grouping>(
     'interleaf.libraryGrouping',
     'status',
@@ -48,7 +59,7 @@ export default function Library({ onAdd }: Props): ReactNode {
       )
     : books
 
-  const shelves = groupBooks(matching, grouping)
+  const openBook = (book: Book): void => navigate({ kind: 'book', id: book.id })
 
   if (isPending) return <div className="h-full" />
 
@@ -124,7 +135,15 @@ export default function Library({ onAdd }: Props): ReactNode {
           </button>
         )}
 
-        <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
+        <Segmented
+          label="Library view"
+          options={LIBRARY_LAYOUTS}
+          value={layout}
+          onChange={setLayout}
+        />
+        {layout === 'grid' && (
+          <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
+        )}
 
         <input
           className="field max-w-64"
@@ -146,13 +165,11 @@ export default function Library({ onAdd }: Props): ReactNode {
         <p className="py-8 text-center text-ink-muted">
           {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
         </p>
+      ) : layout === 'shelf' ? (
+        <Bookshelf books={books} matching={matching} onOpen={openBook} />
       ) : (
-        shelves.map((shelf) => (
-          <ShelfSection
-            key={shelf.key}
-            shelf={shelf}
-            onOpen={(book) => navigate({ kind: 'book', id: book.id })}
-          />
+        groupBooks(matching, grouping).map((shelf) => (
+          <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />
         ))
       )}
     </div>

@@ -36,7 +36,8 @@ import type {
   RecommendationQuery,
   RecommendationRefreshQuery,
   SemanticProgress,
-  SearchHit
+  SearchHit,
+  SpineColors
 } from '@shared/api'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
@@ -96,6 +97,19 @@ function invalidateRecommendations(client: QueryClient): void {
 
 export function useBooks(): UseQueryResult<Book[]> {
   return useQuery({ queryKey: keys.books, queryFn: () => api().listBooks() })
+}
+
+export function useSpineColors(books: Book[]): UseQueryResult<Record<string, SpineColors>> {
+  const paths = [
+    ...new Set(books.flatMap(({ coverPath }) => (coverPath ? [coverPath] : [])))
+  ].sort()
+  return useQuery({
+    queryKey: ['spine-colors', paths],
+    queryFn: () => api().getSpineColors(paths),
+    enabled: paths.length > 0,
+    staleTime: Infinity,
+    retry: false
+  })
 }
 
 // Read from the library list so it cannot drift from it.

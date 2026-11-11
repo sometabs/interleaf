@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 
+import { paletteFor } from '../lib/bookPalette'
+
 interface Props {
   title: string
   author?: string | null
@@ -8,33 +10,6 @@ interface Props {
   /** Open Library cover id, for books not yet in the library. */
   coverId?: number | null
   size?: 'sm' | 'md' | 'lg'
-}
-
-interface PlaceholderPalette {
-  cover: string
-  spine: string
-  ink: string
-  detail: string
-}
-
-// Muted clothbound colours: varied enough to distinguish neighbouring books,
-// restrained enough that a placeholder never masquerades as real cover art.
-const PLACEHOLDER_PALETTES: readonly PlaceholderPalette[] = [
-  { cover: '#3f5268', spine: '#2d3d50', ink: '#f7f4ec', detail: '#9daaba' },
-  { cover: '#7a4650', spine: '#5e3039', ink: '#fff7ed', detail: '#cba0a6' },
-  { cover: '#657560', spine: '#4b5b47', ink: '#fbf8eb', detail: '#aeb8a8' },
-  { cover: '#936b38', spine: '#714d25', ink: '#fff8e8', detail: '#d1b786' },
-  { cover: '#416969', spine: '#2d5050', ink: '#f4fbf8', detail: '#91b2af' },
-  { cover: '#66536f', spine: '#4d3c57', ink: '#fbf5ff', detail: '#ad9ab5' }
-]
-
-function paletteFor(title: string): PlaceholderPalette {
-  let hash = 2166136261
-  for (const char of title.normalize('NFKC').toLowerCase()) {
-    hash ^= char.codePointAt(0) ?? 0
-    hash = Math.imul(hash, 16777619)
-  }
-  return PLACEHOLDER_PALETTES[(hash >>> 0) % PLACEHOLDER_PALETTES.length]
 }
 
 function initialFor(title: string): string {

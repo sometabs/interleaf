@@ -302,6 +302,143 @@
     box-shadow: 0 0 0 2px var(--color-accent-soft);
   }
 
+  .bookshelf {
+    --shelf-row-height: 226px;
+    --shelf-ledge: 13px;
+    --shelf-lip: light-dark(#c6af96, #735d4c);
+    --shelf-wood: light-dark(#b0967a, #564438);
+    --shelf-shadow: light-dark(#947b63, #392e27);
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 3px;
+    padding-inline: 14px;
+    border-inline: 7px solid var(--shelf-wood);
+    border-top: 7px solid var(--shelf-wood);
+    border-radius: var(--radius-card);
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0 calc(var(--shelf-row-height) - var(--shelf-ledge)),
+        var(--shelf-lip) calc(var(--shelf-row-height) - var(--shelf-ledge))
+          calc(var(--shelf-row-height) - 10px),
+        var(--shelf-wood) calc(var(--shelf-row-height) - 10px) calc(var(--shelf-row-height) - 2px),
+        var(--shelf-shadow) calc(var(--shelf-row-height) - 2px) var(--shelf-row-height)
+      ),
+      light-dark(#eee9e2, #292420);
+    box-shadow:
+      inset 0 2px 8px rgb(0 0 0 / 0.1),
+      var(--shadow-card);
+  }
+
+  .bookshelf-slot {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    height: var(--shelf-row-height);
+    align-items: flex-end;
+    padding-bottom: var(--shelf-ledge);
+  }
+
+  .bookshelf-slot[data-drop-side]::before {
+    position: absolute;
+    z-index: 2;
+    inset-block: 14px var(--shelf-ledge);
+    width: 3px;
+    border-radius: 2px;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 1px var(--color-accent-soft);
+    pointer-events: none;
+    content: '';
+  }
+
+  .bookshelf-slot[data-drop-side='before']::before {
+    left: -3px;
+  }
+
+  .bookshelf-slot[data-drop-side='after']::before {
+    right: -3px;
+  }
+
+  .book-spine {
+    position: relative;
+    border: 1px solid rgb(0 0 0 / 0.2);
+    border-radius: 4px 3px 2px 2px;
+    background-image:
+      linear-gradient(
+        90deg,
+        rgb(0 0 0 / 0.22),
+        transparent 15%,
+        rgb(255 255 255 / 0.08) 32%,
+        transparent 65%,
+        rgb(0 0 0 / 0.22)
+      ),
+      repeating-linear-gradient(0deg, rgb(0 0 0 / 0.025) 0 1px, transparent 1px 3px);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.15),
+      1px 1px 3px rgb(0 0 0 / 0.2);
+    cursor: grab;
+    user-select: none;
+    transition: transform 150ms ease;
+  }
+
+  .book-spine:hover:not([data-dragging]),
+  .book-spine:focus-visible {
+    z-index: 1;
+    transform: translateY(-4px);
+  }
+
+  .book-spine[data-dragging] {
+    opacity: 0.6;
+    cursor: grabbing;
+  }
+
+  .book-spine::before,
+  .book-spine::after {
+    position: absolute;
+    inset-inline: 3px;
+    height: 4px;
+    border-block: 1px solid var(--spine-detail);
+    opacity: 0.55;
+    content: '';
+  }
+
+  .book-spine::before {
+    top: 8px;
+  }
+
+  .book-spine::after {
+    bottom: 8px;
+  }
+
+  .book-spine-copy {
+    position: absolute;
+    inset: 18px 1px;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .book-spine-copy > span {
+    max-height: 100%;
+    overflow: hidden;
+    line-height: 1.15;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    writing-mode: vertical-rl;
+  }
+
+  .book-spine-title {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .book-spine-author {
+    font-size: 10px;
+  }
+
   .app-shell {
     display: grid;
     grid-template-columns: 248px minmax(0, 1fr);
