@@ -1,10 +1,18 @@
 import type { Book } from '@shared/api'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { insertAround, sameOrder } from '../lib/bookOrder'
+import { sameOrder } from '../lib/bookOrder'
 import { paletteFor } from '../lib/bookPalette'
+import {
+  arrangeShelves,
+  parseShelves,
+  SHELF_SPAN,
+  shelfInsertion,
+  spineWidth,
+  type Shelf
+} from '../lib/bookshelfLayout'
 import { usePersistentState } from '../lib/persistent'
 import { useSpineColors } from '../lib/queries'
 import Cover from './Cover'
@@ -16,8 +24,8 @@ interface Props {
 }
 
 interface Placement {
-  bookId: number
-  after: boolean
+  shelf: Shelf
+  outlineX: number
 }
 
 interface Preview {
@@ -30,54 +38,26 @@ const PREVIEW_WIDTH = 248
 const PREVIEW_MAX_HEIGHT = 144
 const PREVIEW_GAP = 10
 
-function parseOrder(raw: unknown): number[] | null {
-  if (!Array.isArray(raw)) return null
-  return [
-    ...new Set(raw.filter((id) => typeof id === 'number' && Number.isSafeInteger(id) && id > 0))
-  ]
-}
-
-function placementAt(event: DragEvent<HTMLDivElement>): Placement | null {
-  let slot =
-    event.target instanceof Element ? event.target.closest<HTMLElement>('[data-shelf-book]') : null
-
-  if (!slot) {
-    // Empty shelf space belongs to the nearest book on that row, including the
-    // space after the last book. Slots reach from the top of a row to its ledge.
-    for (const bookSlot of event.currentTarget.querySelectorAll<HTMLElement>('[data-shelf-book]')) {
-      const rect = bookSlot.getBoundingClientRect()
-      if (event.clientY < rect.top) break
-      if (event.clientY >= rect.bottom) continue
-      slot = bookSlot
-      if (event.clientX < rect.right) break
-    }
-  }
-
-  if (!slot) return null
-  const rect = slot.getBoundingClientRect()
-  return {
-    bookId: Number(slot.dataset.shelfBook),
-    after: event.clientX >= rect.left + rect.width / 2
-  }
-}
-
 export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode {
   const { data: spineColors } = useSpineColors(books)
-  const [savedOrder, setSavedOrder] = usePersistentState('interleaf.bookshelfOrder', [], parseOrder)
+  const [savedShelves, setSavedShelves] = usePersistentState(
+    'interleaf.bookshelves',
+    [],
+    parseShelves,
+    'interleaf.bookshelfOrder'
+  )
   const [draggedBookId, setDraggedBookId] = useState<number | null>(null)
-  const [placement, setPlacement] = useState<Placement | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const previewTimer = useRef<number | undefined>(undefined)
-  const positions = new Map(savedOrder.map((id, index) => [id, index]))
-  const arranged = [...books].sort(
-    (left, right) =>
-      (positions.get(left.id) ?? positions.size) - (positions.get(right.id) ?? positions.size) ||
-      left.id - right.id
+  const grabOffset = useRef(0)
+  const dropOutline = useRef<HTMLElement | null>(null)
+  const widths = useMemo(
+    () => new Map(books.map((book) => [book.id, spineWidth(book.pageCount)])),
+    [books]
   )
-  const order = arranged.map((book) => book.id)
-  const matchingIds = new Set(matching.map((book) => book.id))
-  const visible = arranged.filter((book) => matchingIds.has(book.id))
-  const previewBook = preview && visible.find((book) => book.id === preview.bookId)
+  const shelves = useMemo(() => arrangeShelves(savedShelves, widths), [savedShelves, widths])
+  const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
+  const previewBook = preview && matchingById.get(preview.bookId)
 
   const hidePreview = useCallback((): void => {
     window.clearTimeout(previewTimer.current)
@@ -125,106 +105,208 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     }, 400)
   }
 
-  function move(bookId: number, target: Placement): void {
-    if (!order.includes(bookId)) return
-    const next = insertAround(order, bookId, target.bookId, target.after)
-    if (!sameOrder(order, next)) setSavedOrder(next)
+  function placementAt(
+    event: DragEvent<HTMLDivElement>,
+    shelf: Shelf
+  ): Placement | null | undefined {
+    if (draggedBookId === null) return null
+    const strip = event.currentTarget.querySelector('.bookshelf-spines')
+    const track = strip?.parentElement
+    if (!strip || !track) return null
+
+    const origin = strip.getBoundingClientRect().left
+    const left = Math.round((event.clientX || 0) - origin - grabOffset.current)
+    const slot =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>('[data-shelf-book]')
+        : null
+    const slotId = Number(slot?.dataset.shelfBook)
+    // Hovering the source is a no-op. A full destination rejects the drop.
+    if (slotId === draggedBookId) return undefined
+    const bounds = slot?.getBoundingClientRect()
+    const neighbor = bounds
+      ? { bookId: slotId, after: event.clientX >= bounds.left + bounds.width / 2 }
+      : undefined
+    const insertion = shelfInsertion(shelf, draggedBookId, widths, left, neighbor)
+    if (!insertion) return null
+    return {
+      shelf: insertion,
+      outlineX: origin - track.getBoundingClientRect().left + insertion.positions[draggedBookId]
+    }
+  }
+
+  function hideDropOutline(row?: HTMLDivElement): void {
+    const outline = dropOutline.current
+    if (!outline || (row && !row.contains(outline))) return
+    outline.removeAttribute('data-active')
+    dropOutline.current = null
+  }
+
+  function showDropOutline(row: HTMLDivElement, target: Placement, bookId: number): void {
+    const outline = row.querySelector<HTMLElement>('.bookshelf-drop-preview')!
+    const changedRow = dropOutline.current !== outline
+    if (changedRow) {
+      hideDropOutline()
+      outline.style.width = `${widths.get(bookId)}px`
+      outline.style.height = `${166 + (bookId % 5) * 9}px`
+      dropOutline.current = outline
+    }
+    outline.style.transform = `translateX(${target.outlineX}px)`
+    if (changedRow) outline.setAttribute('data-active', '')
+  }
+
+  function move(bookId: number, target: Shelf): void {
+    const source = shelves.find((shelf) => shelf.bookIds.includes(bookId))
+    const destination = shelves.find((shelf) => shelf.id === target.id)
+    if (!source || !destination) return
+
+    if (
+      destination.positions[bookId] === target.positions[bookId] &&
+      sameOrder(destination.bookIds, target.bookIds)
+    )
+      return
+
+    const updated = shelves.map((shelf) => {
+      if (shelf === destination) return target
+      if (shelf === source)
+        return { ...shelf, bookIds: shelf.bookIds.filter((id) => id !== bookId) }
+      return shelf
+    })
+    setSavedShelves(arrangeShelves(updated, widths))
   }
 
   function endDrag(): void {
+    hideDropOutline()
     setDraggedBookId(null)
-    setPlacement(null)
+  }
+
+  function addShelf(): void {
+    const id = Math.max(...shelves.map((shelf) => shelf.id)) + 1
+    setSavedShelves([...shelves, { id, bookIds: [], positions: {} }])
+  }
+
+  function renderSpine(book: Book, left: number): ReactNode {
+    const palette = (book.coverPath && spineColors?.[book.coverPath]) || paletteFor(book.title)
+    const width = widths.get(book.id)!
+    const label = book.author ? `${book.title} by ${book.author}` : book.title
+    const style = {
+      width,
+      height: 166 + (book.id % 5) * 9,
+      color: palette.ink,
+      backgroundColor: palette.cover,
+      '--spine-detail': palette.detail
+    } as CSSProperties
+
+    return (
+      <div
+        key={book.id}
+        role="listitem"
+        data-shelf-book={book.id}
+        style={{ '--shelf-x': `${left}px` } as CSSProperties}
+        className="bookshelf-slot"
+      >
+        <button
+          type="button"
+          className="book-spine"
+          style={style}
+          draggable
+          aria-label={label}
+          data-dragging={draggedBookId === book.id || undefined}
+          onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
+          onMouseLeave={hidePreview}
+          onClick={() => onOpen(book)}
+          onDragStart={(event) => {
+            hidePreview()
+            const { left } = event.currentTarget.getBoundingClientRect()
+            grabOffset.current = Math.max(0, Math.min(width, (event.clientX || 0) - left))
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', String(book.id))
+            setDraggedBookId(book.id)
+          }}
+          onDragEnd={endDrag}
+        >
+          <span aria-hidden="true" className="book-spine-copy">
+            <span className="book-spine-title">{book.title}</span>
+            {book.author && <span className="book-spine-author">{book.author}</span>}
+          </span>
+        </button>
+      </div>
+    )
   }
 
   return (
-    <section aria-label="Bookshelf">
-      <p className="mb-3 text-[13px] text-ink-muted">Drag books to arrange your shelf.</p>
-      <div
-        role="list"
-        className="bookshelf"
-        onDragOver={(event) => {
-          if (draggedBookId === null) return
-          const target = placementAt(event)
-          if (target) {
-            event.preventDefault()
-            event.dataTransfer.dropEffect = 'move'
-          }
-          setPlacement((previous) =>
-            previous?.bookId === target?.bookId && previous?.after === target?.after
-              ? previous
-              : target
-          )
-        }}
-        onDragLeave={(event) => {
-          if (
-            !(event.relatedTarget instanceof Node) ||
-            !event.currentTarget.contains(event.relatedTarget)
-          ) {
-            setPlacement(null)
-          }
-        }}
-        onDrop={(event) => {
-          if (draggedBookId === null) return
-          event.preventDefault()
-          const target = placementAt(event)
-          if (target) move(draggedBookId, target)
-          endDrag()
-        }}
-      >
-        {visible.map((book) => {
-          const palette =
-            (book.coverPath && spineColors?.[book.coverPath]) || paletteFor(book.title)
-          const thickness = Math.min(520, Math.max(0, (book.pageCount ?? 250) - 100))
-          const label = book.author ? `${book.title} by ${book.author}` : book.title
-          const style = {
-            width: 36 + Math.round(thickness / 14),
-            height: 166 + (book.id % 5) * 9,
-            color: palette.ink,
-            backgroundColor: palette.cover,
-            '--spine-detail': palette.detail
-          } as CSSProperties
-
+    <section
+      aria-label="Bookshelf"
+      className="bookshelf-section"
+      style={{ '--shelf-span': `${SHELF_SPAN}px` } as CSSProperties}
+    >
+      <p className="mb-3 text-[13px] text-ink-muted">Drag books along or between shelves.</p>
+      <div className="bookshelf">
+        {shelves.map((shelf, index) => {
+          const visible = shelf.bookIds
+            .map((id) => matchingById.get(id))
+            .filter((book) => book !== undefined)
+          const empty = shelf.bookIds.length === 0
           return (
             <div
-              key={book.id}
-              role="listitem"
-              data-shelf-book={book.id}
-              data-drop-side={
-                placement?.bookId === book.id && book.id !== draggedBookId
-                  ? placement.after
-                    ? 'after'
-                    : 'before'
-                  : undefined
-              }
-              className="bookshelf-slot"
+              key={shelf.id}
+              className="bookshelf-row"
+              onDragOver={(event) => {
+                if (draggedBookId === null) return
+                event.preventDefault()
+                const target = placementAt(event, shelf)
+                event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
+                if (target) showDropOutline(event.currentTarget, target, draggedBookId)
+                else hideDropOutline(event.currentTarget)
+              }}
+              onDragLeave={(event) => {
+                if (
+                  !(event.relatedTarget instanceof Node) ||
+                  !event.currentTarget.contains(event.relatedTarget)
+                ) {
+                  hideDropOutline(event.currentTarget)
+                }
+              }}
+              onDrop={(event) => {
+                if (draggedBookId === null) return
+                event.preventDefault()
+                const target = placementAt(event, shelf)
+                if (target) move(draggedBookId, target.shelf)
+                endDrag()
+              }}
             >
-              <button
-                type="button"
-                className="book-spine"
-                style={style}
-                draggable
-                aria-label={label}
-                data-dragging={draggedBookId === book.id || undefined}
-                onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
-                onMouseLeave={hidePreview}
-                onClick={() => onOpen(book)}
-                onDragStart={(event) => {
-                  hidePreview()
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', String(book.id))
-                  setDraggedBookId(book.id)
-                }}
-                onDragEnd={endDrag}
-              >
-                <span aria-hidden="true" className="book-spine-copy">
-                  <span className="book-spine-title">{book.title}</span>
-                  {book.author && <span className="book-spine-author">{book.author}</span>}
-                </span>
-              </button>
+              <div role="list" aria-label={`Shelf ${index + 1}`} className="bookshelf-track">
+                <div className="bookshelf-spines">
+                  {visible.map((book) => renderSpine(book, shelf.positions[book.id]))}
+                </div>
+              </div>
+              <div aria-hidden="true" className="bookshelf-drop-layer">
+                <span className="bookshelf-drop-preview" />
+              </div>
+              {empty && (
+                <>
+                  <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
+                    Drag books here
+                  </p>
+                  {shelves.length > 1 && (
+                    <button
+                      type="button"
+                      aria-label={`Remove empty shelf ${index + 1}`}
+                      className="btn btn-ghost absolute top-2 right-2 text-[12px]"
+                      onClick={() => setSavedShelves(shelves.filter((row) => row.id !== shelf.id))}
+                    >
+                      Remove shelf
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )
         })}
       </div>
+      <button type="button" className="btn btn-outline mt-3" onClick={addShelf}>
+        Add shelf
+      </button>
       {preview &&
         previewBook &&
         createPortal(

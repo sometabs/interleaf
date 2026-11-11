@@ -166,7 +166,9 @@ export default function Library({ onAdd }: Props): ReactNode {
           {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
         </p>
       ) : layout === 'shelf' ? (
-        <Bookshelf books={books} matching={matching} onOpen={openBook} />
+        <div className="-mx-6">
+          <Bookshelf books={books} matching={matching} onOpen={openBook} />
+        </div>
       ) : (
         groupBooks(matching, grouping).map((shelf) => (
           <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />

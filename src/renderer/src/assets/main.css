@@ -140,6 +140,11 @@
     .spinner {
       animation: interleaf-spin var(--spin-duration) linear infinite !important;
     }
+
+    /* Keep the landing outline smooth while the reader is dragging a book. */
+    .bookshelf-drop-preview[data-active] {
+      transition-duration: var(--drop-outline-duration) !important;
+    }
   }
 }
 
@@ -302,61 +307,81 @@
     box-shadow: 0 0 0 2px var(--color-accent-soft);
   }
 
+  .bookshelf-section {
+    --shelf-padding: 0px;
+    --shelf-frame: 7px;
+    width: calc(var(--shelf-span) + 2 * (var(--shelf-padding) + var(--shelf-frame)));
+    margin-inline: auto;
+  }
+
   .bookshelf {
-    --shelf-row-height: 226px;
+    --shelf-row-height: 230px;
     --shelf-ledge: 13px;
     --shelf-lip: light-dark(#c6af96, #735d4c);
     --shelf-wood: light-dark(#b0967a, #564438);
     --shelf-shadow: light-dark(#947b63, #392e27);
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 3px;
-    padding-inline: 14px;
-    border-inline: 7px solid var(--shelf-wood);
-    border-top: 7px solid var(--shelf-wood);
+    border-inline: var(--shelf-frame) solid var(--shelf-wood);
+    border-top: var(--shelf-frame) solid var(--shelf-wood);
     border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .bookshelf-row {
+    position: relative;
+    height: var(--shelf-row-height);
     background:
-      repeating-linear-gradient(
-        to bottom,
-        transparent 0 calc(var(--shelf-row-height) - var(--shelf-ledge)),
-        var(--shelf-lip) calc(var(--shelf-row-height) - var(--shelf-ledge))
-          calc(var(--shelf-row-height) - 10px),
-        var(--shelf-wood) calc(var(--shelf-row-height) - 10px) calc(var(--shelf-row-height) - 2px),
-        var(--shelf-shadow) calc(var(--shelf-row-height) - 2px) var(--shelf-row-height)
+      linear-gradient(
+        to top,
+        var(--shelf-shadow) 0 2px,
+        var(--shelf-wood) 2px 10px,
+        var(--shelf-lip) 10px var(--shelf-ledge),
+        transparent var(--shelf-ledge)
       ),
       light-dark(#eee9e2, #292420);
-    box-shadow:
-      inset 0 2px 8px rgb(0 0 0 / 0.1),
-      var(--shadow-card);
+    box-shadow: inset 0 2px 8px rgb(0 0 0 / 0.1);
+  }
+
+  .bookshelf-track {
+    height: calc(var(--shelf-row-height) - var(--shelf-ledge));
+    padding-inline: var(--shelf-padding);
+  }
+
+  .bookshelf-spines {
+    position: relative;
+    height: 100%;
   }
 
   .bookshelf-slot {
-    position: relative;
+    position: absolute;
+    inset-block: 0;
+    left: var(--shelf-x);
     display: flex;
-    flex: 0 0 auto;
-    height: var(--shelf-row-height);
     align-items: flex-end;
-    padding-bottom: var(--shelf-ledge);
   }
 
-  .bookshelf-slot[data-drop-side]::before {
+  .bookshelf-drop-layer {
     position: absolute;
     z-index: 2;
-    inset-block: 14px var(--shelf-ledge);
-    width: 3px;
-    border-radius: 2px;
-    background: var(--color-accent);
-    box-shadow: 0 0 0 1px var(--color-accent-soft);
+    inset: 0 0 var(--shelf-ledge);
+    overflow: clip;
     pointer-events: none;
-    content: '';
   }
 
-  .bookshelf-slot[data-drop-side='before']::before {
-    left: -3px;
+  .bookshelf-drop-preview {
+    --drop-outline-duration: 75ms;
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    display: none;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px 3px 2px 2px;
+    background: var(--color-accent-soft);
+    opacity: 0.7;
   }
 
-  .bookshelf-slot[data-drop-side='after']::before {
-    right: -3px;
+  .bookshelf-drop-preview[data-active] {
+    display: block;
+    transition: transform var(--drop-outline-duration) linear;
   }
 
   .book-spine {
