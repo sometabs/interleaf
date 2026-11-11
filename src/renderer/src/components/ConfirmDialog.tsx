@@ -20,7 +20,7 @@ export default function ConfirmDialog(): ReactNode {
       }}
     >
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-ink/25 backdrop-blur-[2px]" />
+        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
         <AlertDialog.Content className="fixed left-1/2 top-[22vh] z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 rounded-card border border-hairline bg-surface p-5 shadow-pop">
           <AlertDialog.Title className="text-[15px] font-semibold">{title}</AlertDialog.Title>
 

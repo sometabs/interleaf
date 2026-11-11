@@ -77,7 +77,7 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/25 backdrop-blur-[2px]" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
         <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 flex max-h-[70vh] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-hairline bg-surface shadow-pop">
           <Dialog.Title className="sr-only">Add a book</Dialog.Title>
           <Dialog.Description className="sr-only">

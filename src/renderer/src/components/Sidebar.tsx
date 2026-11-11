@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useBooks, useNotes } from '../lib/queries'
 import { isQuote } from '../lib/quotes'
 import { useView, type View } from '../lib/view'
+import Appearance from './Appearance'
 
 interface Props {
   onAbout: () => void
@@ -261,6 +262,7 @@ export default function Sidebar({
       <div className="flex-1" />
 
       <footer className={collapsed ? 'flex flex-col items-center gap-1 p-2' : 'space-y-2 p-3'}>
+        <Appearance collapsed={collapsed} />
         {collapsed ? (
           <>
             <button

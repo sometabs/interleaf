@@ -3,32 +3,40 @@
 /* No webfonts: the CSP allows nothing off-disk, and this has to work with the
    network unplugged. */
 @theme {
-  --color-canvas: #f7f7f8;
-  --color-surface: #ffffff;
-  --color-sunken: #f1f1f4;
-  --color-hover: #ececef;
+  --color-canvas: light-dark(#f7f7f8, #1c1b1a);
+  --color-surface: light-dark(#ffffff, #252321);
+  --color-sunken: light-dark(#f1f1f4, #302d2a);
+  --color-hover: light-dark(#ececef, #383430);
 
-  --color-hairline: #e7e7ea;
-  --color-hairline-strong: #d7d8dd;
+  --color-hairline: light-dark(#e7e7ea, #3b3733);
+  --color-hairline-strong: light-dark(#d7d8dd, #57514b);
 
-  --color-ink: #18181b;
-  --color-ink-muted: #61626b;
-  --color-ink-faint: #9496a0;
+  --color-ink: light-dark(#18181b, #eee9e1);
+  --color-ink-muted: light-dark(#61626b, #c1b8ae);
+  --color-ink-faint: light-dark(#9496a0, #a29689);
 
-  --color-accent: #2f65da;
-  --color-accent-hover: #2153bf;
-  --color-accent-soft: #eaf1fd;
+  --color-accent: light-dark(#2f65da, #9bb8ec);
+  --color-accent-soft: light-dark(#eaf1fd, #283647);
+  --color-action: light-dark(#2f65da, #3d619d);
+  --color-action-hover: light-dark(#2153bf, #4b74b5);
 
-  --color-danger: #d7332d;
-  --color-danger-soft: #fdeeed;
-  --color-star: #f59e0b;
+  --color-danger: light-dark(#d7332d, #f09a90);
+  --color-danger-soft: light-dark(#fdeeed, #422b28);
+  --color-danger-action: light-dark(#d7332d, #b64239);
+  --color-danger-action-hover: light-dark(#b82823, #c4483f);
+  --color-star: light-dark(#f59e0b, #dfb66d);
+  --color-overlay: light-dark(rgb(24 24 27 / 0.25), rgb(0 0 0 / 0.65));
 
   --radius-card: 3px;
   --radius-control: 3px;
 
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
-  --shadow-raised: 0 2px 4px rgb(16 24 40 / 0.04), 0 4px 12px rgb(16 24 40 / 0.08);
-  --shadow-pop: 0 12px 32px rgb(16 24 40 / 0.14);
+  --shadow-card:
+    0 1px 2px light-dark(rgb(16 24 40 / 0.04), rgb(0 0 0 / 0.18)),
+    0 1px 3px light-dark(rgb(16 24 40 / 0.06), rgb(0 0 0 / 0.25));
+  --shadow-raised:
+    0 2px 4px light-dark(rgb(16 24 40 / 0.04), rgb(0 0 0 / 0.2)),
+    0 4px 12px light-dark(rgb(16 24 40 / 0.08), rgb(0 0 0 / 0.3));
+  --shadow-pop: 0 12px 32px light-dark(rgb(16 24 40 / 0.14), rgb(0 0 0 / 0.45));
 
   --font-sans:
     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto,
@@ -45,9 +53,15 @@
 
 @layer base {
   :root {
-    /* The app commits to light, so tell the platform: otherwise a dark-mode
-       OS renders scrollbars and native controls dark against white cards. */
     color-scheme: light;
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  :root[data-theme='system'] {
+    color-scheme: light dark;
   }
 
   html,
@@ -161,25 +175,25 @@
   }
 
   .btn-primary {
-    background: var(--color-accent);
+    background: var(--color-action);
     border-color: transparent;
     color: #fff;
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: var(--color-accent-hover);
+    background: var(--color-action-hover);
   }
 
   /* The confirm button of a destructive dialog. Solid red, so the button that
      ends something never looks like the button that saves it. */
   .btn-destructive {
-    background: var(--color-danger);
+    background: var(--color-danger-action);
     border-color: transparent;
     color: #fff;
   }
 
   .btn-destructive:hover:not(:disabled) {
-    background: #b82823;
+    background: var(--color-danger-action-hover);
   }
 
   .btn-outline {

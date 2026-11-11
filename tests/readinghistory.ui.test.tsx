@@ -109,7 +109,10 @@ describe('Reading history', () => {
 
     await user.click(screen.getByRole('button', { name: /^Library/ }))
     await user.click(screen.getByRole('button', { name: 'Search and commands' }))
-    await user.type(screen.getByRole('combobox'), 'Go to Reading history')
+    await user.type(
+      within(screen.getByRole('dialog')).getByRole('combobox'),
+      'Go to Reading history'
+    )
     await user.click(await screen.findByRole('option', { name: /Go to Reading history/ }))
     expect(await screen.findByRole('heading', { name: 'Reading history' })).toBeDefined()
   })

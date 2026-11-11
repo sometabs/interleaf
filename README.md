@@ -140,6 +140,9 @@ model, and undo **Not for me** dismissals.
 
 ## Getting around
 
+Choose Light, Dark or System from **Appearance** in the sidebar. The choice is remembered on this
+machine; System follows your operating system's colour preference.
+
 | key        | action                                     |
 | ---------- | ------------------------------------------ |
 | `Ctrl + K` | Search your library or run common commands |

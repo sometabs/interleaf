@@ -28,7 +28,7 @@ export default function CoverPicker({ book }: { book: Book }): ReactNode {
       <Cover title={book.title} author={book.author} path={book.coverPath} size="lg" />
 
       {busy && (
-        <div className="absolute inset-0 grid place-items-center rounded-card bg-ink/30">
+        <div className="absolute inset-0 grid place-items-center rounded-card bg-black/30">
           <Spinner label="Updating the cover" />
         </div>
       )}

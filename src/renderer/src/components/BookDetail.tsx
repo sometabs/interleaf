@@ -317,7 +317,7 @@ export default function BookDetail({ book }: Props): ReactNode {
                   onClick={() => setStatus(status)}
                   className={`rounded-control border px-2.5 py-1 text-[12px] transition-colors ${
                     book.status === status
-                      ? 'border-transparent bg-accent font-medium text-white'
+                      ? 'border-transparent bg-action font-medium text-white'
                       : 'border-hairline-strong bg-surface text-ink-muted hover:text-ink'
                   }`}
                 >
