@@ -78,7 +78,7 @@ export default function App(): ReactNode {
         {view.kind === 'history' && <ReadingHistory />}
         {view.kind === 'book' && <BookRoute id={view.id} />}
         {view.kind === 'reviews' && <Reviews />}
-        {view.kind === 'review' && <ReviewView key={view.id} noteId={view.id} />}
+        {view.kind === 'review' && <ReviewView key={view.bookId} bookId={view.bookId} />}
         {view.kind === 'notes' && <Notes />}
         {view.kind === 'quotes' && <Quotes />}
         {view.kind === 'stats' && <Stats />}

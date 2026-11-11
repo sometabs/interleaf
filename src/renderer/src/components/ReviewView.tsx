@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { formatDate } from '../lib/dates'
-import { useBook, useDeleteNote, useNote, useUpdateBook, useUpdateNote } from '../lib/queries'
+import { useBooks, useDeleteNote, useNotes, useSaveReview, useUpdateBook } from '../lib/queries'
 import { SCREEN_NAMES, useView } from '../lib/view'
 import Cover from './Cover'
 import Editor from './Editor'
@@ -10,25 +10,27 @@ import Empty from './Empty'
 import Rating from './Rating'
 
 interface Props {
-  noteId: number
+  bookId: number
 }
 
-export default function ReviewView({ noteId }: Props): ReactNode {
+export default function ReviewView({ bookId }: Props): ReactNode {
   const { navigate, previous, back } = useView()
-  const { data: review, isPending } = useNote(noteId)
-  const book = useBook(review?.bookId ?? null)
+  const { data: books, isPending: booksPending } = useBooks()
+  const { data: notes, isPending: notesPending } = useNotes(bookId)
+  const book = books?.find((entry) => entry.id === bookId)
+  const review = notes?.find((note) => note.kind === 'review')
 
-  const updateNote = useUpdateNote()
+  const saveReview = useSaveReview(bookId)
   const updateBook = useUpdateBook()
-  const deleteNote = useDeleteNote()
+  const deleteNote = useDeleteNote(bookId)
+  const deletingId = useRef<number | undefined>(undefined)
 
-  if (isPending) return <div className="h-full" />
-  if (!review) return <Empty title="This review no longer exists." />
+  if (booksPending || notesPending) return <div className="h-full" />
   if (!book) return <Empty title="The book this review belongs to is gone." />
 
   const title = book.title
 
-  async function remove(): Promise<void> {
+  async function remove(noteId: number): Promise<void> {
     const ok = await confirm({
       title: `Delete your review of “${title}”?`,
       body: 'The book and everything else about it stays. This cannot be undone.',
@@ -36,7 +38,13 @@ export default function ReviewView({ noteId }: Props): ReactNode {
       destructive: true
     })
     if (!ok) return
-    deleteNote.mutate(noteId, { onSuccess: () => navigate({ kind: 'reviews' }) })
+    deletingId.current = noteId
+    deleteNote.mutate(noteId, {
+      onSuccess: () => navigate({ kind: 'reviews' }),
+      onError: () => {
+        deletingId.current = undefined
+      }
+    })
   }
 
   return (
@@ -59,9 +67,16 @@ export default function ReviewView({ noteId }: Props): ReactNode {
         >
           Open the book →
         </button>
-        <button type="button" className="btn btn-ghost btn-danger" onClick={() => void remove()}>
-          Delete
-        </button>
+        {review && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-danger"
+            disabled={deleteNote.isPending}
+            onClick={() => void remove(review.id)}
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       <header className="flex items-start gap-4">
@@ -86,10 +101,16 @@ export default function ReviewView({ noteId }: Props): ReactNode {
 
       <div className="card mt-5 min-h-0 flex-1 px-5 py-4">
         <Editor
-          key={review.id}
-          value={review.bodyMd}
+          value={review?.bodyMd ?? ''}
           placeholder="What did you make of it?"
-          onSave={(text) => updateNote.mutateAsync({ id: review.id, patch: { bodyMd: text } })}
+          onSave={(bodyMd) =>
+            saveReview.mutateAsync({
+              // The editor may flush while the deleted review is disappearing.
+              noteId: deletingId.current ?? review?.id,
+              bookTitle: title,
+              bodyMd
+            })
+          }
         />
       </div>
     </div>

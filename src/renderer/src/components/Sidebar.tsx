@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { useBooks, useNotes } from '../lib/queries'
 import { isQuote } from '../lib/quotes'
+import { reviewEntries } from '../lib/reviews'
 import { useView, type View } from '../lib/view'
 import Appearance from './Appearance'
 
@@ -89,7 +90,7 @@ export default function Sidebar({
       label: 'Reviews',
       view: { kind: 'reviews' },
       matches: ['reviews', 'review'],
-      count: notes?.filter((note) => note.kind === 'review').length,
+      count: books && notes ? reviewEntries(books, notes).length : undefined,
       icon: (
         <Icon>
           <path d="m12 4 2.3 4.8 5.2.7-3.8 3.7.9 5.3-4.6-2.5-4.6 2.5.9-5.3-3.8-3.7 5.2-.7z" />

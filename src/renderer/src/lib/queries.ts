@@ -374,9 +374,36 @@ export function useUpdateNote(): UseMutationResult<
   })
 }
 
-export function useDeleteNote(): UseMutationResult<void, Error, number> {
+interface ReviewSave {
+  noteId?: number
+  bookTitle: string
+  bodyMd: string
+}
+
+function reviewWriteScope(bookId: number): { id: string } {
+  return { id: `book-review:${bookId}` }
+}
+
+export function useSaveReview(bookId: number): UseMutationResult<Note | null, Error, ReviewSave> {
   const client = useQueryClient()
   return useMutation({
+    scope: reviewWriteScope(bookId),
+    mutationFn: async ({ noteId, bookTitle, bodyMd }: ReviewSave) => {
+      // Another autosave may have created the review while this save was queued.
+      const id =
+        noteId ?? (await api().listNotes(bookId)).find((note) => note.kind === 'review')?.id
+      if (id !== undefined) return api().updateNote(id, { bodyMd })
+      if (!bodyMd.trim()) return null
+      return api().createNote({ bookId, kind: 'review', title: `Review of ${bookTitle}`, bodyMd })
+    },
+    onSuccess: () => invalidateNotes(client)
+  })
+}
+
+export function useDeleteNote(reviewBookId?: number): UseMutationResult<void, Error, number> {
+  const client = useQueryClient()
+  return useMutation({
+    scope: reviewBookId === undefined ? undefined : reviewWriteScope(reviewBookId),
     mutationFn: (id: number) => api().deleteNote(id),
     onSuccess: () => invalidateNotes(client)
   })

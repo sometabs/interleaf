@@ -1,9 +1,9 @@
-import type { Book, Note } from '@shared/api'
 import { toPlainText } from '@shared/plaintext'
 import { useState, type ReactNode } from 'react'
 
 import { formatDate } from '../lib/dates'
 import { useBooks, useNotes } from '../lib/queries'
+import { reviewEntries } from '../lib/reviews'
 import { useView } from '../lib/view'
 import Cover from './Cover'
 import Empty from './Empty'
@@ -14,28 +14,25 @@ const ANY = ''
 
 export default function Reviews(): ReactNode {
   const { navigate } = useView()
-  const { data: notes = [], isPending } = useNotes()
-  const { data: books = [] } = useBooks()
+  const { data: notes = [], isPending: notesPending } = useNotes()
+  const { data: books = [], isPending: booksPending } = useBooks()
 
   const [filter, setFilter] = useState('')
   const [ratingFilter, setRatingFilter] = useState(ANY)
 
-  const byId = new Map(books.map((book) => [book.id, book]))
-
-  // A review is one per book and cannot exist without one, so a review whose
-  // book is gone is a row that can never be opened.
-  const reviews = notes
-    .filter((note) => note.kind === 'review' && note.bookId !== null && byId.has(note.bookId))
-    .sort((a, b) => finished(byId, b) - finished(byId, a))
+  const reviews = reviewEntries(books, notes).sort(
+    (a, b) =>
+      (b.book.finishedAt ?? -Infinity) - (a.book.finishedAt ?? -Infinity) ||
+      (b.review?.updatedAt ?? 0) - (a.review?.updatedAt ?? 0)
+  )
 
   const query = filter.trim().toLowerCase()
 
-  const matching = reviews.filter((review) => {
-    const book = byId.get(review.bookId as number)
-    if (ratingFilter !== ANY && (book?.rating ?? 0) !== Number(ratingFilter)) return false
+  const matching = reviews.filter(({ book, review }) => {
+    if (ratingFilter !== ANY && book.rating !== Number(ratingFilter)) return false
     if (!query) return true
 
-    return [review.bodyMd, book?.title ?? '', book?.author ?? '']
+    return [review?.bodyMd ?? '', book.title, book.author ?? '']
       .join('\n')
       .toLowerCase()
       .includes(query)
@@ -43,7 +40,7 @@ export default function Reviews(): ReactNode {
 
   const narrowed = query !== '' || ratingFilter !== ANY
 
-  if (isPending) return <div className="h-full" />
+  if (booksPending || notesPending) return <div className="h-full" />
 
   return (
     <div className="h-full overflow-y-auto px-8 pt-7 pb-16">
@@ -54,7 +51,7 @@ export default function Reviews(): ReactNode {
             <p className="mt-0.5 text-[13px] text-ink-muted">
               {narrowed
                 ? `${matching.length} of ${reviews.length}`
-                : `${reviews.length} ${reviews.length === 1 ? 'book' : 'books'} you have written about`}
+                : `${reviews.length} ${reviews.length === 1 ? 'book' : 'books'} you’ve rated or reviewed`}
             </p>
           </div>
 
@@ -102,23 +99,21 @@ export default function Reviews(): ReactNode {
         )}
 
         {reviews.length === 0 ? (
-          <Empty title="No reviews yet">
-            A review is written on the book itself, under Your review.
-          </Empty>
+          <Empty title="No reviews yet">Rate a book or write a review on its book page.</Empty>
         ) : matching.length === 0 ? (
           <p className="py-8 text-center text-ink-muted">
             {query ? `Nothing matches “${filter.trim()}”.` : 'No reviews at that rating.'}
           </p>
         ) : (
           <div className="flex flex-col gap-1">
-            {matching.map((review) => {
-              const book = byId.get(review.bookId as number) as Book
+            {matching.map(({ book, review }) => {
+              const excerpt = review ? toPlainText(review.bodyMd).slice(0, 300) : ''
               return (
                 <button
-                  key={review.id}
+                  key={book.id}
                   type="button"
                   data-testid="review-row"
-                  onClick={() => navigate({ kind: 'review', id: review.id })}
+                  onClick={() => navigate({ kind: 'review', bookId: book.id })}
                   className="flex gap-3.5 rounded-card px-3 py-3 text-left hover:bg-hover"
                 >
                   <span className="w-11 shrink-0">
@@ -147,12 +142,10 @@ export default function Reviews(): ReactNode {
 
                     <span
                       className={`line-clamp-3 min-w-0 wrap-anywhere text-[13px] leading-snug ${
-                        review.bodyMd.trim() ? 'text-ink-muted' : 'italic text-ink-faint'
+                        excerpt ? 'text-ink-muted' : 'italic text-ink-faint'
                       }`}
                     >
-                      {review.bodyMd.trim()
-                        ? toPlainText(review.bodyMd).slice(0, 300)
-                        : 'Empty review'}
+                      {excerpt || 'Empty review'}
                     </span>
                   </span>
                 </button>
@@ -163,10 +156,4 @@ export default function Reviews(): ReactNode {
       </div>
     </div>
   )
-}
-
-// `?? 0` and not a sentinel: an undated book sorts below every real date
-// without any pair of them comparing as NaN.
-function finished(books: Map<number, Book>, review: Note): number {
-  return books.get(review.bookId as number)?.finishedAt ?? 0
 }

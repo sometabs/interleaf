@@ -10,7 +10,7 @@ export type View =
   | { kind: 'new-note' }
   | { kind: 'notes' }
   | { kind: 'reviews' }
-  | { kind: 'review'; id: number }
+  | { kind: 'review'; bookId: number }
   | { kind: 'quotes' }
   | { kind: 'stats' }
   // Set when the screen was opened from one book: Discover then ranks against

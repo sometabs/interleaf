@@ -1,5 +1,5 @@
 import { BOOK_STATUSES, STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/api'
-import { useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { fromDateInput, readingDurationDays, relativeDate, toDateInput } from '../lib/dates'
@@ -12,6 +12,7 @@ import {
   useDeleteNote,
   useEnrichBook,
   useNotes,
+  useSaveReview,
   useUpdateBook,
   useUpdateNote
 } from '../lib/queries'
@@ -43,13 +44,12 @@ export default function BookDetail({ book }: Props): ReactNode {
   const createNote = useCreateNote()
   const updateNote = useUpdateNote()
   const deleteNote = useDeleteNote()
+  const saveReview = useSaveReview(book.id)
 
   const [openId, setOpenId] = useState<number | null>(null)
   const [openQuoteId, setOpenQuoteId] = useState<number | null>(null)
   const [noteDraft, setNoteDraft] = useState(false)
   const [quoteDraft, setQuoteDraft] = useState(false)
-  const reviewIdRef = useRef<number | null>(null)
-  const reviewSaveRef = useRef<Promise<void>>(Promise.resolve())
 
   const review = notes.find((note) => note.kind === 'review') ?? null
   const thoughts = notes.filter((note) => note.kind !== 'review' && !isQuote(note))
@@ -57,29 +57,6 @@ export default function BookDetail({ book }: Props): ReactNode {
 
   function setStatus(status: BookStatus): void {
     updateBook.mutate({ id: book.id, patch: statusPatch(status) })
-  }
-
-  function saveReview(text: string): Promise<void> {
-    // A new review needs its ID before later autosaves can update it. Queue
-    // those writes, including the final flush when the reader leaves the page.
-    const save = reviewSaveRef.current
-      .catch(() => {})
-      .then(async () => {
-        const id = reviewIdRef.current ?? review?.id
-        if (id !== undefined && id !== null) {
-          await updateNote.mutateAsync({ id, patch: { bodyMd: text } })
-        } else if (text.trim()) {
-          const created = await createNote.mutateAsync({
-            bookId: book.id,
-            kind: 'review',
-            title: `Review of ${book.title}`,
-            bodyMd: text
-          })
-          reviewIdRef.current = created.id
-        }
-      })
-    reviewSaveRef.current = save
-    return save
   }
 
   // The row expands into an editor in place, so the book stays in view.
@@ -416,7 +393,9 @@ export default function BookDetail({ book }: Props): ReactNode {
                     key={`review-${book.id}`}
                     value={review?.bodyMd ?? ''}
                     placeholder={`What did you make of ${book.title}?`}
-                    onSave={saveReview}
+                    onSave={(bodyMd) =>
+                      saveReview.mutateAsync({ noteId: review?.id, bookTitle: book.title, bodyMd })
+                    }
                   />
                 </div>
               )}
