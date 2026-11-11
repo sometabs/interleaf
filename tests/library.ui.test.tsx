@@ -113,6 +113,36 @@ describe('filtering inside a grouping', () => {
 })
 
 describe('arranging the bookshelf', () => {
+  it('previews the cached cover after hovering and hides it when a drag starts', async () => {
+    const coverPath = 'book-1-test.jpg'
+    installBridge({ books: [{ ...SOLARIS, coverPath }] }, { getSpineColors: async () => ({}) })
+    renderApp(<Library onAdd={() => {}} />)
+    await userEvent.setup().click(await screen.findByRole('radio', { name: 'Shelf' }))
+    const spine = screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.mouseEnter(spine)
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+      fireEvent.mouseLeave(spine)
+      act(() => vi.runOnlyPendingTimers())
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+
+      fireEvent.mouseEnter(spine)
+      act(() => vi.runOnlyPendingTimers())
+      const preview = screen.getByText('Solaris', { selector: 'p' }).closest('[aria-hidden="true"]')
+      expect(preview?.querySelector('img')?.getAttribute('src')).toBe(
+        `bookcover://covers/${coverPath}`
+      )
+      expect(preview?.textContent).toContain('Stanisław Lem')
+
+      fireEvent.dragStart(spine, { dataTransfer: { setData: vi.fn() } })
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('saves the shelf order after dragging a book', async () => {
     const coverPath = 'book-1-test.jpg'
     const getSpineColors = vi.fn(async () => ({

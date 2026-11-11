@@ -1,10 +1,13 @@
 import type { Book } from '@shared/api'
-import { useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties, DragEvent, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 import { insertAround, sameOrder } from '../lib/bookOrder'
 import { paletteFor } from '../lib/bookPalette'
 import { usePersistentState } from '../lib/persistent'
 import { useSpineColors } from '../lib/queries'
+import Cover from './Cover'
 
 interface Props {
   books: Book[]
@@ -16,6 +19,16 @@ interface Placement {
   bookId: number
   after: boolean
 }
+
+interface Preview {
+  bookId: number
+  left: number
+  top: number
+}
+
+const PREVIEW_WIDTH = 248
+const PREVIEW_MAX_HEIGHT = 144
+const PREVIEW_GAP = 10
 
 function parseOrder(raw: unknown): number[] | null {
   if (!Array.isArray(raw)) return null
@@ -53,6 +66,8 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   const [savedOrder, setSavedOrder] = usePersistentState('interleaf.bookshelfOrder', [], parseOrder)
   const [draggedBookId, setDraggedBookId] = useState<number | null>(null)
   const [placement, setPlacement] = useState<Placement | null>(null)
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const previewTimer = useRef<number | undefined>(undefined)
   const positions = new Map(savedOrder.map((id, index) => [id, index]))
   const arranged = [...books].sort(
     (left, right) =>
@@ -62,6 +77,53 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   const order = arranged.map((book) => book.id)
   const matchingIds = new Set(matching.map((book) => book.id))
   const visible = arranged.filter((book) => matchingIds.has(book.id))
+  const previewBook = preview && visible.find((book) => book.id === preview.bookId)
+
+  const hidePreview = useCallback((): void => {
+    window.clearTimeout(previewTimer.current)
+    setPreview(null)
+  }, [])
+
+  useEffect(() => {
+    function dismissOnEscape(event: KeyboardEvent): void {
+      if (event.key === 'Escape') hidePreview()
+    }
+
+    window.addEventListener('scroll', hidePreview, true)
+    window.addEventListener('resize', hidePreview)
+    window.addEventListener('keydown', dismissOnEscape)
+    return () => {
+      window.clearTimeout(previewTimer.current)
+      window.removeEventListener('scroll', hidePreview, true)
+      window.removeEventListener('resize', hidePreview)
+      window.removeEventListener('keydown', dismissOnEscape)
+    }
+  }, [hidePreview])
+
+  function queuePreview(bookId: number, spine: HTMLButtonElement): void {
+    hidePreview()
+    if (draggedBookId !== null) return
+
+    previewTimer.current = window.setTimeout(() => {
+      if (!spine.isConnected) return
+      const { left, right, top, height } = spine.getBoundingClientRect()
+      const nextToRight = right + PREVIEW_GAP
+      setPreview({
+        bookId,
+        left:
+          nextToRight + PREVIEW_WIDTH + PREVIEW_GAP <= window.innerWidth
+            ? nextToRight
+            : Math.max(PREVIEW_GAP, left - PREVIEW_GAP - PREVIEW_WIDTH),
+        top: Math.max(
+          PREVIEW_GAP,
+          Math.min(
+            top + (height - PREVIEW_MAX_HEIGHT) / 2,
+            window.innerHeight - PREVIEW_MAX_HEIGHT - PREVIEW_GAP
+          )
+        )
+      })
+    }, 400)
+  }
 
   function move(bookId: number, target: Placement): void {
     if (!order.includes(bookId)) return
@@ -142,10 +204,12 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                 style={style}
                 draggable
                 aria-label={label}
-                title={label}
                 data-dragging={draggedBookId === book.id || undefined}
+                onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
+                onMouseLeave={hidePreview}
                 onClick={() => onOpen(book)}
                 onDragStart={(event) => {
+                  hidePreview()
                   event.dataTransfer.effectAllowed = 'move'
                   event.dataTransfer.setData('text/plain', String(book.id))
                   setDraggedBookId(book.id)
@@ -161,6 +225,39 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           )
         })}
       </div>
+      {preview &&
+        previewBook &&
+        createPortal(
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed z-30 flex items-center gap-3 overflow-hidden rounded-card border border-hairline bg-surface p-3 shadow-raised"
+            style={{
+              left: preview.left,
+              top: preview.top,
+              width: PREVIEW_WIDTH,
+              maxHeight: PREVIEW_MAX_HEIGHT
+            }}
+          >
+            <div className="w-16 shrink-0">
+              <Cover
+                title={previewBook.title}
+                author={previewBook.author}
+                path={previewBook.coverPath}
+              />
+            </div>
+            <div className="min-w-0 wrap-anywhere">
+              <p className="line-clamp-4 text-sm leading-tight font-semibold">
+                {previewBook.title}
+              </p>
+              {previewBook.author && (
+                <p className="mt-1 line-clamp-2 text-xs leading-snug text-ink-muted">
+                  {previewBook.author}
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </section>
   )
 }

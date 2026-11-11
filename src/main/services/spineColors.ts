@@ -4,23 +4,38 @@ import { readFile } from 'fs/promises'
 import type { SpineColors } from '../../shared/api'
 import { resolveCoverPath } from './covers'
 
-interface ColorSample {
+interface Color {
   red: number
   green: number
   blue: number
+}
+
+interface ColorSample extends Color {
   weight: number
 }
 
-function hex(red: number, green: number, blue: number): string {
+function hex({ red, green, blue }: Color): string {
   return (
     '#' +
     [red, green, blue].map((value) => Math.round(value).toString(16).padStart(2, '0')).join('')
   )
 }
 
-function linear(value: number): number {
-  const srgb = value / 255
-  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4
+function brightness({ red, green, blue }: Color): number {
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+function chroma({ red, green, blue }: Color): number {
+  return Math.max(red, green, blue) - Math.min(red, green, blue)
+}
+
+function mutedTone(color: Color, tone: number): string {
+  const gray = brightness(color)
+  return hex({
+    red: tone + (color.red - gray) * 0.27,
+    green: tone + (color.green - gray) * 0.27,
+    blue: tone + (color.blue - gray) * 0.27
+  })
 }
 
 function colorsFromBitmap(bitmap: Buffer, width: number): SpineColors | null {
@@ -50,7 +65,8 @@ function colorsFromBitmap(bitmap: Buffer, width: number): SpineColors | null {
     .map(({ red, green, blue, weight }) => ({
       red: red / weight,
       green: green / weight,
-      blue: blue / weight
+      blue: blue / weight,
+      weight
     }))
   const base = ranked[0]
   if (!base) return null
@@ -62,13 +78,19 @@ function colorsFromBitmap(bitmap: Buffer, width: number): SpineColors | null {
         Math.abs(color.blue - base.blue) >=
       120
   )
-  const luminance =
-    0.2126 * linear(base.red) + 0.7152 * linear(base.green) + 0.0722 * linear(base.blue)
-  const ink = luminance < 0.18 ? '#ffffff' : '#000000'
+  // Use a substantial secondary hue when the jacket background is almost gray.
+  const hue =
+    chroma(base) >= 28
+      ? base
+      : (ranked.find((color) => chroma(color) >= 42 && color.weight >= base.weight / 8) ?? base)
+  const lightness = brightness(base)
+  const dark = lightness < 118
+  // Keep dark and light cloth tones apart so the spine lettering stays clear.
+  const tone = dark ? 69 + (lightness * 37) / 118 : 148 + ((lightness - 118) * 36) / 137
   return {
-    cover: hex(base.red, base.green, base.blue),
-    ink,
-    detail: accent ? hex(accent.red, accent.green, accent.blue) : ink
+    cover: mutedTone(hue, tone),
+    ink: dark ? '#fffaf2' : '#181615',
+    detail: mutedTone(accent ?? hue, tone + (dark ? 52 : -46))
   }
 }
 
