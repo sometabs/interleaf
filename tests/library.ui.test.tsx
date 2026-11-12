@@ -117,6 +117,17 @@ describe('arranging the bookshelf', () => {
     window.localStorage.setItem('interleaf.libraryLayout', '"shelf"')
   })
 
+  function shelfTitles(shelf: HTMLElement): (string | null)[] {
+    return Array.from(shelf.querySelectorAll('button[draggable]'), (button) =>
+      button.getAttribute('aria-label')
+    )
+  }
+
+  function chooseBookAction(book: HTMLElement, name: string): void {
+    fireEvent.contextMenu(book)
+    fireEvent.click(screen.getByRole('menuitem', { name }))
+  }
+
   it('shows the right hover preview for both orientations and hides it when a drag starts', async () => {
     const coverPath = 'book-1-test.jpg'
     installBridge(
@@ -148,7 +159,7 @@ describe('arranging the bookshelf', () => {
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
       fireEvent.dragEnd(spine)
 
-      fireEvent.contextMenu(spine)
+      chooseBookAction(spine, 'Show cover')
       fireEvent.mouseEnter(spine)
       act(() => vi.advanceTimersByTime(399))
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
@@ -173,10 +184,7 @@ describe('arranging the bookshelf', () => {
     installBridge({ books: [{ ...SOLARIS, coverPath }, PICNIC, HALL] }, { getSpineColors })
     const first = renderApp(<Library onAdd={() => {}} />)
     const shelf = await screen.findByRole('list', { name: 'Shelf 1' })
-    const titles = (): string[] =>
-      within(shelf)
-        .getAllByRole('button')
-        .map((button) => button.getAttribute('aria-label') ?? '')
+    const titles = (): (string | null)[] => shelfTitles(shelf)
     const wolf = within(shelf).getByRole('button', { name: 'Wolf Hall by Hilary Mantel' })
     const solaris = within(shelf).getByRole('button', { name: 'Solaris by Stanisław Lem' })
     expect(solaris.style.width).toBe('43px')
@@ -196,9 +204,7 @@ describe('arranging the bookshelf', () => {
     first.unmount()
     renderApp(<Library onAdd={() => {}} />)
     const restored = await screen.findByRole('list', { name: 'Shelf 1' })
-    expect(within(restored).getAllByRole('button')[0].getAttribute('aria-label')).toBe(
-      'Wolf Hall by Hilary Mantel'
-    )
+    expect(shelfTitles(restored)[0]).toBe('Wolf Hall by Hilary Mantel')
   })
 
   it('keeps the previous order and saves a book dropped into open shelf space', async () => {
@@ -208,9 +214,7 @@ describe('arranging the bookshelf', () => {
     const user = userEvent.setup()
     await screen.findByRole('list', { name: 'Shelf 1' })
     const titles = (shelf: string): (string | null)[] =>
-      within(screen.getByRole('list', { name: shelf }))
-        .queryAllByRole('button')
-        .map((button) => button.getAttribute('aria-label'))
+      shelfTitles(screen.getByRole('list', { name: shelf }))
     expect(titles('Shelf 1')).toEqual([
       'Wolf Hall by Hilary Mantel',
       'Roadside Picnic by Strugatsky',
@@ -315,7 +319,7 @@ describe('arranging the bookshelf', () => {
     const first = renderApp(<Library onAdd={() => {}} />)
     const label = 'Solaris by Stanisław Lem'
     const solaris = await screen.findByRole('button', { name: label })
-    fireEvent.contextMenu(solaris)
+    chooseBookAction(solaris, 'Show cover')
     expect(solaris.style.width).toBe('112px')
     expect(within(solaris).getByTestId('cover').querySelector('img')?.getAttribute('src')).toBe(
       'bookcover://covers/book-1-test.jpg'
@@ -330,7 +334,7 @@ describe('arranging the bookshelf', () => {
     renderApp(<Library onAdd={() => {}} />)
     const restored = await screen.findByRole('button', { name: label })
     expect(within(restored).getByTestId('cover')).toBeTruthy()
-    fireEvent.contextMenu(restored)
+    chooseBookAction(restored, 'Show spine')
     expect(within(restored).queryByTestId('cover')).toBeNull()
     expect(restored.style.width).toBe('43px')
   })
@@ -343,16 +347,177 @@ describe('arranging the bookshelf', () => {
     renderApp(<Library onAdd={() => {}} />)
     const book = await screen.findByRole('button', { name: 'Book 1' })
     const first = screen.getByRole('list', { name: 'Shelf 1' })
-    fireEvent.contextMenu(book)
-    expect(within(first).getAllByRole('button')).toHaveLength(10)
+    chooseBookAction(book, 'Show cover')
+    expect(within(first).getAllByRole('listitem')).toHaveLength(10)
     expect(within(book).getByTestId('cover')).toBeTruthy()
     expect(
       within(screen.getByRole('list', { name: 'Shelf 2' })).getByRole('button', { name: 'Book 11' })
     ).toBeTruthy()
 
-    fireEvent.contextMenu(book)
+    chooseBookAction(book, 'Show spine')
     expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
-    expect(within(first).getAllByRole('button')).toHaveLength(11)
+    expect(within(first).getAllByRole('listitem')).toHaveLength(11)
+  })
+
+  it('hides books only from the shelf, supports Undo, and appends books added back', async () => {
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        { id: 1, name: 'Favorites', bookIds: [1], positions: { 1: 110 } },
+        { id: 2, bookIds: [2, 3], positions: { 2: 0, 3: 180 } }
+      ])
+    )
+    const library = installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    const user = userEvent.setup()
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const label = 'Solaris by Stanisław Lem'
+    chooseBookAction(await screen.findByRole('button', { name: label }), 'Hide from shelf')
+    expect(screen.queryByRole('button', { name: label })).toBeNull()
+    expect(library.deleted).toEqual([])
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    const favorites = within(screen.getByRole('list', { name: 'Favorites' }))
+    expect(
+      favorites
+        .getByRole('button', { name: label })
+        .parentElement?.style.getPropertyValue('--shelf-x')
+    ).toBe('110px')
+
+    chooseBookAction(screen.getByRole('button', { name: label }), 'Hide from shelf')
+    chooseBookAction(
+      screen.getByRole('button', { name: 'Roadside Picnic by Strugatsky' }),
+      'Hide from shelf'
+    )
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    await user.click(await screen.findByRole('button', { name: 'Add to shelf' }))
+    const search = screen.getByRole('combobox', { name: 'Search hidden books' })
+    await user.type(search, 'lem')
+    expect(screen.queryByRole('option', { name: /Roadside Picnic/ })).toBeNull()
+    await user.click(screen.getByRole('option', { name: /Solaris/ }))
+    expect(shelfTitles(screen.getByRole('list', { name: 'Shelf 2' }))).toEqual([
+      'Wolf Hall by Hilary Mantel',
+      label
+    ])
+    expect(library.books).toHaveLength(3)
+  })
+
+  it('opens the book menu from the keyboard and returns focus on Escape', async () => {
+    installBridge({ books: [SOLARIS] })
+    renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    const solaris = await screen.findByRole('button', { name: 'Solaris by Stanisław Lem' })
+    solaris.focus()
+    await user.keyboard('{Shift>}{F10}{/Shift}')
+    const menu = screen.getByRole('menu', { name: 'Options for Solaris' })
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Show cover' }))
+    expect(within(solaris).queryByTestId('cover')).toBeNull()
+    await user.keyboard('{ArrowDown}')
+    expect(document.activeElement).toBe(
+      within(menu).getByRole('menuitem', { name: 'Start a stack' })
+    )
+    await user.keyboard('{ArrowDown}')
+    expect(document.activeElement).toBe(
+      within(menu).getByRole('menuitem', { name: 'Hide from shelf' })
+    )
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(solaris))
+
+    await user.keyboard('{Shift>}{F10}{/Shift}{ArrowDown}{Enter}')
+    const stacked = within(screen.getByRole('group', { name: 'Book stack' })).getByRole('button', {
+      name: 'Solaris by Stanisław Lem'
+    })
+    await waitFor(() => expect(document.activeElement).toBe(stacked))
+  })
+
+  it('saves horizontal stacks and keeps books flat when dragged out or slid along a shelf', async () => {
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        { id: 1, name: 'Favorites', bookIds: [1, 2], positions: { 1: 70, 2: 320 } },
+        { id: 2, bookIds: [3], positions: { 3: 30 } }
+      ])
+    )
+    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const solaris = await screen.findByRole('button', { name: 'Solaris by Stanisław Lem' })
+    chooseBookAction(solaris, 'Start a stack')
+    const pile = screen.getByRole('group', { name: 'Book stack' })
+    expect(
+      within(pile).getByRole('button', { name: 'Solaris by Stanisław Lem' }).style.height
+    ).toBe('43px')
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+    const wolf = 'Wolf Hall by Hilary Mantel'
+    fireEvent.dragStart(screen.getByRole('button', { name: wolf }), { dataTransfer })
+    fireEvent.drop(within(pile).getByText('Drop onto stack'), { dataTransfer })
+    expect(shelfTitles(pile)).toEqual(['Solaris by Stanisław Lem', wolf])
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const restored = await screen.findByRole('group', { name: 'Book stack' })
+    expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem', wolf])
+    const user = userEvent.setup()
+    chooseBookAction(within(restored).getByRole('button', { name: wolf }), 'Hide from shelf')
+    expect(within(restored).queryByRole('button', { name: wolf })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem', wolf])
+
+    const stackedWolf = within(restored).getByRole('button', { name: wolf })
+    const { width, height } = stackedWolf.style
+    fireEvent.dragStart(stackedWolf, { dataTransfer })
+    const second = screen.getByRole('list', { name: 'Shelf 2' })
+    fireEvent.dragOver(second.firstElementChild!, { dataTransfer })
+    const outline = second.parentElement!.querySelector<HTMLElement>('.bookshelf-drop-preview')!
+    expect(outline.style.width).toBe(width)
+    expect(outline.style.height).toBe(height)
+    const drop = new MouseEvent('drop', { bubbles: true, clientX: 175 })
+    fireEvent(second.firstElementChild!, Object.assign(drop, { dataTransfer }))
+    expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem'])
+    const flat = within(second).getByRole('group', { name: 'Book stack' })
+    const flatWolf = within(flat).getByRole('button', { name: wolf })
+    expect(flatWolf.classList.contains('book-spine-horizontal')).toBe(true)
+    expect(flat.parentElement?.style.getPropertyValue('--shelf-x')).toBe('175px')
+
+    fireEvent.dragStart(flatWolf, { dataTransfer })
+    const slide = new MouseEvent('drop', { bubbles: true, clientX: 210 })
+    fireEvent(flatWolf, Object.assign(slide, { dataTransfer }))
+    expect(flat.parentElement?.style.getPropertyValue('--shelf-x')).toBe('210px')
+    expect(shelfTitles(flat)).toEqual([wolf])
+
+    chooseBookAction(flatWolf, 'Stand upright')
+    chooseBookAction(
+      within(restored).getByRole('button', { name: 'Solaris by Stanisław Lem' }),
+      'Stand upright'
+    )
+    expect(screen.queryByRole('group', { name: 'Book stack' })).toBeNull()
+    expect(shelfTitles(screen.getByRole('list', { name: 'Favorites' }))).toEqual([
+      'Solaris by Stanisław Lem',
+      'Roadside Picnic by Strugatsky'
+    ])
+  })
+
+  it('rejects a drop onto a stack that would exceed the shelf height', async () => {
+    const books = Array.from({ length: 4 }, (_, index) =>
+      makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
+    )
+    installBridge({ books })
+    renderApp(<Library onAdd={() => {}} />)
+    chooseBookAction(await screen.findByRole('button', { name: 'Book 1' }), 'Start a stack')
+    const pile = within(screen.getByRole('group', { name: 'Book stack' }))
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+    for (const name of ['Book 2', 'Book 3']) {
+      fireEvent.dragStart(screen.getByRole('button', { name }), { dataTransfer })
+      fireEvent.drop(pile.getByText('Drop onto stack'), { dataTransfer })
+    }
+    const fourth = screen.getByRole('button', { name: 'Book 4' })
+    fireEvent.dragStart(fourth, { dataTransfer })
+    const target = pile.getByText('Stack is full')
+    fireEvent.dragOver(target, { dataTransfer })
+    expect(dataTransfer.dropEffect).toBe('none')
+    fireEvent.drop(target, { dataTransfer })
+    expect(pile.getAllByRole('button')).toHaveLength(3)
+    expect(pile.queryByRole('button', { name: 'Book 4' })).toBeNull()
+    expect(fourth.isConnected).toBe(true)
   })
 
   it('fits an older wide row and rejects drops onto a full shelf', async () => {
@@ -367,7 +532,7 @@ describe('arranging the bookshelf', () => {
     renderApp(<Library onAdd={() => {}} />)
     const first = await screen.findByRole('list', { name: 'Shelf 1' })
     const second = screen.getByRole('list', { name: 'Shelf 2' })
-    expect(within(first).getAllByRole('button')).toHaveLength(11)
+    expect(within(first).getAllByRole('listitem')).toHaveLength(11)
     expect(
       within(first)
         .getByRole('button', { name: 'Book 2' })

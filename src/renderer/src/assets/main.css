@@ -473,6 +473,68 @@
     font-size: 10px;
   }
 
+  .bookshelf-stack {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+  }
+
+  .bookshelf-stack-target {
+    display: grid;
+    width: 100%;
+    height: 24px;
+    margin-bottom: 4px;
+    place-items: center;
+    border: 1px dashed var(--color-accent);
+    border-radius: var(--radius-control);
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-size: 11px;
+  }
+
+  .bookshelf-stack-target[data-active] {
+    border-style: solid;
+  }
+
+  .bookshelf-stack-target[data-unavailable] {
+    border-color: var(--color-hairline-strong);
+    background: var(--color-surface);
+    color: var(--color-ink-muted);
+  }
+
+  .book-spine-horizontal:hover:not([data-dragging]),
+  .book-spine-horizontal:focus-visible {
+    transform: none;
+  }
+
+  .book-spine-horizontal::before,
+  .book-spine-horizontal::after {
+    inset: 3px auto;
+    width: 4px;
+    height: auto;
+    border-block: 0;
+    border-inline: 1px solid var(--spine-detail);
+  }
+
+  .book-spine-horizontal::before {
+    left: 5px;
+  }
+
+  .book-spine-horizontal::after {
+    right: 5px;
+  }
+
+  .book-spine-horizontal .book-spine-copy {
+    inset: 2px 13px;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .book-spine-horizontal .book-spine-copy > span {
+    max-width: 100%;
+    writing-mode: horizontal-tb;
+  }
+
   .app-shell {
     display: grid;
     grid-template-columns: 248px minmax(0, 1fr);

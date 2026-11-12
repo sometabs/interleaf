@@ -19,7 +19,7 @@ interface Option {
 interface Props {
   label: string
   options: Option[]
-  value: string
+  value?: string
   onChange: (value: string) => void
   searchLabel?: string
   active?: boolean
@@ -44,7 +44,7 @@ export default function FilterPicker({
   const panel = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const selected = options.find((option) => option.value === value)
-  const display = selected?.label ?? options[0]?.label ?? label
+  const display = value === undefined ? label : (selected?.label ?? options[0]?.label ?? label)
 
   const positionPanel = useCallback((): void => {
     const rect = trigger.current?.getBoundingClientRect()
@@ -101,7 +101,7 @@ export default function FilterPicker({
         <button
           ref={trigger}
           type="button"
-          aria-label={`${label}, ${display}`}
+          aria-label={value === undefined ? label : `${label}, ${display}`}
           className={`btn btn-outline min-w-0 max-w-56 justify-between gap-2 px-2.5 py-1.5 text-[13px] ${
             active ? 'border-accent/40 bg-accent-soft text-accent' : 'text-ink-muted'
           }`}
