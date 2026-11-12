@@ -1,3 +1,4 @@
+import * as Dialog from '@radix-ui/react-dialog'
 import type { Book } from '@shared/api'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
@@ -9,10 +10,15 @@ import {
   arrangeShelves,
   parseFaceOutBooks,
   parseShelves,
+  restoreShelf,
+  saveShelves,
+  SHELF_DECORATIONS,
   SHELF_SPAN,
   shelfInsertion,
   spineWidth,
-  type Shelf
+  type DecorationKind,
+  type Shelf,
+  type ShelfDecoration
 } from '../lib/bookshelfLayout'
 import { usePersistentState } from '../lib/persistent'
 import { useSpineColors } from '../lib/queries'
@@ -56,23 +62,33 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     [],
     parseFaceOutBooks
   )
-  const [draggedBookId, setDraggedBookId] = useState<number | null>(null)
+  const [draggedItemId, setDraggedItemId] = useState<number | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
   const faceOutIds = useMemo(() => new Set(faceOutBooks), [faceOutBooks])
-  const widths = useMemo(
+  const decorations = useMemo(
     () =>
       new Map(
-        books.map((book) => [
-          book.id,
-          faceOutIds.has(book.id) ? FACE_OUT_WIDTH : spineWidth(book.pageCount)
-        ])
+        savedShelves.flatMap((shelf) => (shelf.decorations ?? []).map((item) => [item.id, item]))
       ),
-    [books, faceOutIds]
+    [savedShelves]
   )
-  const shelves = useMemo(() => arrangeShelves(savedShelves, widths), [savedShelves, widths])
+  const widths = useMemo(() => {
+    const sizes = new Map(
+      books.map((book) => [
+        book.id,
+        faceOutIds.has(book.id) ? FACE_OUT_WIDTH : spineWidth(book.pageCount)
+      ])
+    )
+    for (const { id, kind } of decorations.values()) sizes.set(id, SHELF_DECORATIONS[kind].width)
+    return sizes
+  }, [books, faceOutIds, decorations])
+  const shelves = useMemo(
+    () => arrangeShelves(savedShelves.map(restoreShelf), widths),
+    [savedShelves, widths]
+  )
   const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
   const previewBook = preview && matchingById.get(preview.bookId)
 
@@ -99,7 +115,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
 
   function queuePreview(bookId: number, button: HTMLButtonElement): void {
     hidePreview()
-    if (draggedBookId !== null) return
+    if (draggedItemId !== null) return
 
     previewTimer.current = window.setTimeout(() => {
       if (!button.isConnected) return
@@ -128,7 +144,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     event: DragEvent<HTMLDivElement>,
     shelf: Shelf
   ): Placement | null | undefined {
-    if (draggedBookId === null) return null
+    if (draggedItemId === null) return null
     const strip = event.currentTarget.querySelector('.bookshelf-spines')
     const track = strip?.parentElement
     if (!strip || !track) return null
@@ -137,20 +153,20 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     const left = Math.round((event.clientX || 0) - origin - grabOffset.current)
     const slot =
       event.target instanceof Element
-        ? event.target.closest<HTMLElement>('[data-shelf-book]')
+        ? event.target.closest<HTMLElement>('[data-shelf-item]')
         : null
-    const slotId = Number(slot?.dataset.shelfBook)
+    const slotId = Number(slot?.dataset.shelfItem)
     // Hovering the source is a no-op. A full destination rejects the drop.
-    if (slotId === draggedBookId) return undefined
+    if (slotId === draggedItemId) return undefined
     const bounds = slot?.getBoundingClientRect()
     const neighbor = bounds
-      ? { bookId: slotId, after: event.clientX >= bounds.left + bounds.width / 2 }
+      ? { itemId: slotId, after: event.clientX >= bounds.left + bounds.width / 2 }
       : undefined
-    const insertion = shelfInsertion(shelf, draggedBookId, widths, left, neighbor)
+    const insertion = shelfInsertion(shelf, draggedItemId, widths, left, neighbor)
     if (!insertion) return null
     return {
       shelf: insertion,
-      outlineX: origin - track.getBoundingClientRect().left + insertion.positions[draggedBookId]
+      outlineX: origin - track.getBoundingClientRect().left + insertion.positions[draggedItemId]
     }
   }
 
@@ -161,47 +177,79 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     dropOutline.current = null
   }
 
-  function showDropOutline(row: HTMLDivElement, target: Placement, bookId: number): void {
+  function showDropOutline(row: HTMLDivElement, target: Placement, itemId: number): void {
     const outline = row.querySelector<HTMLElement>('.bookshelf-drop-preview')!
     const changedRow = dropOutline.current !== outline
     if (changedRow) {
       hideDropOutline()
-      outline.style.width = `${widths.get(bookId)}px`
-      outline.style.height = `${bookHeight(bookId)}px`
+      outline.style.width = `${widths.get(itemId)}px`
+      const decoration = decorations.get(itemId)
+      outline.style.height = `${decoration ? SHELF_DECORATIONS[decoration.kind].height : bookHeight(itemId)}px`
       dropOutline.current = outline
     }
     outline.style.transform = `translateX(${target.outlineX}px)`
     if (changedRow) outline.setAttribute('data-active', '')
   }
 
-  function move(bookId: number, target: Shelf): void {
-    const source = shelves.find((shelf) => shelf.bookIds.includes(bookId))
+  function saveRows(rows: Shelf[]): void {
+    setSavedShelves(saveShelves(rows, decorations))
+  }
+
+  function move(itemId: number, target: Shelf): void {
+    const source = shelves.find((shelf) => shelf.itemIds.includes(itemId))
     const destination = shelves.find((shelf) => shelf.id === target.id)
     if (!source || !destination) return
 
     if (
-      destination.positions[bookId] === target.positions[bookId] &&
-      sameOrder(destination.bookIds, target.bookIds)
+      destination.positions[itemId] === target.positions[itemId] &&
+      sameOrder(destination.itemIds, target.itemIds)
     )
       return
 
     const updated = shelves.map((shelf) => {
       if (shelf === destination) return target
       if (shelf === source)
-        return { ...shelf, bookIds: shelf.bookIds.filter((id) => id !== bookId) }
+        return { ...shelf, itemIds: shelf.itemIds.filter((id) => id !== itemId) }
       return shelf
     })
-    setSavedShelves(arrangeShelves(updated, widths))
+    saveRows(arrangeShelves(updated, widths))
+  }
+
+  function startDrag(event: DragEvent<HTMLElement>, itemId: number): void {
+    hidePreview()
+    const { left } = event.currentTarget.getBoundingClientRect()
+    grabOffset.current = Math.max(0, Math.min(widths.get(itemId)!, (event.clientX || 0) - left))
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(itemId))
+    setDraggedItemId(itemId)
   }
 
   function endDrag(): void {
     hideDropOutline()
-    setDraggedBookId(null)
+    setDraggedItemId(null)
   }
 
   function addShelf(): void {
     const id = Math.max(...shelves.map((shelf) => shelf.id)) + 1
-    setSavedShelves([...shelves, { id, bookIds: [], positions: {} }])
+    saveRows([...shelves, { id, itemIds: [], positions: {} }])
+  }
+
+  function addDecorations(kinds: DecorationKind[]): void {
+    const nextDecorations = new Map(decorations)
+    const nextWidths = new Map(widths)
+    let id = Math.min(0, ...decorations.keys())
+    for (const kind of kinds) {
+      id -= 1
+      nextDecorations.set(id, { id, kind })
+      nextWidths.set(id, SHELF_DECORATIONS[kind].width)
+    }
+    setSavedShelves(saveShelves(arrangeShelves(shelves, nextWidths), nextDecorations))
+  }
+
+  function removeDecoration(id: number): void {
+    const nextWidths = new Map(widths)
+    nextWidths.delete(id)
+    saveRows(arrangeShelves(shelves, nextWidths))
   }
 
   function moveShelf(index: number, offset: -1 | 1): void {
@@ -212,7 +260,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     next[index] = shelves[destination]
     next[destination] = shelves[index]
     hidePreview()
-    setSavedShelves(next)
+    saveRows(next)
   }
 
   function bookHeight(bookId: number): number {
@@ -247,7 +295,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       <div
         key={book.id}
         role="listitem"
-        data-shelf-book={book.id}
+        data-shelf-item={book.id}
         style={{ '--shelf-x': `${left}px` } as CSSProperties}
         className="bookshelf-slot"
       >
@@ -257,7 +305,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           style={style}
           draggable
           aria-label={label}
-          data-dragging={draggedBookId === book.id || undefined}
+          data-dragging={draggedItemId === book.id || undefined}
           onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
           onMouseLeave={hidePreview}
           onClick={() => onOpen(book)}
@@ -265,14 +313,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
             event.preventDefault()
             turnBook(book.id)
           }}
-          onDragStart={(event) => {
-            hidePreview()
-            const { left } = event.currentTarget.getBoundingClientRect()
-            grabOffset.current = Math.max(0, Math.min(width, (event.clientX || 0) - left))
-            event.dataTransfer.effectAllowed = 'move'
-            event.dataTransfer.setData('text/plain', String(book.id))
-            setDraggedBookId(book.id)
-          }}
+          onDragStart={(event) => startDrag(event, book.id)}
           onDragEnd={endDrag}
         >
           {faceOut ? (
@@ -290,6 +331,49 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     )
   }
 
+  function renderDecoration({ id, kind }: ShelfDecoration, left: number): ReactNode {
+    const { label, width, height } = SHELF_DECORATIONS[kind]
+    return (
+      <div
+        key={id}
+        role="listitem"
+        data-shelf-item={id}
+        style={{ '--shelf-x': `${left}px` } as CSSProperties}
+        className="bookshelf-slot"
+      >
+        <div className="group relative">
+          <div
+            role="img"
+            aria-label={label}
+            className={`bookshelf-decoration bookshelf-decoration-${kind}`}
+            style={{ width, height }}
+            draggable
+            data-dragging={draggedItemId === id || undefined}
+            onDragStart={(event) => startDrag(event, id)}
+            onDragEnd={endDrag}
+          >
+            {kind === 'plant' && (
+              <span aria-hidden="true" className="bookshelf-plant-leaves">
+                <span />
+                <span />
+                <span />
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            aria-label={`Remove ${label.toLowerCase()}`}
+            title={`Remove ${label.toLowerCase()}`}
+            className="bookshelf-decoration-remove absolute -top-2 right-0 z-10 grid size-5 place-items-center rounded-full border border-hairline bg-surface text-sm text-ink-muted shadow-card hover:text-ink"
+            onClick={() => removeDecoration(id)}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <section
       aria-label="Bookshelf"
@@ -297,14 +381,11 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       style={{ '--shelf-span': `${SHELF_SPAN}px` } as CSSProperties}
     >
       <p className="mb-3 text-[13px] text-ink-muted">
-        Drag books to arrange them. Right-click a book to show its cover or spine.
+        Drag items to arrange them. Right-click a book to show its cover or spine.
       </p>
       <div className="bookshelf">
         {shelves.map((shelf, index) => {
-          const visible = shelf.bookIds
-            .map((id) => matchingById.get(id))
-            .filter((book) => book !== undefined)
-          const empty = shelf.bookIds.length === 0
+          const empty = shelf.itemIds.length === 0
           const defaultName = `Shelf ${index + 1}`
           const name = shelf.name ?? defaultName
           return (
@@ -317,7 +398,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   hint="Rename shelf"
                   className="min-w-0 max-w-full py-0.5 text-base font-medium text-ink-muted!"
                   onCommit={(nextName) =>
-                    setSavedShelves(
+                    saveRows(
                       shelves.map((row) =>
                         row.id === shelf.id ? { ...row, name: nextName || undefined } : row
                       )
@@ -352,11 +433,11 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
               <div
                 className="bookshelf-row"
                 onDragOver={(event) => {
-                  if (draggedBookId === null) return
+                  if (draggedItemId === null) return
                   event.preventDefault()
                   const target = placementAt(event, shelf)
                   event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
-                  if (target) showDropOutline(event.currentTarget, target, draggedBookId)
+                  if (target) showDropOutline(event.currentTarget, target, draggedItemId)
                   else hideDropOutline(event.currentTarget)
                 }}
                 onDragLeave={(event) => {
@@ -368,16 +449,21 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   }
                 }}
                 onDrop={(event) => {
-                  if (draggedBookId === null) return
+                  if (draggedItemId === null) return
                   event.preventDefault()
                   const target = placementAt(event, shelf)
-                  if (target) move(draggedBookId, target.shelf)
+                  if (target) move(draggedItemId, target.shelf)
                   endDrag()
                 }}
               >
                 <div role="list" aria-label={name} className="bookshelf-track">
                   <div className="bookshelf-spines">
-                    {visible.map((book) => renderBook(book, shelf.positions[book.id]))}
+                    {shelf.itemIds.map((id) => {
+                      const decoration = decorations.get(id)
+                      if (decoration) return renderDecoration(decoration, shelf.positions[id])
+                      const book = matchingById.get(id)
+                      return book && renderBook(book, shelf.positions[id])
+                    })}
                   </div>
                 </div>
                 <div aria-hidden="true" className="bookshelf-drop-layer">
@@ -386,16 +472,14 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                 {empty && (
                   <>
                     <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
-                      Drag books here
+                      Drag items here
                     </p>
                     {shelves.length > 1 && (
                       <button
                         type="button"
                         aria-label={`Remove empty shelf ${index + 1}`}
                         className="btn btn-ghost absolute top-2 right-2 text-[12px]"
-                        onClick={() =>
-                          setSavedShelves(shelves.filter((row) => row.id !== shelf.id))
-                        }
+                        onClick={() => saveRows(shelves.filter((row) => row.id !== shelf.id))}
                       >
                         Remove shelf
                       </button>
@@ -407,9 +491,35 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           )
         })}
       </div>
-      <button type="button" className="btn btn-outline mt-3" onClick={addShelf}>
-        Add shelf
-      </button>
+      <div className="mt-3 flex items-center gap-2">
+        <button type="button" className="btn btn-outline" onClick={addShelf}>
+          Add shelf
+        </button>
+        <div className="relative">
+          <Dialog.Root modal={false}>
+            <Dialog.Trigger className="btn btn-outline">Add decoration</Dialog.Trigger>
+            <Dialog.Content
+              aria-describedby={undefined}
+              onEscapeKeyDown={(event) => event.stopPropagation()}
+              className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-card border border-hairline bg-surface p-1 shadow-pop"
+            >
+              <Dialog.Title className="sr-only">Add decoration</Dialog.Title>
+              <Dialog.Close
+                className="btn w-full justify-start"
+                onClick={() => addDecorations(['plant'])}
+              >
+                Plant
+              </Dialog.Close>
+              <Dialog.Close
+                className="btn w-full justify-start"
+                onClick={() => addDecorations(['left-bookend', 'right-bookend'])}
+              >
+                Bookends
+              </Dialog.Close>
+            </Dialog.Content>
+          </Dialog.Root>
+        </div>
+      </div>
       {preview &&
         previewBook &&
         createPortal(

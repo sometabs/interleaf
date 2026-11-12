@@ -355,6 +355,56 @@ describe('arranging the bookshelf', () => {
     expect(within(first).getAllByRole('button')).toHaveLength(11)
   })
 
+  it('adds, moves, and removes decorations while preserving the books on each shelf', async () => {
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        { id: 1, name: 'Favorites', bookIds: [1], positions: { 1: 110 } },
+        { id: 2, bookIds: [2], positions: { 2: 250 } }
+      ])
+    )
+    installBridge({ books: [SOLARIS, PICNIC] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    const add = await screen.findByRole('button', { name: 'Add decoration' })
+    await user.click(add)
+    await user.click(screen.getByRole('button', { name: 'Plant' }))
+    await user.click(add)
+    await user.click(screen.getByRole('button', { name: 'Bookends' }))
+
+    const lastShelf = within(screen.getByRole('list', { name: 'Shelf 2' }))
+    const plant = lastShelf.getByRole('img', { name: 'Plant' })
+    expect(lastShelf.getByRole('img', { name: 'Left bookend' })).toBeTruthy()
+    expect(lastShelf.getByRole('img', { name: 'Right bookend' })).toBeTruthy()
+
+    const favorites = screen.getByRole('list', { name: 'Favorites' })
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+    fireEvent.dragStart(plant, { dataTransfer })
+    const drop = new MouseEvent('drop', { bubbles: true, clientX: 35 })
+    fireEvent(favorites.firstElementChild!, Object.assign(drop, { dataTransfer }))
+    expect(within(favorites).getByRole('img', { name: 'Plant' })).toBeTruthy()
+    expect(lastShelf.queryByRole('img', { name: 'Plant' })).toBeNull()
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const restored = within(await screen.findByRole('list', { name: 'Favorites' }))
+    expect(
+      restored
+        .getByRole('img', { name: 'Plant' })
+        .closest<HTMLElement>('[role="listitem"]')
+        ?.style.getPropertyValue('--shelf-x')
+    ).toBe('35px')
+    expect(
+      restored
+        .getByRole('button', { name: 'Solaris by Stanisław Lem' })
+        .parentElement?.style.getPropertyValue('--shelf-x')
+    ).toBe('110px')
+    await user.click(restored.getByRole('button', { name: 'Remove plant' }))
+    expect(restored.queryByRole('img', { name: 'Plant' })).toBeNull()
+    expect(screen.getByRole('img', { name: 'Left bookend' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Right bookend' })).toBeTruthy()
+  })
+
   it('fits an older wide row and rejects drops onto a full shelf', async () => {
     const books = Array.from({ length: 12 }, (_, index) =>
       makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })

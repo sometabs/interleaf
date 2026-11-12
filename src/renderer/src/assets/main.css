@@ -473,6 +473,92 @@
     font-size: 10px;
   }
 
+  .bookshelf-decoration {
+    position: relative;
+    cursor: grab;
+    user-select: none;
+  }
+
+  .bookshelf-decoration[data-dragging] {
+    opacity: 0.6;
+    cursor: grabbing;
+  }
+
+  .bookshelf-decoration-remove {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .group:hover > .bookshelf-decoration-remove,
+  .bookshelf-decoration-remove:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .bookshelf-decoration-plant {
+    background: linear-gradient(#59674a, #657450) center bottom 21px / 2px 31px no-repeat;
+  }
+
+  .bookshelf-decoration-plant::before {
+    position: absolute;
+    inset: auto 8px 0;
+    height: 24px;
+    border-radius: 1px 1px 7px 7px;
+    background: linear-gradient(100deg, #9d6047, #c58a6d 38%, #985b43);
+    clip-path: polygon(0 0, 100% 0, 85% 100%, 15% 100%);
+    content: '';
+  }
+
+  .bookshelf-decoration-plant::after {
+    position: absolute;
+    inset: auto 6px 21px;
+    height: 5px;
+    border-radius: 2px;
+    background: #b77d61;
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.22);
+    content: '';
+  }
+
+  .bookshelf-plant-leaves > span {
+    position: absolute;
+    width: 20px;
+    height: 12px;
+    border-radius: 85% 8% 85% 8%;
+    background: linear-gradient(150deg, #82936b, #506645);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.09);
+  }
+
+  .bookshelf-plant-leaves > span:nth-child(1) {
+    bottom: 33px;
+    left: 7px;
+    transform: rotate(45deg);
+  }
+
+  .bookshelf-plant-leaves > span:nth-child(2) {
+    bottom: 39px;
+    right: 6px;
+    transform: rotate(-12deg);
+  }
+
+  .bookshelf-plant-leaves > span:nth-child(3) {
+    bottom: 48px;
+    left: 13px;
+    transform: rotate(72deg);
+  }
+
+  .bookshelf-decoration-left-bookend::before,
+  .bookshelf-decoration-right-bookend::before {
+    position: absolute;
+    inset: 0 2px;
+    background: linear-gradient(110deg, #5b5146, #a08a70 80%, #6b5b4c);
+    clip-path: polygon(0 88%, 73% 88%, 73% 8%, 100% 0, 100% 100%, 0 100%);
+    content: '';
+  }
+
+  .bookshelf-decoration-right-bookend::before {
+    transform: scaleX(-1);
+  }
+
   .app-shell {
     display: grid;
     grid-template-columns: 248px minmax(0, 1fr);
