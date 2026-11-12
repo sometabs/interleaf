@@ -75,6 +75,9 @@ of five. Books without usable cover art receive a generated clothbound cover ins
 The book page shows reading duration when both start and finish dates are set. This counts elapsed
 calendar days, including breaks, not active reading time.
 
+**Library layout.** Choose **Grid** or **Shelf** in **Settings**. In Shelf, drag books to arrange
+them along or between rows, and use **Add shelf** to make more room.
+
 **Reading queue.** Every _want to read_ book appears in one ordered list. Drag books or use the
 arrow controls to put them in the order you intend to read them.
 

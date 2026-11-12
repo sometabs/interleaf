@@ -12,7 +12,9 @@ import {
   useRetryMetadataRefresh
 } from '../lib/queries'
 import { groupBooks, GROUPINGS, type Grouping, type Shelf } from '../lib/shelves'
+import { useSettings } from '../lib/settings'
 import { useView } from '../lib/view'
+import Bookshelf from './Bookshelf'
 import Cover from './Cover'
 import Empty from './Empty'
 import Rating from './Rating'
@@ -22,6 +24,7 @@ interface Props {
 }
 
 export default function Library({ onAdd }: Props): ReactNode {
+  const { libraryLayout: layout } = useSettings()
   const { navigate } = useView()
   const { data: books = [], isPending } = useBooks()
   const refresh = useRefreshAllMetadata()
@@ -48,7 +51,7 @@ export default function Library({ onAdd }: Props): ReactNode {
       )
     : books
 
-  const shelves = groupBooks(matching, grouping)
+  const openBook = (book: Book): void => navigate({ kind: 'book', id: book.id })
 
   if (isPending) return <div className="h-full" />
 
@@ -124,7 +127,9 @@ export default function Library({ onAdd }: Props): ReactNode {
           </button>
         )}
 
-        <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
+        {layout === 'grid' && (
+          <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
+        )}
 
         <input
           className="field max-w-64"
@@ -146,13 +151,13 @@ export default function Library({ onAdd }: Props): ReactNode {
         <p className="py-8 text-center text-ink-muted">
           {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
         </p>
+      ) : layout === 'shelf' ? (
+        <div className="-mx-6">
+          <Bookshelf books={books} matching={matching} onOpen={openBook} />
+        </div>
       ) : (
-        shelves.map((shelf) => (
-          <ShelfSection
-            key={shelf.key}
-            shelf={shelf}
-            onOpen={(book) => navigate({ kind: 'book', id: book.id })}
-          />
+        groupBooks(matching, grouping).map((shelf) => (
+          <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />
         ))
       )}
     </div>

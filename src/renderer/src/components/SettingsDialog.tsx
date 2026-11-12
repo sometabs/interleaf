@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { useAppDiagnostics } from '../lib/queries'
@@ -81,29 +81,36 @@ export default function SettingsDialog({ collapsed }: { collapsed: boolean }): R
               />
               <Switch
                 label="Motion"
+                description="Animates transitions and book reordering for a smoother experience."
                 checked={settings.motionEnabled}
                 onToggle={() => settings.setMotionEnabled(!settings.motionEnabled)}
               />
             </section>
 
-            <section aria-label="Discover" className="space-y-3 py-4">
-              <h2 className="eyebrow">Discover</h2>
+            <section aria-label="Layouts" className="space-y-3 py-4">
+              <h2 className="eyebrow">Layouts</h2>
+              <Choices
+                label="Library layout"
+                options={['grid', 'shelf']}
+                value={settings.libraryLayout}
+                onChange={settings.setLibraryLayout}
+              />
               <Choices
                 label="Discover layout"
                 options={['grid', 'tree']}
                 value={settings.discoverLayout}
                 onChange={settings.setDiscoverLayout}
               />
-              <div>
-                <Switch
-                  label="Advanced recommendations"
-                  checked={settings.advancedEnabled}
-                  onToggle={() => void toggleAdvanced()}
-                />
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-                  {ADVANCED_DESCRIPTION}
-                </p>
-              </div>
+            </section>
+
+            <section aria-label="Discover" className="space-y-3 py-4">
+              <h2 className="eyebrow">Discover</h2>
+              <Switch
+                label="Advanced recommendations"
+                description={ADVANCED_DESCRIPTION}
+                checked={settings.advancedEnabled}
+                onToggle={() => void toggleAdvanced()}
+              />
               <div>
                 <p className="text-[13px]">Recommendation model</p>
                 <p className="text-xs text-ink-muted">
@@ -161,30 +168,55 @@ function Choices<T extends string>({
 
 function Switch({
   label,
+  description,
   checked,
   onToggle
 }: {
   label: string
+  description: string
   checked: boolean
   onToggle: () => void
 }): ReactNode {
+  const switchId = useId()
+  const descriptionId = useId()
+
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onToggle}
-      className="flex w-full items-center justify-between gap-3 rounded-control text-left text-[14px]"
-    >
-      {label}
-      <span
-        aria-hidden="true"
+    <div className="flex items-center justify-between gap-3">
+      <div className="relative flex items-center gap-1.5">
+        <label htmlFor={switchId} className="cursor-pointer text-[14px]">
+          {label}
+        </label>
+        <span className="group inline-flex items-center self-stretch">
+          <button
+            type="button"
+            aria-label={`About ${label.toLowerCase()}`}
+            aria-describedby={descriptionId}
+            className="inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border border-hairline-strong text-[10px] leading-none text-ink-muted hover:text-ink"
+          >
+            ?
+          </button>
+          <span
+            id={descriptionId}
+            role="tooltip"
+            className="invisible absolute bottom-full left-0 z-10 w-[min(16rem,calc(100vw-76px))] rounded-control border border-hairline-strong bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-ink shadow-pop group-hover:visible group-has-[:focus-visible]:visible"
+          >
+            {description}
+          </span>
+        </span>
+      </div>
+      <button
+        id={switchId}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={onToggle}
         className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-action' : 'bg-hairline-strong'}`}
       >
         <span
+          aria-hidden="true"
           className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-card transition-transform ${checked ? 'translate-x-4' : ''}`}
         />
-      </span>
-    </button>
+      </button>
+    </div>
   )
 }

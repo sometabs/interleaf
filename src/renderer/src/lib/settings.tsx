@@ -3,6 +3,7 @@ import { createContext, useContext, useLayoutEffect, type ReactNode } from 'reac
 import { usePersistentState } from './persistent'
 
 type Theme = 'light' | 'dark' | 'system'
+type LibraryLayout = 'grid' | 'shelf'
 type DiscoverLayout = 'grid' | 'tree'
 
 interface Settings {
@@ -10,6 +11,8 @@ interface Settings {
   setTheme: (value: Theme) => void
   motionEnabled: boolean
   setMotionEnabled: (value: boolean) => void
+  libraryLayout: LibraryLayout
+  setLibraryLayout: (value: LibraryLayout) => void
   discoverLayout: DiscoverLayout
   setDiscoverLayout: (value: DiscoverLayout) => void
   advancedEnabled: boolean
@@ -28,6 +31,11 @@ export function SettingsProvider({ children }: { children: ReactNode }): ReactNo
     'interleaf.motionEnabled',
     true,
     parseBoolean
+  )
+  const [libraryLayout, setLibraryLayout] = usePersistentState<LibraryLayout>(
+    'interleaf.libraryLayout',
+    'grid',
+    (raw) => (raw === 'grid' || raw === 'shelf' ? raw : null)
   )
   const [discoverLayout, setDiscoverLayout] = usePersistentState<DiscoverLayout>(
     'interleaf.recommendationLayout',
@@ -62,6 +70,8 @@ export function SettingsProvider({ children }: { children: ReactNode }): ReactNo
         setTheme,
         motionEnabled,
         setMotionEnabled,
+        libraryLayout,
+        setLibraryLayout,
         discoverLayout,
         setDiscoverLayout,
         advancedEnabled: downloadAcknowledged && !hybridDisabled,

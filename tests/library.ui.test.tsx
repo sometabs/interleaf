@@ -1,6 +1,6 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import Library from '../src/renderer/src/components/Library'
@@ -109,6 +109,174 @@ describe('filtering inside a grouping', () => {
     await user.type(await screen.findByLabelText('Filter library'), 'zzz')
 
     expect(await screen.findByText(/Nothing matches/)).toBeTruthy()
+  })
+})
+
+describe('arranging the bookshelf', () => {
+  beforeEach(() => {
+    window.localStorage.setItem('interleaf.libraryLayout', '"shelf"')
+  })
+
+  it('previews the cached cover after hovering and hides it when a drag starts', async () => {
+    const coverPath = 'book-1-test.jpg'
+    installBridge(
+      { books: [{ ...SOLARIS, coverPath, pageCount: 96 }] },
+      { getSpineColors: async () => ({}) }
+    )
+    renderApp(<Library onAdd={() => {}} />)
+    const spine = await screen.findByRole('button', { name: 'Solaris by Stanisław Lem' })
+    expect(spine.style.width).toBe('38px')
+    expect(spine.querySelector('.book-spine-author')?.textContent).toBe('Stanisław Lem')
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.mouseEnter(spine)
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+      fireEvent.mouseLeave(spine)
+      act(() => vi.runOnlyPendingTimers())
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+
+      fireEvent.mouseEnter(spine)
+      act(() => vi.runOnlyPendingTimers())
+      const preview = screen.getByText('Solaris', { selector: 'p' }).closest('[aria-hidden="true"]')
+      expect(preview?.querySelector('img')?.getAttribute('src')).toBe(
+        `bookcover://covers/${coverPath}`
+      )
+      expect(preview?.textContent).toContain('Stanisław Lem')
+
+      fireEvent.dragStart(spine, { dataTransfer: { setData: vi.fn() } })
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('saves the shelf order after dragging a book', async () => {
+    const coverPath = 'book-1-test.jpg'
+    const getSpineColors = vi.fn(async () => ({
+      [coverPath]: { cover: '#2672ad', ink: '#ffffff', detail: '#f3cd50' }
+    }))
+    installBridge({ books: [{ ...SOLARIS, coverPath }, PICNIC, HALL] }, { getSpineColors })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const shelf = await screen.findByRole('list', { name: 'Shelf 1' })
+    const titles = (): string[] =>
+      within(shelf)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? '')
+    const wolf = within(shelf).getByRole('button', { name: 'Wolf Hall by Hilary Mantel' })
+    const solaris = within(shelf).getByRole('button', { name: 'Solaris by Stanisław Lem' })
+    expect(solaris.style.width).toBe('43px')
+    await waitFor(() => expect(solaris.style.backgroundColor).toBe('rgb(38, 114, 173)'))
+    expect(getSpineColors).toHaveBeenCalledWith([coverPath])
+    expect(wolf.style.backgroundColor).toBeTruthy()
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+
+    fireEvent.dragStart(wolf, { dataTransfer })
+    fireEvent.drop(solaris, { dataTransfer, clientX: -1 })
+    expect(titles()).toEqual([
+      'Wolf Hall by Hilary Mantel',
+      'Solaris by Stanisław Lem',
+      'Roadside Picnic by Strugatsky'
+    ])
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const restored = await screen.findByRole('list', { name: 'Shelf 1' })
+    expect(within(restored).getAllByRole('button')[0].getAttribute('aria-label')).toBe(
+      'Wolf Hall by Hilary Mantel'
+    )
+  })
+
+  it('keeps the previous order and saves a book dropped into open shelf space', async () => {
+    window.localStorage.setItem('interleaf.bookshelfOrder', JSON.stringify([3, 2, 1]))
+    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    await screen.findByRole('list', { name: 'Shelf 1' })
+    const titles = (shelf: string): (string | null)[] =>
+      within(screen.getByRole('list', { name: shelf }))
+        .queryAllByRole('button')
+        .map((button) => button.getAttribute('aria-label'))
+    expect(titles('Shelf 1')).toEqual([
+      'Wolf Hall by Hilary Mantel',
+      'Roadside Picnic by Strugatsky',
+      'Solaris by Stanisław Lem'
+    ])
+
+    await user.click(screen.getByRole('button', { name: 'Add shelf' }))
+    expect(titles('Shelf 2')).toEqual([])
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+    const solaris = (): HTMLElement =>
+      screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
+    function dragAt(shelf: string, x: number, type: 'dragover' | 'drop' = 'drop'): HTMLElement {
+      const track = screen.getByRole('list', { name: shelf })
+      const strip = track.firstElementChild!
+      vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 0, 660, 217))
+      vi.spyOn(strip, 'getBoundingClientRect').mockReturnValue(new DOMRect(114, 0, 632, 217))
+      const event = new MouseEvent(type, { bubbles: true, clientX: x })
+      fireEvent(strip, Object.assign(event, { dataTransfer }))
+      return track.parentElement!.querySelector('.bookshelf-drop-preview')!
+    }
+
+    fireEvent.dragStart(solaris(), { dataTransfer })
+    const outline = dragAt('Shelf 2', 400, 'dragover')
+    expect(outline.hasAttribute('data-active')).toBe(true)
+    expect(outline.style.transform).toBe('translateX(300px)')
+    expect(dragAt('Shelf 2', 500, 'dragover')).toBe(outline)
+    expect(outline.style.transform).toBe('translateX(400px)')
+    dragAt('Shelf 2', 500)
+    expect(outline.hasAttribute('data-active')).toBe(false)
+    expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('386px')
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    await screen.findByRole('list', { name: 'Shelf 2' })
+    expect(titles('Shelf 1')).toEqual([
+      'Wolf Hall by Hilary Mantel',
+      'Roadside Picnic by Strugatsky'
+    ])
+    expect(titles('Shelf 2')).toEqual(['Solaris by Stanisław Lem'])
+    expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('386px')
+
+    fireEvent.dragStart(solaris(), { dataTransfer })
+    dragAt('Shelf 2', 600)
+    expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('486px')
+
+    fireEvent.dragStart(solaris(), { dataTransfer })
+    dragAt('Shelf 1', 600)
+    expect(titles('Shelf 2')).toEqual([])
+    await user.click(screen.getByRole('button', { name: 'Remove empty shelf 2' }))
+    expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
+    expect(titles('Shelf 1').at(-1)).toBe('Solaris by Stanisław Lem')
+  })
+
+  it('fits an older wide row and rejects drops onto a full shelf', async () => {
+    const books = Array.from({ length: 12 }, (_, index) =>
+      makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
+    )
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([{ id: 1, bookIds: books.map((book) => book.id), positions: { 12: 800 } }])
+    )
+    installBridge({ books })
+    renderApp(<Library onAdd={() => {}} />)
+    const first = await screen.findByRole('list', { name: 'Shelf 1' })
+    const second = screen.getByRole('list', { name: 'Shelf 2' })
+    expect(within(first).getAllByRole('button')).toHaveLength(11)
+    expect(
+      within(first)
+        .getByRole('button', { name: 'Book 2' })
+        .parentElement?.style.getPropertyValue('--shelf-x')
+    ).toBe('54px')
+    const lastBook = within(second).getByRole('button', { name: 'Book 12' })
+    expect(lastBook.parentElement?.style.getPropertyValue('--shelf-x')).toBe('0px')
+
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'move', setData: vi.fn() }
+    fireEvent.dragStart(lastBook, { dataTransfer })
+    fireEvent.dragOver(first, { dataTransfer })
+    expect(dataTransfer.dropEffect).toBe('none')
+    fireEvent.drop(first, { dataTransfer })
+    expect(within(second).getByRole('button', { name: 'Book 12' })).toBe(lastBook)
   })
 })
 

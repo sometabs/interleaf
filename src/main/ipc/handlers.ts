@@ -33,6 +33,7 @@ import { coversDir, importCoverFile } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
 import { suggestHybridRecommendations, suggestHybridRecommendationTree } from '../services/hybrid'
+import { getSpineColors } from '../services/spineColors'
 
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
@@ -91,6 +92,7 @@ const api: InterleafApi = {
   async listBooks() {
     return books.listBooks(getDb())
   },
+  getSpineColors,
   async createBook(input) {
     return books.createBook(getDb(), input)
   },

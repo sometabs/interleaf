@@ -43,6 +43,46 @@ describe('Settings', () => {
     expect(document.documentElement.dataset.theme).toBe('dark')
   })
 
+  it.each([
+    ['Motion', true, /animates transitions/i],
+    ['Advanced recommendations', false, /combines keyword matching with AI/i]
+  ])('associates %s help with its own control', async (label, checked, description) => {
+    installBridge()
+    renderApp(<App />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+    const help = screen.getByRole('button', {
+      name: `About ${label.toLowerCase()}`,
+      description
+    })
+    expect(screen.getByText(description).getAttribute('role')).toBe('tooltip')
+    await user.click(help)
+    expect(screen.getByRole('switch', { name: label, checked })).toBeTruthy()
+  })
+
+  it('applies and remembers the Library layout from Settings', async () => {
+    installBridge({ books: [makeBook({ title: 'Solaris' })] })
+    const first = renderApp(<App />)
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { name: 'Library' })
+    expect(screen.queryByRole('region', { name: 'Bookshelf' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    const dialog = screen.getByRole('dialog', { name: 'Settings' })
+    const layouts = within(within(dialog).getByRole('region', { name: 'Layouts' }))
+    const libraryLayout = within(layouts.getByRole('group', { name: 'Library layout' }))
+    expect(layouts.getByRole('group', { name: 'Discover layout' })).toBeTruthy()
+    expect(libraryLayout.getByRole('button', { name: 'Grid', pressed: true })).toBeTruthy()
+    await user.click(libraryLayout.getByRole('button', { name: 'Shelf' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await screen.findByRole('region', { name: 'Bookshelf' })
+    expect(window.localStorage.getItem('interleaf.libraryLayout')).toBe('"shelf"')
+
+    first.unmount()
+    renderApp(<App />)
+    expect(await screen.findByRole('region', { name: 'Bookshelf' })).toBeTruthy()
+  })
+
   it('dismisses with Escape without navigating away and returns focus', async () => {
     installBridge({ books: [makeBook({ title: 'Solaris', status: 'read' })] })
     renderApp(<App />)
