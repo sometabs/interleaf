@@ -15,15 +15,19 @@
   --color-ink-muted: light-dark(#61626b, #c1b8ae);
   --color-ink-faint: light-dark(#9496a0, #a29689);
 
-  --color-accent: light-dark(#2f65da, #9bb8ec);
-  --color-accent-soft: light-dark(#eaf1fd, #283647);
-  --color-action: light-dark(#2f65da, #3d619d);
-  --color-action-hover: light-dark(#2153bf, #4b74b5);
+  --color-action-light: #3f6dbd;
+  --color-accent: light-dark(var(--color-action-light), #9bb8ec);
+  --color-accent-soft: light-dark(
+    color-mix(in srgb, var(--color-action-light) 10%, white),
+    #283647
+  );
+  --color-action: light-dark(var(--color-action-light), #3d619d);
+  --color-action-hover: light-dark(#355c9f, #4b74b5);
 
   --color-danger: light-dark(#d7332d, #f09a90);
   --color-danger-soft: light-dark(#fdeeed, #422b28);
-  --color-danger-action: light-dark(#d7332d, #b64239);
-  --color-danger-action-hover: light-dark(#b82823, #c4483f);
+  --color-danger-action: light-dark(#b64f59, #b64239);
+  --color-danger-action-hover: light-dark(#9b414b, #c4483f);
   --color-star: light-dark(#f59e0b, #dfb66d);
   --color-overlay: light-dark(rgb(24 24 27 / 0.25), rgb(0 0 0 / 0.65));
 
@@ -109,7 +113,8 @@
     height: 12px;
   }
 
-  ::-webkit-scrollbar-track {
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
     background: transparent;
   }
 
@@ -479,6 +484,11 @@
 
   .sidebar-collapsed {
     overflow: hidden;
+  }
+
+  .sidebar-nav-active {
+    color: light-dark(#2f65da, var(--color-accent));
+    background-color: light-dark(#eaf1fd, var(--color-accent-soft));
   }
 
   .sidebar-icon-button {

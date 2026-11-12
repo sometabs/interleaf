@@ -246,7 +246,7 @@ export default function Sidebar({
                 collapsed ? 'sidebar-icon-button size-9 justify-center px-0' : 'w-full px-2.5'
               } ${
                 active
-                  ? 'bg-accent-soft font-medium text-accent'
+                  ? 'sidebar-nav-active font-medium'
                   : 'text-ink-muted hover:bg-hover hover:text-ink'
               }`}
             >
