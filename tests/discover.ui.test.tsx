@@ -1,10 +1,10 @@
 import type { Recommendation, RecommendationQuery } from '@shared/api'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import App from '../src/renderer/src/App'
 import Discover from '../src/renderer/src/components/Discover'
-import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import { MIN_SHOWN, shownFor } from '../src/renderer/src/lib/shown'
 import { installBridge, makeBook, renderApp } from './helpers/render'
 
@@ -49,6 +49,16 @@ function lastQuery(spy: Spy): RecommendationQuery {
 
 function advancedSwitch(checked: boolean): HTMLElement {
   return screen.getByRole('switch', { name: 'Advanced recommendations', checked })
+}
+
+async function openSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'Settings' }))
+}
+
+async function closeSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(
+    within(screen.getByRole('dialog', { name: 'Settings' })).getByRole('button', { name: 'Close' })
+  )
 }
 
 describe('what the screen asks for', () => {
@@ -100,27 +110,25 @@ describe('advanced recommendations', () => {
     expect(screen.queryByRole('button', { name: 'Standard' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Advanced' })).toBeNull()
     expect(screen.getByText('Cached Open Library books')).toBeTruthy()
-    expect(advancedSwitch(false)).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: 'Advanced recommendations' })).toBeNull()
     expect(getHybridRecommendations).not.toHaveBeenCalled()
   })
 
-  it('opens and closes the help without changing the recommendation mode', async () => {
+  it('explains Advanced in Settings without changing the recommendation mode', async () => {
     const getHybridRecommendations = vi.fn(async () => [])
     installBridge(
       { books: [makeBook()] },
       { getRecommendations: async () => ALL, getHybridRecommendations }
     )
-    renderApp(<Discover />)
+    renderApp(<App />, { kind: 'discover' })
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'About advanced recommendations' }))
-    expect(
-      screen.getByRole('dialog', { name: 'About advanced recommendations' }).textContent
-    ).toContain('Combines keyword matching with AI')
+    await openSettings(user)
+    expect(screen.getByText(/Combines keyword matching with AI/i)).toBeTruthy()
     expect(screen.getByText(/uses more RAM/i)).toBeTruthy()
+    expect(advancedSwitch(false)).toBeTruthy()
 
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(advancedSwitch(false)).toBeTruthy()
     expect(getHybridRecommendations).not.toHaveBeenCalled()
   })
 
@@ -136,24 +144,22 @@ describe('advanced recommendations', () => {
         refreshRecommendations
       }
     )
-    renderApp(
-      <>
-        <Discover />
-        <ConfirmDialog />
-      </>
-    )
+    renderApp(<App />, { kind: 'discover' })
     const user = userEvent.setup()
     await card(ALL[0].title)
+    await openSettings(user)
     await user.click(advancedSwitch(false))
     expect(getHybridRecommendations).not.toHaveBeenCalled()
-    expect(screen.getByText(/uses more RAM/i)).toBeTruthy()
-    expect(screen.getByText(/35 MB/)).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Turn on' }))
+    const consent = screen.getByRole('alertdialog', { name: 'Turn on advanced recommendations?' })
+    expect(within(consent).getByText(/uses more RAM/i)).toBeTruthy()
+    expect(within(consent).getByText(/35 MB/)).toBeTruthy()
+    await user.click(within(consent).getByRole('button', { name: 'Turn on' }))
+    expect(advancedSwitch(true)).toBeTruthy()
+    await closeSettings(user)
     await card(match.title)
     expect(getHybridRecommendations).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBe('true')
     expect(refreshRecommendations).not.toHaveBeenCalled()
-    expect(advancedSwitch(true)).toBeTruthy()
   })
 
   it('remembers when advanced recommendations are off and turns them back on with prior consent', async () => {
@@ -165,28 +171,26 @@ describe('advanced recommendations', () => {
       { getRecommendations: async () => ALL, getHybridRecommendations }
     )
     const user = userEvent.setup()
-    const ui = (
-      <>
-        <Discover />
-        <ConfirmDialog />
-      </>
-    )
-    const first = renderApp(ui)
+    const first = renderApp(<App />, { kind: 'discover' })
     await card(match.title)
+    await openSettings(user)
     advancedSwitch(true).focus()
     await user.keyboard('[Space]')
-    await card(ALL[0].title)
     expect(advancedSwitch(false)).toBeTruthy()
+    await closeSettings(user)
+    await card(ALL[0].title)
     expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBe('true')
 
     first.unmount()
-    renderApp(ui)
+    renderApp(<App />, { kind: 'discover' })
     await card(ALL[0].title)
     expect(getHybridRecommendations).toHaveBeenCalledOnce()
+    await openSettings(user)
     await user.click(advancedSwitch(false))
-    await card(match.title)
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(advancedSwitch(true)).toBeTruthy()
+    await closeSettings(user)
+    await card(match.title)
   })
 
   it('keeps keyword results if the download is declined', async () => {
@@ -198,15 +202,12 @@ describe('advanced recommendations', () => {
         getHybridRecommendations
       }
     )
-    renderApp(
-      <>
-        <Discover />
-        <ConfirmDialog />
-      </>
-    )
+    renderApp(<App />, { kind: 'discover' })
     const user = userEvent.setup()
+    await openSettings(user)
     await user.click(advancedSwitch(false))
     await user.click(screen.getByRole('button', { name: 'Not now' }))
+    await closeSettings(user)
     await card(ALL[0].title)
     expect(getHybridRecommendations).not.toHaveBeenCalled()
     expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBeNull()
@@ -225,7 +226,6 @@ describe('advanced recommendations', () => {
       expect(getHybridRecommendations).toHaveBeenCalledOnce()
       expect(getRecommendations).not.toHaveBeenCalled()
       expect(screen.queryByRole('group', { name: 'Ranking' })).toBeNull()
-      expect(advancedSwitch(true)).toBeTruthy()
     }
   )
 
@@ -298,14 +298,17 @@ describe('advanced recommendations', () => {
         getHybridRecommendationTree
       }
     )
-    const first = renderApp(<Discover />)
-    await userEvent.click(await screen.findByRole('button', { name: 'tree' }))
+    const first = renderApp(<App />, { kind: 'discover' })
+    const user = userEvent.setup()
+    await openSettings(user)
+    await user.click(screen.getByRole('button', { name: 'Tree' }))
     await waitFor(() =>
       expect(getHybridRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     )
     first.unmount()
-    renderApp(<Discover />)
-    expect(screen.getByRole('button', { name: 'tree' }).getAttribute('aria-pressed')).toBe('true')
+    renderApp(<App />, { kind: 'discover' })
+    await openSettings(user)
+    expect(screen.getByRole('button', { name: 'Tree', pressed: true })).toBeTruthy()
     expect(window.localStorage.getItem('interleaf.recommendationRanking')).toBeNull()
   })
 

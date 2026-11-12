@@ -20,21 +20,17 @@ function rejectPending(error: Error): void {
   pending.clear()
 }
 
-function stopWorker(afterStop?: () => void): Promise<void> {
-  const current = worker
-  worker = null
-  const completion = Promise.resolve(current ? current.terminate() : stopping)
-    .then(() => afterStop?.())
-    .finally(() => {
-      if (stopping === completion) stopping = null
-    })
-  stopping = completion
-  return completion
-}
-
 function stopWhenDrained(): void {
-  if (pending.size > 0) return
-  void stopWorker().catch((error) => console.warn('[semantic] could not stop worker:', error))
+  const current = worker
+  if (pending.size > 0 || !current) return
+  worker = null
+  stopping = current
+    .terminate()
+    .then(() => undefined)
+    .finally(() => {
+      stopping = null
+    })
+  void stopping.catch((error) => console.warn('[semantic] could not stop worker:', error))
 }
 
 function semanticWorker(): Worker {
@@ -96,10 +92,4 @@ export async function embedInSemanticWorker(
       stopWhenDrained()
     }
   })
-}
-
-/** Stops the worker and allows the model files to be removed before any restart. */
-export function stopSemanticWorker(removeModel: () => void): Promise<void> {
-  rejectPending(new Error('Recommendation model was removed.'))
-  return stopWorker(removeModel)
 }

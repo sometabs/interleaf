@@ -342,7 +342,6 @@ export interface InterleafApi {
   deleteAllQuotes(): Promise<number>
   deleteAllReviews(): Promise<number>
   clearRecommendationCache(): Promise<number>
-  removeAdvancedModel(): Promise<boolean>
   deleteEverything(): Promise<void>
 }
 
@@ -399,6 +398,5 @@ export const IPC_CHANNELS = [
   'deleteAllQuotes',
   'deleteAllReviews',
   'clearRecommendationCache',
-  'removeAdvancedModel',
   'deleteEverything'
 ] as const satisfies readonly (keyof InterleafApi)[]

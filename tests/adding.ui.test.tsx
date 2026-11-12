@@ -279,7 +279,7 @@ describe('the spinner itself', () => {
   // up rather than slowing it: the repeat has to stop too.
   it('stops animations repeating when motion is reduced', async () => {
     const source = await css()
-    const block = /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}/.exec(source)
+    const block = /:root\[data-motion='off'\] \{[\s\S]*?\n {2}\}/.exec(source)
 
     expect(block).not.toBeNull()
     expect(block?.[0]).toContain('animation-duration: 0.01ms !important')
@@ -289,7 +289,7 @@ describe('the spinner itself', () => {
   // Exempted from the rule above: a frozen ring indicates nothing.
   it('keeps spinning even when motion is reduced', async () => {
     const source = await css()
-    const block = /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}/.exec(source)
+    const block = /:root\[data-motion='off'\] \{[\s\S]*?\n {2}\}/.exec(source)
 
     expect(block?.[0]).toMatch(
       /\.spinner \{[\s\S]*?animation: interleaf-spin var\(--spin-duration\)[\s\S]*?!important/

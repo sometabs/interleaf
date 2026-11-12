@@ -101,13 +101,13 @@ quotes. It does not search the contents of the books themselves.
 4 or 5 stars to search Open Library using their subjects and author names, then ranks the cached
 pool locally using subjects and descriptions. Finished 3-star books provide a weaker positive
 signal; 1–2-star ratings count against similar candidates. Hybrid combines TF-IDF keyword and
-semantic rankings using reciprocal rank fusion. Enabling it asks for confirmation before downloading
-a roughly 35 MB BGE Small model from Hugging Face. Matching then runs locally.
+semantic rankings using reciprocal rank fusion. Turn on **Advanced recommendations** in **Settings**
+to download a roughly 35 MB BGE Small model from Hugging Face after confirmation. Matching then runs locally.
 Until enabled, or if the model fails, keyword-only results are shown automatically. There is no
 ranking-mode selector. Suggestions identify a library book behind
 the match. Your reviews, notes and quotes are not sent to either service.
 
-**Grid or tree.** Browse the ranked list as cards, or explore the same pool as a similarity tree.
+**Grid or tree.** Choose **Discover layout** in **Settings** to browse cards or a similarity tree.
 Candidates remain cached for offline ranking, and can be dismissed or added to your shelf.
 
 **Books like this one.** Any book on your shelf has a **Find books like this** button, which ranks the
@@ -142,8 +142,8 @@ model, and undo **Not for me** dismissals.
 
 ## Getting around
 
-Choose Light, Dark or System from **Appearance** in the sidebar. The choice is remembered on this
-machine; System follows your operating system's colour preference.
+Open **Settings** in the sidebar to choose Light, Dark or System. System follows your operating
+system's colour preference. Motion is on by default and can be turned off here.
 
 | key        | action                                     |
 | ---------- | ------------------------------------------ |

@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './assets/main.css'
 import { fail } from './lib/feedback'
+import { SettingsProvider } from './lib/settings'
 import { ViewProvider } from './lib/view'
 
 function createClient(): QueryClient {
@@ -31,7 +32,9 @@ createRoot(host).render(
   <StrictMode>
     <QueryClientProvider client={createClient()}>
       <ViewProvider>
-        <App />
+        <SettingsProvider>
+          <App />
+        </SettingsProvider>
       </ViewProvider>
     </QueryClientProvider>
   </StrictMode>

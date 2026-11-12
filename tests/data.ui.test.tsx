@@ -28,7 +28,6 @@ function setup(
     deleteAllQuotes: vi.fn(async () => counts.quotes ?? 0),
     deleteAllReviews: vi.fn(async () => counts.reviews ?? 0),
     clearRecommendationCache: vi.fn(async () => counts.candidates ?? 0),
-    removeAdvancedModel: vi.fn(async () => true),
     deleteEverything: vi.fn(async () => undefined),
     restoreDismissed: vi.fn(async () => undefined),
     exportBackup: vi.fn(async () => ({
@@ -51,12 +50,6 @@ function setup(
         reviews: counts.reviews ?? 0,
         candidates: counts.candidates ?? 0,
         dismissed: counts.dismissed ?? dismissed.length
-      }),
-      getAppDiagnostics: async () => ({
-        version: 'test',
-        dataDirectory: 'C:/data',
-        schemaVersion: 19,
-        advancedModelInstalled: false
       }),
       listDismissed: async () => dismissed,
       ...spies,
@@ -84,25 +77,6 @@ async function press(name: RegExp | string): Promise<void> {
 }
 
 describe('the Data screen', () => {
-  it('requires consent again after the recommendation model is removed', async () => {
-    window.localStorage.setItem('interleaf.advancedDownloadAcknowledged', 'true')
-    const spies = setup({}, [], {
-      getAppDiagnostics: async () => ({
-        version: 'test',
-        dataDirectory: 'C:/data',
-        schemaVersion: 19,
-        advancedModelInstalled: true
-      })
-    })
-    await press('Remove model')
-    await screen.findByText('Remove the recommendation model?')
-    await press('Remove model')
-    await waitFor(() => expect(spies.removeAdvancedModel).toHaveBeenCalledOnce())
-    await waitFor(() =>
-      expect(window.localStorage.getItem('interleaf.advancedDownloadAcknowledged')).toBeNull()
-    )
-  })
-
   it('shows how much there is before you delete it', async () => {
     setup({ books: 47, notes: 12, quotes: 8, reviews: 3 })
 

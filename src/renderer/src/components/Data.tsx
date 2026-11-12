@@ -4,7 +4,6 @@ import { importSummary } from '../lib/highlights'
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
 import {
-  useAppDiagnostics,
   useClearRecommendationCache,
   useDataCounts,
   useDeleteAllBooks,
@@ -16,7 +15,6 @@ import {
   useExportBackup,
   useImportHighlights,
   useReadHighlightExport,
-  useRemoveAdvancedModel,
   useRestoreBackup,
   useRestoreDismissed
 } from '../lib/queries'
@@ -29,7 +27,6 @@ import Empty from './Empty'
 export default function Data(): ReactNode {
   const { navigate } = useView()
   const { data: counts } = useDataCounts()
-  const { data: diagnostics } = useAppDiagnostics()
   const exportBackup = useExportBackup()
   const restoreBackup = useRestoreBackup()
   const readExport = useReadHighlightExport()
@@ -40,7 +37,6 @@ export default function Data(): ReactNode {
   const deleteQuotes = useDeleteAllQuotes()
   const deleteReviews = useDeleteAllReviews()
   const clearRecommendations = useClearRecommendationCache()
-  const removeModel = useRemoveAdvancedModel()
   const deleteAll = useDeleteEverything()
 
   const busy =
@@ -49,7 +45,6 @@ export default function Data(): ReactNode {
     deleteQuotes.isPending ||
     deleteReviews.isPending ||
     clearRecommendations.isPending ||
-    removeModel.isPending ||
     deleteAll.isPending
 
   async function onBackup(): Promise<void> {
@@ -160,18 +155,6 @@ export default function Data(): ReactNode {
     if (!ok) return
     const deleted = await clearRecommendations.mutateAsync()
     notify(`Cleared ${deleted} cached recommendations`)
-  }
-
-  async function onRemoveModel(): Promise<void> {
-    const ok = await confirm({
-      title: 'Remove the recommendation model?',
-      body: 'Discover will use keyword matching until you turn on advanced recommendations again.',
-      confirmLabel: 'Remove model',
-      destructive: true
-    })
-    if (!ok) return
-    await removeModel.mutateAsync()
-    notify('Recommendation model removed')
   }
 
   async function onDeleteEverything(): Promise<void> {
@@ -337,17 +320,6 @@ export default function Data(): ReactNode {
             action="Clear cache"
             onAction={onClearRecommendations}
             disabled={busy || (counts?.candidates ?? 0) === 0}
-          />
-          <Row
-            label="Recommendation model"
-            detail={
-              diagnostics?.advancedModelInstalled
-                ? 'Downloaded locally; it can be downloaded again later'
-                : 'Not downloaded'
-            }
-            action="Remove model"
-            onAction={onRemoveModel}
-            disabled={busy || !diagnostics?.advancedModelInstalled}
           />
         </section>
 

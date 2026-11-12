@@ -252,7 +252,7 @@ export default function RecommendationTree({
             height: natural.height ? natural.height * zoom : undefined
           }}
         >
-          {/* `transition-none` because `prefers-reduced-motion` forces a 0.01ms
+          {/* `transition-none` because reduced motion forces a 0.01ms
               transition on everything, and the re-anchor reads back mid-flight. */}
           <div
             ref={stageRef}

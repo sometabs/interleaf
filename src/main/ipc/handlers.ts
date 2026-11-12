@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import { existsSync, readdirSync, rmSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 import {
@@ -33,7 +33,6 @@ import { coversDir, importCoverFile } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
 import { suggestHybridRecommendations, suggestHybridRecommendationTree } from '../services/hybrid'
-import { stopSemanticWorker } from '../services/semanticWorkerClient'
 
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
@@ -327,12 +326,6 @@ const api: InterleafApi = {
   },
   async clearRecommendationCache() {
     return data.clearRecommendationCache(getDb())
-  },
-  async removeAdvancedModel() {
-    const dir = semanticModelsDir()
-    if (!existsSync(dir)) return false
-    await stopSemanticWorker(() => rmSync(dir, { recursive: true, force: true }))
-    return true
   },
   async deleteEverything() {
     data.deleteEverything(getDb())

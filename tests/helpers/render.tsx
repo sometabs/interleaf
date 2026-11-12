@@ -13,6 +13,7 @@ import type {
   Note
 } from '../../src/shared/api'
 import { fail } from '../../src/renderer/src/lib/feedback'
+import { SettingsProvider } from '../../src/renderer/src/lib/settings'
 import { ViewProvider, type View } from '../../src/renderer/src/lib/view'
 
 export function makeBook(overrides: Partial<Book> = {}): Book {
@@ -110,6 +111,12 @@ export function installBridge(
         .map((note) => ({ ...note })),
     getNote: async (id: number) => state.notes.find((note) => note.id === id) ?? null,
     getBookMetadata: async () => null,
+    getAppDiagnostics: async () => ({
+      version: 'test',
+      schemaVersion: 0,
+      dataDirectory: '',
+      advancedModelInstalled: false
+    }),
     search: async () => [],
     getRecommendations: async () => [],
     refreshAllMetadata: async () => ({
@@ -216,7 +223,9 @@ function Providers({
 
   return (
     <QueryClientProvider client={client}>
-      <ViewProvider initial={initialView}>{children}</ViewProvider>
+      <ViewProvider initial={initialView}>
+        <SettingsProvider>{children}</SettingsProvider>
+      </ViewProvider>
     </QueryClientProvider>
   )
 }

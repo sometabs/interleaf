@@ -1,6 +1,5 @@
 import type { Recommendation, RecommendationQuery } from '@shared/api'
 import { screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import Discover from '../src/renderer/src/components/Discover'
@@ -37,9 +36,9 @@ function shelf(size: number): ReturnType<typeof makeBook>[] {
 
 function show(
   available: number,
-  books = 1
+  books = 1,
+  layout: 'grid' | 'tree' = 'grid'
 ): {
-  user: ReturnType<typeof userEvent.setup>
   getRecommendations: Spy
   getRecommendationTree: Spy
 } {
@@ -59,8 +58,9 @@ function show(
   )
 
   installBridge({ books: shelf(books) }, { getRecommendations, getRecommendationTree })
+  window.localStorage.setItem('interleaf.recommendationLayout', JSON.stringify(layout))
   renderApp(<Discover />)
-  return { user: userEvent.setup(), getRecommendations, getRecommendationTree }
+  return { getRecommendations, getRecommendationTree }
 }
 
 function cards(): HTMLElement[] {
@@ -109,11 +109,7 @@ describe('how many suggestions are shown', () => {
   })
 
   it('holds the tree to the same number', async () => {
-    const { user, getRecommendationTree } = show(100, 20)
-    await waitFor(() => expect(cards()).toHaveLength(shownFor(20)))
-
-    await user.click(await screen.findByRole('button', { name: 'tree' }))
-
+    const { getRecommendationTree } = show(100, 20, 'tree')
     await waitFor(() => expect(lastQuery(getRecommendationTree).limit).toBe(shownFor(20)))
     expect(cards()).toHaveLength(shownFor(20))
   })

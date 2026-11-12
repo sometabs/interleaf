@@ -1,6 +1,7 @@
 import { type DragEvent, type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 
 import { useBooks, useReorderPriority } from '../lib/queries'
+import { useSettings } from '../lib/settings'
 import { useView } from '../lib/view'
 import Cover from './Cover'
 
@@ -25,6 +26,7 @@ function insertAround(
 }
 
 export default function ReadingQueue(): ReactNode {
+  const { motionEnabled } = useSettings()
   const { navigate } = useView()
   const { data: books = [], isPending } = useBooks()
   const reorderPriority = useReorderPriority()
@@ -121,7 +123,8 @@ export default function ReadingQueue(): ReactNode {
     if (firstRects.size === 0) return
 
     previousRects.current = new Map()
-    const rows: HTMLElement[] = []
+    if (!motionEnabled) return
+    const slides: Animation[] = []
 
     for (const [id, row] of rowRefs.current) {
       const first = firstRects.get(id)
@@ -130,34 +133,20 @@ export default function ReadingQueue(): ReactNode {
       const offsetY = first.top - row.getBoundingClientRect().top
       if (Math.abs(offsetY) < 1) continue
 
-      row.style.transition = 'none'
-      row.style.transform = `translateY(${offsetY}px)`
-      rows.push(row)
+      const slide = row.animate?.(
+        [{ transform: `translateY(${offsetY}px)` }, { transform: 'none' }],
+        {
+          duration: 180,
+          easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+        }
+      )
+      if (slide) slides.push(slide)
     }
-
-    if (rows.length === 0 || typeof requestAnimationFrame !== 'function') {
-      for (const row of rows) {
-        row.style.transition = ''
-        row.style.transform = ''
-      }
-      return
-    }
-
-    const frame = requestAnimationFrame(() => {
-      for (const row of rows) {
-        row.style.transition = 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)'
-        row.style.transform = ''
-      }
-    })
 
     return () => {
-      cancelAnimationFrame(frame)
-      for (const row of rows) {
-        row.style.transition = ''
-        row.style.transform = ''
-      }
+      for (const slide of slides) slide.cancel()
     }
-  }, [previewIds])
+  }, [previewIds, motionEnabled])
 
   if (isPending) return <div className="h-full" />
 

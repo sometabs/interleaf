@@ -1,4 +1,5 @@
 import {
+  useIsFetching,
   useMutation,
   useQuery,
   useQueryClient,
@@ -473,8 +474,15 @@ export function useDataCounts(): UseQueryResult<DataCounts> {
   return useQuery({ queryKey: keys.dataCounts, queryFn: () => api().dataCounts() })
 }
 
-export function useAppDiagnostics(): UseQueryResult<AppDiagnostics> {
-  return useQuery({ queryKey: keys.diagnostics, queryFn: () => api().getAppDiagnostics() })
+export function useAppDiagnostics(enabled: boolean): UseQueryResult<AppDiagnostics> {
+  const ranking = useIsFetching({ queryKey: keys.hybridRecommendations })
+  const buildingTree = useIsFetching({ queryKey: keys.hybridRecommendationTrees })
+  return useQuery({
+    queryKey: keys.diagnostics,
+    queryFn: () => api().getAppDiagnostics(),
+    enabled: enabled && ranking === 0 && buildingTree === 0,
+    staleTime: 0
+  })
 }
 
 export function useRestoreDismissed(): UseMutationResult<void, Error, string> {
@@ -532,22 +540,6 @@ export function useClearRecommendationCache(): UseMutationResult<number, Error, 
   return useMutation({
     mutationFn: () => api().clearRecommendationCache(),
     onSuccess: () => invalidateEverything(client)
-  })
-}
-
-export function useRemoveAdvancedModel(): UseMutationResult<boolean, Error, void> {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: () => api().removeAdvancedModel(),
-    onSuccess: () => {
-      // Removing the model must not trigger an automatic re-download later.
-      try {
-        window.localStorage.removeItem('interleaf.advancedDownloadAcknowledged')
-      } catch {
-        // Preference storage may be unavailable; removal must still succeed.
-      }
-      return invalidateEverything(client)
-    }
   })
 }
 

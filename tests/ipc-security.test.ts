@@ -36,7 +36,6 @@ vi.mock('../src/main/services/hybrid', () => ({
   suggestHybridRecommendations: vi.fn(),
   suggestHybridRecommendationTree: vi.fn()
 }))
-vi.mock('../src/main/services/semanticWorkerClient', () => ({ stopSemanticWorker: vi.fn() }))
 
 const APP_URL = 'file:///C:/Interleaf/out/renderer/index.html'
 let db: Database

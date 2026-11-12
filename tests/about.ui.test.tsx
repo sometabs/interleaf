@@ -30,7 +30,7 @@ describe('About & diagnostics', () => {
 
     expect(await screen.findByText('Available')).toBeDefined()
     expect(screen.getByText('1.8.8')).toBeDefined()
-    expect(screen.getByText('Downloaded')).toBeDefined()
+    expect(screen.queryByText('Recommendation model')).toBeNull()
     expect(checkOpenLibrary).toHaveBeenCalledOnce()
 
     await user.click(screen.getByRole('button', { name: 'Close' }))

@@ -104,7 +104,6 @@ export default function AboutDialog({ open, onOpenChange }: Props): ReactNode {
     const summary = [
       `Interleaf ${diagnostics.version}`,
       `Database schema: ${diagnostics.schemaVersion}`,
-      `Recommendation model: ${diagnostics.advancedModelInstalled ? 'Downloaded' : 'Not downloaded'}`,
       `Network: ${online ? 'Online' : 'Offline'}`,
       `Open Library: ${openLibrary}`
     ].join('\n')
@@ -146,13 +145,6 @@ export default function AboutDialog({ open, onOpenChange }: Props): ReactNode {
               </h2>
               <div className="overflow-hidden rounded-control border border-hairline">
                 <InfoRow label="Version">{diagnostics?.version ?? 'Loading…'}</InfoRow>
-                <InfoRow label="Recommendation model">
-                  {diagnostics
-                    ? diagnostics.advancedModelInstalled
-                      ? 'Downloaded'
-                      : 'Not downloaded'
-                    : 'Loading…'}
-                </InfoRow>
                 <InfoRow label="Data location">
                   <span className="break-all text-right text-[11px]">
                     {diagnostics?.dataDirectory ?? 'Loading…'}
