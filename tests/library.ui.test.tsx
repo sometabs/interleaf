@@ -117,7 +117,7 @@ describe('arranging the bookshelf', () => {
     window.localStorage.setItem('interleaf.libraryLayout', '"shelf"')
   })
 
-  it('previews the cached cover after hovering and hides it when a drag starts', async () => {
+  it('shows the right hover preview for both orientations and hides it when a drag starts', async () => {
     const coverPath = 'book-1-test.jpg'
     installBridge(
       { books: [{ ...SOLARIS, coverPath, pageCount: 96 }] },
@@ -145,6 +145,20 @@ describe('arranging the bookshelf', () => {
       expect(preview?.textContent).toContain('Stanisław Lem')
 
       fireEvent.dragStart(spine, { dataTransfer: { setData: vi.fn() } })
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+      fireEvent.dragEnd(spine)
+
+      fireEvent.contextMenu(spine)
+      fireEvent.mouseEnter(spine)
+      act(() => vi.advanceTimersByTime(399))
+      expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
+      act(() => vi.advanceTimersByTime(1))
+      const textPreview = screen
+        .getByText('Solaris', { selector: 'p' })
+        .closest('[aria-hidden="true"]')
+      expect(textPreview?.textContent).toContain('Stanisław Lem')
+      expect(textPreview?.querySelector('img')).toBeNull()
+      fireEvent.mouseLeave(spine)
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
     } finally {
       vi.useRealTimers()
@@ -248,6 +262,97 @@ describe('arranging the bookshelf', () => {
     await user.click(screen.getByRole('button', { name: 'Remove empty shelf 2' }))
     expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
     expect(titles('Shelf 1').at(-1)).toBe('Solaris by Stanisław Lem')
+  })
+
+  it('remembers shelf names and row order without moving the books within each shelf', async () => {
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        { id: 1, bookIds: [1], positions: { 1: 110 } },
+        { id: 2, bookIds: [2], positions: { 2: 250 } }
+      ])
+    )
+    installBridge({ books: [SOLARIS, PICNIC] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Shelf 2' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name for shelf 2' }), 'Favorites{Enter}')
+
+    const lists = (): (string | null)[] =>
+      within(screen.getByRole('region', { name: 'Bookshelf' }))
+        .getAllByRole('list')
+        .map((list) => list.getAttribute('aria-label'))
+    expect(lists()).toEqual(['Shelf 1', 'Favorites'])
+    await user.click(screen.getByRole('button', { name: 'Move Favorites up' }))
+    expect(lists()).toEqual(['Favorites', 'Shelf 2'])
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const favorites = await screen.findByRole('list', { name: 'Favorites' })
+    expect(lists()).toEqual(['Favorites', 'Shelf 2'])
+    expect(
+      within(favorites)
+        .getByRole('button', { name: 'Roadside Picnic by Strugatsky' })
+        .parentElement?.style.getPropertyValue('--shelf-x')
+    ).toBe('250px')
+
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+    const solaris = screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
+    fireEvent.dragStart(solaris, { dataTransfer })
+    fireEvent.drop(favorites.firstElementChild!, { dataTransfer })
+    expect(within(favorites).getByRole('button', { name: 'Solaris by Stanisław Lem' })).toBeTruthy()
+    expect(lists()).toEqual(['Favorites', 'Shelf 2'])
+
+    await user.click(screen.getByRole('button', { name: 'Move Favorites down' }))
+    await user.click(screen.getByRole('button', { name: 'Favorites' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Name for shelf 2' }))
+    await user.keyboard('{Enter}')
+    expect(lists()).toEqual(['Shelf 1', 'Shelf 2'])
+  })
+
+  it('turns a book to its cached cover and remembers which way it faces', async () => {
+    installBridge({ books: [{ ...SOLARIS, coverPath: 'book-1-test.jpg' }, PICNIC] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const label = 'Solaris by Stanisław Lem'
+    const solaris = await screen.findByRole('button', { name: label })
+    fireEvent.contextMenu(solaris)
+    expect(solaris.style.width).toBe('112px')
+    expect(within(solaris).getByTestId('cover').querySelector('img')?.getAttribute('src')).toBe(
+      'bookcover://covers/book-1-test.jpg'
+    )
+    expect(
+      screen
+        .getByRole('button', { name: 'Roadside Picnic by Strugatsky' })
+        .parentElement?.style.getPropertyValue('--shelf-x')
+    ).toBe('112px')
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const restored = await screen.findByRole('button', { name: label })
+    expect(within(restored).getByTestId('cover')).toBeTruthy()
+    fireEvent.contextMenu(restored)
+    expect(within(restored).queryByTestId('cover')).toBeNull()
+    expect(restored.style.width).toBe('43px')
+  })
+
+  it('wraps a full shelf for a face-out book and restores the row when it turns back', async () => {
+    const books = Array.from({ length: 11 }, (_, index) =>
+      makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
+    )
+    installBridge({ books })
+    renderApp(<Library onAdd={() => {}} />)
+    const book = await screen.findByRole('button', { name: 'Book 1' })
+    const first = screen.getByRole('list', { name: 'Shelf 1' })
+    fireEvent.contextMenu(book)
+    expect(within(first).getAllByRole('button')).toHaveLength(10)
+    expect(within(book).getByTestId('cover')).toBeTruthy()
+    expect(
+      within(screen.getByRole('list', { name: 'Shelf 2' })).getByRole('button', { name: 'Book 11' })
+    ).toBeTruthy()
+
+    fireEvent.contextMenu(book)
+    expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
+    expect(within(first).getAllByRole('button')).toHaveLength(11)
   })
 
   it('fits an older wide row and rejects drops onto a full shelf', async () => {

@@ -1,5 +1,6 @@
 export interface Shelf {
   id: number
+  name?: string
   bookIds: number[]
   positions: Record<number, number>
 }
@@ -15,6 +16,10 @@ export function spineWidth(pageCount: number | null): number {
 
 function isId(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+export function parseFaceOutBooks(raw: unknown): number[] | null {
+  return Array.isArray(raw) ? [...new Set(raw.filter(isId))] : null
 }
 
 export function parseShelves(raw: unknown): Shelf[] | null {
@@ -40,7 +45,8 @@ export function parseShelves(raw: unknown): Shelf[] | null {
       const left: unknown = shelf.positions?.[id]
       if (typeof left === 'number' && Number.isSafeInteger(left) && left >= 0) positions[id] = left
     }
-    shelves.push({ id: shelf.id, bookIds: ordered, positions })
+    const name = typeof shelf.name === 'string' ? shelf.name.trim() : ''
+    shelves.push({ id: shelf.id, name: name || undefined, bookIds: ordered, positions })
   }
   return shelves
 }
@@ -78,7 +84,7 @@ export function arrangeShelves(saved: Shelf[], widths: ReadonlyMap<number, numbe
   const initial: Shelf[] = saved.length ? saved : [{ id: 1, bookIds: [], positions: {} }]
   let nextId = Math.max(...initial.map((shelf) => shelf.id)) + 1
 
-  const rows = initial.flatMap((shelf) => {
+  const rows = initial.flatMap<Shelf>((shelf) => {
     let group: number[] = []
     const groups = [group]
     let nextLeft = 0
@@ -96,6 +102,7 @@ export function arrangeShelves(saved: Shelf[], widths: ReadonlyMap<number, numbe
 
     return groups.map((bookIds, index) => ({
       id: index === 0 ? shelf.id : nextId++,
+      name: index === 0 ? shelf.name : undefined,
       bookIds,
       positions: fitPositions(
         bookIds,
@@ -145,7 +152,7 @@ export function shelfInsertion(
   otherIds.splice(index, 0, bookId)
   if (packedWidth(otherIds, widths) > SHELF_SPAN) return null
   return {
-    id: shelf.id,
+    ...shelf,
     bookIds: otherIds,
     positions: fitPositions(
       otherIds,

@@ -7,6 +7,7 @@ import { sameOrder } from '../lib/bookOrder'
 import { paletteFor } from '../lib/bookPalette'
 import {
   arrangeShelves,
+  parseFaceOutBooks,
   parseShelves,
   SHELF_SPAN,
   shelfInsertion,
@@ -16,6 +17,7 @@ import {
 import { usePersistentState } from '../lib/persistent'
 import { useSpineColors } from '../lib/queries'
 import Cover from './Cover'
+import EditableTitle from './EditableTitle'
 
 interface Props {
   books: Book[]
@@ -32,11 +34,14 @@ interface Preview {
   bookId: number
   left: number
   top: number
+  width: number
 }
 
 const PREVIEW_WIDTH = 248
+const TEXT_PREVIEW_WIDTH = 196
 const PREVIEW_MAX_HEIGHT = 144
 const PREVIEW_GAP = 10
+const FACE_OUT_WIDTH = 112
 
 export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode {
   const { data: spineColors } = useSpineColors(books)
@@ -46,14 +51,26 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     parseShelves,
     'interleaf.bookshelfOrder'
   )
+  const [faceOutBooks, setFaceOutBooks] = usePersistentState(
+    'interleaf.bookshelfFaceOut',
+    [],
+    parseFaceOutBooks
+  )
   const [draggedBookId, setDraggedBookId] = useState<number | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
+  const faceOutIds = useMemo(() => new Set(faceOutBooks), [faceOutBooks])
   const widths = useMemo(
-    () => new Map(books.map((book) => [book.id, spineWidth(book.pageCount)])),
-    [books]
+    () =>
+      new Map(
+        books.map((book) => [
+          book.id,
+          faceOutIds.has(book.id) ? FACE_OUT_WIDTH : spineWidth(book.pageCount)
+        ])
+      ),
+    [books, faceOutIds]
   )
   const shelves = useMemo(() => arrangeShelves(savedShelves, widths), [savedShelves, widths])
   const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
@@ -80,20 +97,22 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     }
   }, [hidePreview])
 
-  function queuePreview(bookId: number, spine: HTMLButtonElement): void {
+  function queuePreview(bookId: number, button: HTMLButtonElement): void {
     hidePreview()
     if (draggedBookId !== null) return
 
     previewTimer.current = window.setTimeout(() => {
-      if (!spine.isConnected) return
-      const { left, right, top, height } = spine.getBoundingClientRect()
+      if (!button.isConnected) return
+      const { left, right, top, height } = button.getBoundingClientRect()
       const nextToRight = right + PREVIEW_GAP
+      const width = faceOutIds.has(bookId) ? TEXT_PREVIEW_WIDTH : PREVIEW_WIDTH
       setPreview({
         bookId,
+        width,
         left:
-          nextToRight + PREVIEW_WIDTH + PREVIEW_GAP <= window.innerWidth
+          nextToRight + width + PREVIEW_GAP <= window.innerWidth
             ? nextToRight
-            : Math.max(PREVIEW_GAP, left - PREVIEW_GAP - PREVIEW_WIDTH),
+            : Math.max(PREVIEW_GAP, left - PREVIEW_GAP - width),
         top: Math.max(
           PREVIEW_GAP,
           Math.min(
@@ -148,7 +167,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     if (changedRow) {
       hideDropOutline()
       outline.style.width = `${widths.get(bookId)}px`
-      outline.style.height = `${166 + (bookId % 5) * 9}px`
+      outline.style.height = `${bookHeight(bookId)}px`
       dropOutline.current = outline
     }
     outline.style.transform = `translateX(${target.outlineX}px)`
@@ -185,16 +204,43 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     setSavedShelves([...shelves, { id, bookIds: [], positions: {} }])
   }
 
-  function renderSpine(book: Book, left: number): ReactNode {
+  function moveShelf(index: number, offset: -1 | 1): void {
+    const destination = index + offset
+    if (destination < 0 || destination >= shelves.length) return
+
+    const next = [...shelves]
+    next[index] = shelves[destination]
+    next[destination] = shelves[index]
+    hidePreview()
+    setSavedShelves(next)
+  }
+
+  function bookHeight(bookId: number): number {
+    return faceOutIds.has(bookId) ? FACE_OUT_WIDTH * 1.5 : 166 + (bookId % 5) * 9
+  }
+
+  function turnBook(bookId: number): void {
+    hidePreview()
+    setFaceOutBooks(
+      faceOutIds.has(bookId)
+        ? faceOutBooks.filter((id) => id !== bookId)
+        : [...faceOutBooks, bookId]
+    )
+  }
+
+  function renderBook(book: Book, left: number): ReactNode {
     const palette = (book.coverPath && spineColors?.[book.coverPath]) || paletteFor(book.title)
     const width = widths.get(book.id)!
     const label = book.author ? `${book.title} by ${book.author}` : book.title
+    const faceOut = faceOutIds.has(book.id)
     const style = {
       width,
-      height: 166 + (book.id % 5) * 9,
-      color: palette.ink,
-      backgroundColor: palette.cover,
-      '--spine-detail': palette.detail
+      height: bookHeight(book.id),
+      ...(!faceOut && {
+        color: palette.ink,
+        backgroundColor: palette.cover,
+        '--spine-detail': palette.detail
+      })
     } as CSSProperties
 
     return (
@@ -207,7 +253,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       >
         <button
           type="button"
-          className="book-spine"
+          className={faceOut ? 'bookshelf-book' : 'bookshelf-book book-spine'}
           style={style}
           draggable
           aria-label={label}
@@ -215,6 +261,10 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
           onMouseLeave={hidePreview}
           onClick={() => onOpen(book)}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            turnBook(book.id)
+          }}
           onDragStart={(event) => {
             hidePreview()
             const { left } = event.currentTarget.getBoundingClientRect()
@@ -225,10 +275,16 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           }}
           onDragEnd={endDrag}
         >
-          <span aria-hidden="true" className="book-spine-copy">
-            <span className="book-spine-title">{book.title}</span>
-            {book.author && <span className="book-spine-author">{book.author}</span>}
-          </span>
+          {faceOut ? (
+            <div aria-hidden="true" className="pointer-events-none">
+              <Cover title={book.title} author={book.author} path={book.coverPath} />
+            </div>
+          ) : (
+            <span aria-hidden="true" className="book-spine-copy">
+              <span className="book-spine-title">{book.title}</span>
+              {book.author && <span className="book-spine-author">{book.author}</span>}
+            </span>
+          )}
         </button>
       </div>
     )
@@ -240,66 +296,113 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       className="bookshelf-section"
       style={{ '--shelf-span': `${SHELF_SPAN}px` } as CSSProperties}
     >
-      <p className="mb-3 text-[13px] text-ink-muted">Drag books along or between shelves.</p>
+      <p className="mb-3 text-[13px] text-ink-muted">
+        Drag books to arrange them. Right-click a book to show its cover or spine.
+      </p>
       <div className="bookshelf">
         {shelves.map((shelf, index) => {
           const visible = shelf.bookIds
             .map((id) => matchingById.get(id))
             .filter((book) => book !== undefined)
           const empty = shelf.bookIds.length === 0
+          const defaultName = `Shelf ${index + 1}`
+          const name = shelf.name ?? defaultName
           return (
-            <div
-              key={shelf.id}
-              className="bookshelf-row"
-              onDragOver={(event) => {
-                if (draggedBookId === null) return
-                event.preventDefault()
-                const target = placementAt(event, shelf)
-                event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
-                if (target) showDropOutline(event.currentTarget, target, draggedBookId)
-                else hideDropOutline(event.currentTarget)
-              }}
-              onDragLeave={(event) => {
-                if (
-                  !(event.relatedTarget instanceof Node) ||
-                  !event.currentTarget.contains(event.relatedTarget)
-                ) {
-                  hideDropOutline(event.currentTarget)
-                }
-              }}
-              onDrop={(event) => {
-                if (draggedBookId === null) return
-                event.preventDefault()
-                const target = placementAt(event, shelf)
-                if (target) move(draggedBookId, target.shelf)
-                endDrag()
-              }}
-            >
-              <div role="list" aria-label={`Shelf ${index + 1}`} className="bookshelf-track">
-                <div className="bookshelf-spines">
-                  {visible.map((book) => renderSpine(book, shelf.positions[book.id]))}
-                </div>
-              </div>
-              <div aria-hidden="true" className="bookshelf-drop-layer">
-                <span className="bookshelf-drop-preview" />
-              </div>
-              {empty && (
-                <>
-                  <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
-                    Drag books here
-                  </p>
-                  {shelves.length > 1 && (
+            <div key={shelf.id}>
+              <div className="bookshelf-header flex items-center justify-between gap-2 px-3">
+                <EditableTitle
+                  label={`Name for shelf ${index + 1}`}
+                  value={shelf.name ?? ''}
+                  placeholder={defaultName}
+                  hint="Rename shelf"
+                  className="min-w-0 max-w-full py-0.5 text-base font-medium text-ink-muted!"
+                  onCommit={(nextName) =>
+                    setSavedShelves(
+                      shelves.map((row) =>
+                        row.id === shelf.id ? { ...row, name: nextName || undefined } : row
+                      )
+                    )
+                  }
+                />
+                {shelves.length > 1 && (
+                  <div className="flex shrink-0">
                     <button
                       type="button"
-                      aria-label={`Remove empty shelf ${index + 1}`}
-                      className="btn btn-ghost absolute top-2 right-2 text-[12px]"
-                      onClick={() => setSavedShelves(shelves.filter((row) => row.id !== shelf.id))}
+                      aria-label={`Move ${name} up`}
+                      title="Move shelf up"
+                      disabled={index === 0}
+                      className="btn btn-ghost px-2 py-0.5 disabled:opacity-25"
+                      onClick={() => moveShelf(index, -1)}
                     >
-                      Remove shelf
+                      ↑
                     </button>
-                  )}
-                </>
-              )}
+                    <button
+                      type="button"
+                      aria-label={`Move ${name} down`}
+                      title="Move shelf down"
+                      disabled={index === shelves.length - 1}
+                      className="btn btn-ghost px-2 py-0.5 disabled:opacity-25"
+                      onClick={() => moveShelf(index, 1)}
+                    >
+                      ↓
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div
+                className="bookshelf-row"
+                onDragOver={(event) => {
+                  if (draggedBookId === null) return
+                  event.preventDefault()
+                  const target = placementAt(event, shelf)
+                  event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
+                  if (target) showDropOutline(event.currentTarget, target, draggedBookId)
+                  else hideDropOutline(event.currentTarget)
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    !(event.relatedTarget instanceof Node) ||
+                    !event.currentTarget.contains(event.relatedTarget)
+                  ) {
+                    hideDropOutline(event.currentTarget)
+                  }
+                }}
+                onDrop={(event) => {
+                  if (draggedBookId === null) return
+                  event.preventDefault()
+                  const target = placementAt(event, shelf)
+                  if (target) move(draggedBookId, target.shelf)
+                  endDrag()
+                }}
+              >
+                <div role="list" aria-label={name} className="bookshelf-track">
+                  <div className="bookshelf-spines">
+                    {visible.map((book) => renderBook(book, shelf.positions[book.id]))}
+                  </div>
+                </div>
+                <div aria-hidden="true" className="bookshelf-drop-layer">
+                  <span className="bookshelf-drop-preview" />
+                </div>
+                {empty && (
+                  <>
+                    <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
+                      Drag books here
+                    </p>
+                    {shelves.length > 1 && (
+                      <button
+                        type="button"
+                        aria-label={`Remove empty shelf ${index + 1}`}
+                        className="btn btn-ghost absolute top-2 right-2 text-[12px]"
+                        onClick={() =>
+                          setSavedShelves(shelves.filter((row) => row.id !== shelf.id))
+                        }
+                      >
+                        Remove shelf
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )
         })}
@@ -316,17 +419,19 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
             style={{
               left: preview.left,
               top: preview.top,
-              width: PREVIEW_WIDTH,
+              width: preview.width,
               maxHeight: PREVIEW_MAX_HEIGHT
             }}
           >
-            <div className="w-16 shrink-0">
-              <Cover
-                title={previewBook.title}
-                author={previewBook.author}
-                path={previewBook.coverPath}
-              />
-            </div>
+            {!faceOutIds.has(previewBook.id) && (
+              <div className="w-16 shrink-0">
+                <Cover
+                  title={previewBook.title}
+                  author={previewBook.author}
+                  path={previewBook.coverPath}
+                />
+              </div>
+            )}
             <div className="min-w-0 wrap-anywhere">
               <p className="line-clamp-4 text-sm leading-tight font-semibold">
                 {previewBook.title}
