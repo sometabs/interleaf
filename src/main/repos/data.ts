@@ -1,7 +1,5 @@
 import type { Database } from 'better-sqlite3'
 
-// None of it is undoable; the vault export is the only safety net.
-
 export interface DataCounts {
   books: number
   notes: number

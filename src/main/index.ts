@@ -4,16 +4,23 @@ import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 import icon from '../../resources/icon.png?asset'
-import { initDb, closeDb } from './db/connection'
+import { getDb, closeDb } from './db/connection'
 import { referencedCovers } from './services/backup'
 import { resolveUserDataDir } from './db/userdata'
 import { registerIpcHandlers } from './ipc/handlers'
 import { isAppUrl, isExternalLink } from './navigation'
 import { restrictPermissions, trustRenderer } from './security'
 import { coverForId, coversDir, pruneOrphanCovers, resolveCoverPath } from './services/covers'
+import {
+  openLibraryWithRecovery,
+  startAutomaticBackups,
+  stopAutomaticBackups
+} from './services/libraryRecovery'
 
 // Must run before anything touches disk.
 app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged))
+// A restore replaces files shared by all instances using this profile.
+if (!app.requestSingleInstanceLock()) app.exit(0)
 
 // The only scheme that can reach the UI with an image, and it serves one directory.
 protocol.registerSchemesAsPrivileged([
@@ -104,8 +111,12 @@ app.whenReady().then(() => {
   })
 
   // Open before the renderer exists to ask it anything.
-  const db = initDb()
-  pruneOrphanCovers(coversDir(), referencedCovers(db))
+  if (!openLibraryWithRecovery()) {
+    app.exit(1)
+    return
+  }
+  pruneOrphanCovers(coversDir(), referencedCovers(getDb()))
+  startAutomaticBackups()
   registerCoverProtocol()
   registerIpcHandlers()
 
@@ -120,4 +131,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', closeDb)
+app.on('second-instance', () => {
+  const window = BrowserWindow.getAllWindows()[0]
+  if (!window) return
+  if (window.isMinimized()) window.restore()
+  window.focus()
+})
+
+app.on('will-quit', () => {
+  stopAutomaticBackups()
+  closeDb()
+})

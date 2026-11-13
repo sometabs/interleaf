@@ -23,7 +23,6 @@ import { useView } from '../lib/view'
 import Empty from './Empty'
 
 // Counts sit on every button so "Delete all books" reads as "delete these 47".
-// Backup is at the top because it is the only undo any of this has.
 export default function Data(): ReactNode {
   const { navigate } = useView()
   const { data: counts } = useDataCounts()
@@ -52,21 +51,21 @@ export default function Data(): ReactNode {
     const result = await exportBackup.mutateAsync()
     if (!result) return
     notify(
-      `Backed up ${result.books} books and ${result.notes} notes, ` +
+      `Exported ${result.books} books and ${result.notes} notes, ` +
         `with ${result.files} Markdown files, to ${result.dir}`
     )
   }
 
   async function onRestore(): Promise<void> {
     const ok = await confirm({
-      title: 'Restore a backup?',
-      body: 'Everything in your library now is replaced by what is in the backup. A copy of the current library is kept beside it. Interleaf restarts once it is done.',
-      confirmLabel: 'Choose a backup',
+      title: 'Import a library?',
+      body: 'This replaces your current library with the export you choose, then restarts Interleaf. Export your current library first if you want to keep a copy.',
+      confirmLabel: 'Choose an export',
       destructive: true
     })
     if (!ok) return
     // Success never returns here: the app relaunches onto the restored file.
-    await restoreBackup.mutateAsync()
+    restoreBackup.mutate()
   }
 
   // The matching screen is only worth showing when there is something to
@@ -96,7 +95,7 @@ export default function Data(): ReactNode {
     const n = counts?.books ?? 0
     const ok = await confirm({
       title: `Delete all ${n} books?`,
-      body: 'Their notes, quotes, reviews, ratings and reading data go with them. Notes not attached to a book are kept. This cannot be undone.',
+      body: 'Books and their attached notes, quotes, reviews, ratings and reading data will be deleted. Standalone notes stay.',
       confirmLabel: 'Delete books',
       destructive: true
     })
@@ -109,7 +108,7 @@ export default function Data(): ReactNode {
     const n = counts?.notes ?? 0
     const ok = await confirm({
       title: `Delete all ${n} notes?`,
-      body: 'Ordinary notes, attached or free-floating, will be deleted. Reviews, quotes and books are kept. This cannot be undone.',
+      body: 'All ordinary notes, including standalone notes, will be deleted.',
       confirmLabel: 'Delete notes',
       destructive: true
     })
@@ -122,7 +121,7 @@ export default function Data(): ReactNode {
     const n = counts?.quotes ?? 0
     const ok = await confirm({
       title: `Delete all ${n} quotes?`,
-      body: 'Every saved and imported quote will be deleted. Notes, reviews and books are kept. This cannot be undone.',
+      body: 'All saved and imported quotes will be deleted.',
       confirmLabel: 'Delete quotes',
       destructive: true
     })
@@ -135,7 +134,7 @@ export default function Data(): ReactNode {
     const n = counts?.reviews ?? 0
     const ok = await confirm({
       title: `Delete all ${n} reviews?`,
-      body: 'Every book review will be deleted. Notes, quotes and books are kept. This cannot be undone.',
+      body: 'All written reviews will be deleted.',
       confirmLabel: 'Delete reviews',
       destructive: true
     })
@@ -160,7 +159,7 @@ export default function Data(): ReactNode {
   async function onDeleteEverything(): Promise<void> {
     const ok = await confirm({
       title: 'Delete all library data?',
-      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted. The downloaded recommendation model is kept. This cannot be undone.',
+      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted.',
       confirmLabel: 'Delete everything',
       destructive: true
     })
@@ -177,28 +176,28 @@ export default function Data(): ReactNode {
         </header>
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-[14px] font-medium">Backup</h2>
+          <h2 className="text-[14px] font-medium">Library import and export</h2>
 
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px]">Back up everything</p>
+              <p className="text-[14px]">Library export</p>
               <p className="mt-0.5 text-[13px] text-ink-muted">
-                Everything, plus a Markdown copy you can read anywhere
+                Database, book covers, and a readable Markdown copy
               </p>
             </div>
             <button
               type="button"
               className="btn btn-primary shrink-0"
               onClick={onBackup}
-              disabled={exportBackup.isPending}
+              disabled={exportBackup.isPending || restoreBackup.isPending}
             >
-              {exportBackup.isPending ? 'Backing up…' : 'Back up'}
+              {exportBackup.isPending ? 'Exporting…' : 'Export library'}
             </button>
           </div>
 
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px]">Restore a backup</p>
+              <p className="text-[14px]">Library import</p>
               <p className="mt-0.5 text-[13px] text-ink-muted">
                 Replaces your library, then restarts
               </p>
@@ -207,9 +206,9 @@ export default function Data(): ReactNode {
               type="button"
               className="btn btn-outline shrink-0"
               onClick={onRestore}
-              disabled={restoreBackup.isPending}
+              disabled={restoreBackup.isPending || exportBackup.isPending}
             >
-              {restoreBackup.isPending ? 'Restoring…' : 'Restore backup'}
+              {restoreBackup.isPending ? 'Importing…' : 'Import'}
             </button>
           </div>
         </section>

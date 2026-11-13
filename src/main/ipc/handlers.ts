@@ -13,7 +13,7 @@ import {
   type MetadataRefreshResult,
   type SemanticProgress
 } from '../../shared/api'
-import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
+import { closeDb, getDb } from '../db/connection'
 import { assertTrustedIpcSender } from '../security'
 import * as books from '../repos/books'
 import * as data from '../repos/data'
@@ -21,6 +21,11 @@ import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
 import * as searchRepo from '../repos/search'
 import * as backup from '../services/backup'
+import {
+  restoreLibrary,
+  scheduleAutomaticBackup,
+  stopAutomaticBackups
+} from '../services/libraryRecovery'
 import * as highlights from '../services/highlights'
 import { harvestCandidates } from '../services/harvest'
 import {
@@ -38,6 +43,49 @@ import { getSpineColors } from '../services/spineColors'
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
 let selectedHighlightExport: string | null = null
+let pendingIpc = 0
+let restarting = false
+
+const libraryWrites = new Set<keyof InterleafApi>([
+  'createBook',
+  'updateBook',
+  'reorderPriority',
+  'deleteBook',
+  'createNote',
+  'updateNote',
+  'deleteNote',
+  'deleteBookNotes',
+  'addBookFromOpenLibrary',
+  'enrichBook',
+  'refreshAllMetadata',
+  'retryMetadataRefresh',
+  'chooseCover',
+  'removeCover',
+  'dismissRecommendation',
+  'saveRecommendation',
+  'restoreDismissed',
+  'importHighlights',
+  'deleteAllBooks',
+  'deleteAllThoughts',
+  'deleteAllQuotes',
+  'deleteAllReviews',
+  'deleteEverything'
+])
+
+function restoreAndRestart(dir: string): backup.RestoreResult {
+  if (pendingIpc > 1)
+    throw new Error('Wait for other library operations to finish, then retry the restore.')
+  const result = restoreLibrary(dir)
+  restarting = true
+  // Let the IPC reply reach the renderer before restarting.
+  setTimeout(() => {
+    stopAutomaticBackups()
+    closeDb()
+    app.relaunch(backup.relaunchOptions())
+    app.exit(0)
+  }, 200)
+  return result
+}
 
 function sendMetadataProgress(progress: MetadataRefreshProgress): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -235,34 +283,13 @@ const api: InterleafApi = {
   },
 
   async exportBackup() {
-    const dir = await pickDirectory('Choose where to write the backup', 'Back up here')
+    const dir = await pickDirectory('Choose where to export your library', 'Export here')
     if (!dir) return null
     return backup.exportBackup(getDb(), dir, coversDir())
   },
   async restoreBackup() {
-    const dir = await pickDirectory('Choose a backup folder to restore', 'Restore from here')
-    if (!dir) return null
-
-    // The file is replaced rather than edited, so nothing may hold it open.
-    closeDb()
-    let result: backup.RestoreResult
-    try {
-      result = backup.restoreBackup(dir, getDbPath(), coversDir())
-    } catch (err) {
-      // A refused restore leaves the old library untouched; reopen it.
-      initDb()
-      throw err
-    }
-
-    // Not in this tick: the reply is still on its way out, and the caller's
-    // promise would never settle.
-    setTimeout(() => {
-      app.relaunch(backup.relaunchOptions())
-      // `quit` runs a teardown a window handler can cancel or delay, which lets
-      // the replacement process start while this one still holds userData.
-      app.exit(0)
-    }, 200)
-    return result
+    const dir = await pickDirectory('Choose a library export folder', 'Import from here')
+    return dir ? restoreAndRestart(dir) : null
   },
 
   async listDismissed() {
@@ -368,7 +395,9 @@ export function registerIpcHandlers(): void {
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, async (event, ...args: unknown[]) => {
       assertTrustedIpcSender(event)
+      if (restarting) throw new Error('Interleaf is restarting after restoring your library.')
       const handler = api[channel] as (...a: unknown[]) => Promise<unknown>
+      pendingIpc++
       try {
         const result = await handler(...args)
         if (is.dev) console.log(`[ipc] ${channel} ok`)
@@ -377,6 +406,9 @@ export function registerIpcHandlers(): void {
         // IPC serializes a thrown error by message only, losing the stack.
         console.error(`[ipc] ${channel} failed:`, err)
         throw err
+      } finally {
+        pendingIpc--
+        if (libraryWrites.has(channel)) scheduleAutomaticBackup()
       }
     })
   }

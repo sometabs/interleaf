@@ -10,14 +10,15 @@ import {
   rmSync,
   statSync
 } from 'fs'
-import { basename, dirname, join } from 'path'
+import { basename, dirname, join, resolve } from 'path'
 
 import { createDatabase, MIGRATIONS } from '../db/database'
 import { writeVault } from './vault'
 
 const BACKUP_DIR = 'interleaf-backup'
-const DB_NAME = 'interleaf.db'
+export const DB_NAME = 'interleaf.db'
 const COVERS_DIR = 'covers'
+const SIDECARS = ['-wal', '-shm', '-journal']
 
 // An AppImage runs from a temporary mount, and the path Electron would relaunch
 // is gone by the time the replacement process reaches it.
@@ -42,11 +43,23 @@ export interface RestoreResult {
 }
 
 export class BackupError extends Error {}
+export class DatabaseIntegrityError extends BackupError {}
 
-function isDir(path: string): boolean {
+export function isDatabaseCorruption(err: unknown): boolean {
+  const cause = err as (Error & { code?: string }) | null
+  return (
+    err instanceof DatabaseIntegrityError ||
+    cause?.code === 'SQLITE_NOTADB' ||
+    Boolean(cause?.code?.startsWith('SQLITE_CORRUPT')) ||
+    (cause?.cause !== undefined && isDatabaseCorruption(cause.cause))
+  )
+}
+
+function isDir(path: string, strict: boolean): boolean {
   try {
     return statSync(path).isDirectory()
-  } catch {
+  } catch (err) {
+    if (strict && (err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
     return false
   }
 }
@@ -61,23 +74,42 @@ function safeCoverName(name: string): boolean {
 function copyCovers(
   fromDir: string | undefined,
   toDir: string,
-  keep?: ReadonlySet<string>
+  keep?: ReadonlySet<string>,
+  strict = false
 ): number {
-  if (!fromDir || !isDir(fromDir)) return 0
+  if (!fromDir || !isDir(fromDir, strict)) return 0
   mkdirSync(toDir, { recursive: true })
+  const sameDirectory = resolve(fromDir) === resolve(toDir)
 
   let copied = 0
   for (const name of readdirSync(fromDir)) {
     if (!safeCoverName(name)) continue
     if (keep && !keep.has(name)) continue
+    if (sameDirectory) {
+      copied++
+      continue
+    }
     try {
       copyFileSync(join(fromDir, name), join(toDir, name))
       copied++
-    } catch {
+    } catch (err) {
+      if (strict) throw err
       // One unreadable jacket is not worth failing a backup over.
     }
   }
   return copied
+}
+
+export function writeDatabaseSnapshot(db: Database.Database, target: string): void {
+  // Copy the committed WAL contents along with the main file.
+  db.prepare('VACUUM INTO ?').run(target)
+}
+
+export function writeRecoverySnapshot(db: Database.Database, dir: string, coversDir: string): void {
+  const target = join(dir, DB_NAME)
+  writeDatabaseSnapshot(db, target)
+  copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db), true)
+  verifySnapshot(target)
 }
 
 export function referencedCovers(db: Database.Database): Set<string> {
@@ -105,9 +137,8 @@ export function exportBackup(
 
   const pendingDir = mkdtempSync(join(dir, '.pending-'))
   try {
-    // A snapshot, not a file copy: WAL keeps recent writes outside the .db.
     const target = join(pendingDir, DB_NAME)
-    db.prepare('VACUUM INTO ?').run(target)
+    writeDatabaseSnapshot(db, target)
     const covers = copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db))
     const files = writeVault(db, dir, coversDir)
     const result = { dir, ...counts(db), covers, files }
@@ -139,7 +170,17 @@ function readable(file: string): Database.Database {
   }
 }
 
-function assertRestorable(file: string): { books: number; notes: number } {
+export function checkDatabaseIntegrity(db: Database.Database): void {
+  if (db.pragma('quick_check', { simple: true }) !== 'ok') {
+    throw new DatabaseIntegrityError('The database failed its integrity check.')
+  }
+}
+
+export function verifySnapshot(file: string): {
+  books: number
+  notes: number
+  revision: string | null
+} {
   const db = readable(file)
   try {
     const version = db.pragma('user_version', { simple: true }) as number
@@ -157,7 +198,16 @@ function assertRestorable(file: string): { books: number; notes: number } {
       .get()
     if (!hasBooks) throw new BackupError('That file is not an Interleaf library.')
 
-    return counts(db)
+    checkDatabaseIntegrity(db)
+    const revision =
+      version >= 20
+        ? db
+            .prepare<[], { revision: string }>('SELECT revision FROM library_revision WHERE id = 1')
+            .get()?.revision
+        : null
+    if (version >= 20 && revision === undefined)
+      throw new BackupError('The library revision is missing.')
+    return { ...counts(db), revision: revision ?? null }
   } finally {
     db.close()
   }
@@ -179,11 +229,19 @@ function dropOlderCopies(dbPath: string, keep: string): void {
   }
 }
 
-// The caller closes the live connection first: the file is replaced, not edited.
+interface RestoreOptions {
+  /** Runs after validation, immediately before touching live files. Close the live connection here. */
+  beforeReplace?: () => void
+  preservePrevious?: boolean
+  preserveDamaged?: boolean
+}
+
+// The live connection must be closed before publication.
 export function restoreBackup(
   sourceDir: string,
   dbPath: string,
-  coversDir?: string
+  coversDir?: string,
+  options: RestoreOptions = {}
 ): RestoreResult {
   const root = resolveBackupRoot(sourceDir)
   if (!root) {
@@ -191,43 +249,101 @@ export function restoreBackup(
   }
 
   const source = join(root, DB_NAME)
-  assertRestorable(source)
+  verifySnapshot(source)
   const pendingDir = mkdtempSync(join(dirname(dbPath), '.restore-'))
+  let keepStaging = false
   try {
     const target = join(pendingDir, DB_NAME)
     // Capture WAL too if the chosen folder contains an uncheckpointed database.
     const sourceDb = readable(source)
     try {
-      sourceDb.prepare('VACUUM INTO ?').run(target)
+      writeDatabaseSnapshot(sourceDb, target)
     } finally {
       sourceDb.close()
     }
     // Test upgrades on the staged copy, never on the installed library or backup.
     const staged = createDatabase(target)
     try {
-      if (staged.pragma('quick_check', { simple: true }) !== 'ok') {
-        throw new BackupError('That backup contains a damaged database.')
-      }
+      checkDatabaseIntegrity(staged)
     } finally {
       staged.close()
     }
-    const found = assertRestorable(target)
+    const { books, notes } = verifySnapshot(target)
 
+    const snapshot = readable(target)
+    const stagedCovers = join(pendingDir, COVERS_DIR)
+    const destination = coversDir ?? join(root, COVERS_DIR)
+    let covers: number
+    try {
+      covers = copyCovers(join(root, COVERS_DIR), stagedCovers, referencedCovers(snapshot), true)
+    } finally {
+      snapshot.close()
+    }
+
+    options.beforeReplace?.()
     let replaced: string | null = null
-    if (existsSync(dbPath)) {
+    if (options.preserveDamaged && existsSync(dbPath)) {
+      const damagedDir = mkdtempSync(join(dirname(dbPath), 'damaged-library-'))
+      replaced = join(damagedDir, basename(dbPath))
+      for (const suffix of ['', ...SIDECARS]) {
+        if (existsSync(dbPath + suffix)) copyFileSync(dbPath + suffix, replaced + suffix)
+      }
+    } else if (options.preservePrevious !== false && existsSync(dbPath)) {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-')
       replaced = `${dbPath}.${stamp}-${randomUUID()}.bak`
       copyFileSync(dbPath, replaced)
     }
 
-    const covers = copyCovers(join(root, COVERS_DIR), coversDir ?? join(root, COVERS_DIR))
-    // The caller has closed the live connection, so these are stale sidecars.
-    for (const suffix of ['-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true })
-    renameSync(target, dbPath)
-    if (replaced) dropOlderCopies(dbPath, replaced)
+    // A damaged database can have a live WAL. Set it aside before publishing the
+    // replacement and put it back if publication fails.
+    const moved: string[] = []
+    const installedCovers: { path: string; previous?: string }[] = []
+    try {
+      if (covers > 0 && resolve(destination) !== resolve(join(root, COVERS_DIR))) {
+        mkdirSync(destination, { recursive: true })
+        const previousDir = join(pendingDir, 'original-covers')
+        mkdirSync(previousDir)
+        for (const name of readdirSync(stagedCovers)) {
+          const path = join(destination, name)
+          const previous = existsSync(path) ? join(previousDir, name) : undefined
+          if (previous) copyFileSync(path, previous)
+          renameSync(join(stagedCovers, name), path)
+          installedCovers.push({ path, previous })
+        }
+      }
+      for (const suffix of SIDECARS) {
+        if (!existsSync(dbPath + suffix)) continue
+        renameSync(dbPath + suffix, join(pendingDir, 'original' + suffix))
+        moved.push(suffix)
+      }
+      renameSync(target, dbPath)
+    } catch (err) {
+      try {
+        for (const suffix of moved) {
+          renameSync(join(pendingDir, 'original' + suffix), dbPath + suffix)
+        }
+        for (const { path, previous } of installedCovers) {
+          if (previous) renameSync(previous, path)
+          else rmSync(path, { force: true })
+        }
+      } catch (rollbackError) {
+        keepStaging = true
+        throw new BackupError(`Restore failed. The staged recovery files are in ${pendingDir}.`, {
+          cause: new AggregateError([err, rollbackError])
+        })
+      }
+      throw err
+    }
+    if (replaced && !options.preserveDamaged) dropOlderCopies(dbPath, replaced)
 
-    return { ...found, covers, replaced }
+    return { books, notes, covers, replaced }
   } finally {
-    rmSync(pendingDir, { recursive: true, force: true })
+    if (!keepStaging) {
+      try {
+        rmSync(pendingDir, { recursive: true, force: true })
+      } catch (err) {
+        console.warn('Could not clean up staged restore files.', err)
+      }
+    }
   }
 }

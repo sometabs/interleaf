@@ -130,10 +130,16 @@ library once and Interleaf remembers it; re-importing the same highlights skips 
 Kindle import currently recognises English clippings headers and skips bookmarks and standalone
 notes. Nothing touches the source library or device.
 
-**Backups.** One button writes the database, referenced covers and a readable Markdown copy to a
-folder you choose. Reusing that destination replaces its previous database backup. Restore validates
-a compatible backup, keeps one previous database copy, and restarts Interleaf on the restored
-database. UI preferences and the downloaded model and embedding cache are not included.
+**Backups and exports.** **Export library** writes the database, referenced covers, and a readable
+Markdown copy to a folder you choose. **Import** verifies that copy and restarts
+Interleaf on the restored library.
+
+Interleaf takes its first automatic backup after a saved library change. Further changes are
+backed up once the 24-hour window ends, or at the next launch if it was closed. Interleaf keeps one
+verified copy of the database and its covers in the `backups` folder beside the database. After a
+successful manual restore, Interleaf refreshes that copy. If the database is missing or damaged at
+startup, Interleaf offers to restore the automatic backup and preserves any damaged database.
+UI preferences, the downloaded model, and the embedding cache are outside these backups.
 
 **Your data, in plain text.** The Markdown in that folder is yours to read in any editor or keep in
 Git: each book with its status and rating, its review, its notes and its quotes, each dated. It is
@@ -169,7 +175,7 @@ Runs from source and preview builds use a separate `Interleaf Dev` directory und
 platform-specific application-data folder, so development cannot modify the installed library.
 
 That folder holds `interleaf.db` and the `covers/` directory, plus the local model and embedding cache
-after Hybrid is enabled. Use **Data → Back up** for a portable library backup. Do not treat
+after Hybrid is enabled. Use **Data → Export library** for a portable library backup. Do not treat
 `covers/` as disposable: manually chosen covers may not be recoverable from Open Library.
 
 ## Notes and limits

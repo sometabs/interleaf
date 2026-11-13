@@ -122,7 +122,7 @@ describe('the Data screen', () => {
     // The heading is what settles on mount; the sentence shares a description
     // node with two others, so a text query will not match it alone.
     await screen.findByText('Delete all 2 books?')
-    expect(document.body.textContent).toContain('not attached to a book are kept')
+    expect(document.body.textContent).toContain('Standalone notes stay')
   })
 
   it('deletes everything once confirmed', async () => {
@@ -164,7 +164,7 @@ describe('the Data screen', () => {
   it('backs up, naming where it went and what went with it', async () => {
     const spies = setup()
 
-    await press('Back up')
+    await press('Export library')
 
     await waitFor(() => expect(spies.exportBackup).toHaveBeenCalled())
     expect(await screen.findByText(/2 books and 5 notes/)).toBeDefined()
@@ -176,25 +176,25 @@ describe('the Data screen', () => {
     const cancelled = vi.fn(async () => null)
     setup({}, [], { exportBackup: cancelled })
 
-    await press('Back up')
+    await press('Export library')
 
     await waitFor(() => expect(cancelled).toHaveBeenCalled())
-    expect(screen.queryByText(/Backed up/)).toBeNull()
+    expect(screen.queryByText(/Exported/)).toBeNull()
   })
 
   it('asks before restoring, since it replaces the whole library', async () => {
     const spies = setup()
 
-    await press('Restore backup')
+    await press('Import')
 
-    expect(await screen.findByText(/Restore a backup\?/)).toBeDefined()
+    expect(await screen.findByText('Import a library?')).toBeDefined()
     expect(spies.restoreBackup).not.toHaveBeenCalled()
   })
 
   it('restores nothing when the confirmation is refused', async () => {
     const spies = setup()
 
-    await press('Restore backup')
+    await press('Import')
     await press('Cancel')
 
     expect(spies.restoreBackup).not.toHaveBeenCalled()
@@ -203,10 +203,15 @@ describe('the Data screen', () => {
   it('restores once the confirmation is accepted', async () => {
     const spies = setup()
 
-    await press('Restore backup')
-    await press('Choose a backup')
+    await press('Import')
+    await press('Choose an export')
 
     await waitFor(() => expect(spies.restoreBackup).toHaveBeenCalled())
+  })
+
+  it('keeps emergency recovery out of Data', () => {
+    setup()
+    expect(screen.queryByRole('button', { name: 'Recover library' })).toBeNull()
   })
 })
 
