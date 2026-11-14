@@ -154,6 +154,7 @@ describe('arranging the bookshelf', () => {
         `bookcover://covers/${coverPath}`
       )
       expect(preview?.textContent).toContain('Stanisław Lem')
+      expect(preview?.querySelector('p:last-child')?.textContent).toBe('Read')
 
       fireEvent.dragStart(spine, { dataTransfer: { setData: vi.fn() } })
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
@@ -168,6 +169,7 @@ describe('arranging the bookshelf', () => {
         .getByText('Solaris', { selector: 'p' })
         .closest('[aria-hidden="true"]')
       expect(textPreview?.textContent).toContain('Stanisław Lem')
+      expect(textPreview?.querySelector('p:last-child')?.textContent).toBe('Read')
       expect(textPreview?.querySelector('img')).toBeNull()
       fireEvent.mouseLeave(spine)
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()

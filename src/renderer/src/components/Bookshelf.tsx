@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import type { Book } from '@shared/api'
+import { STATUS_LABELS, type Book } from '@shared/api'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CSSProperties,
@@ -804,7 +804,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
               </div>
             )}
             <div className="min-w-0 wrap-anywhere">
-              <p className="line-clamp-4 text-sm leading-tight font-semibold">
+              <p className="line-clamp-3 text-sm leading-tight font-semibold">
                 {previewBook.title}
               </p>
               {previewBook.author && (
@@ -812,6 +812,9 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   {previewBook.author}
                 </p>
               )}
+              <p className="mt-2 text-xs font-medium text-ink-muted">
+                {STATUS_LABELS[previewBook.status]}
+              </p>
             </div>
           </div>,
           document.body
