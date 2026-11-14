@@ -1,13 +1,9 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import Library from '../src/renderer/src/components/Library'
-import { resetConfirm } from '../src/renderer/src/lib/confirm'
 import { installBridge, makeBook, renderApp } from './helpers/render'
-
-afterEach(resetConfirm)
 
 // The grouping rules themselves are covered in `shelves.test.ts`.
 
@@ -50,6 +46,7 @@ describe('grouping the library', () => {
     show()
 
     expect(await headings()).toEqual(['Reading · 1', 'Want to read · 1', 'Read · 1'])
+    expect(screen.queryByRole('button', { name: 'Refresh all metadata' })).toBeNull()
   })
 
   it('does not offer the removed Category grouping or embed the priority queue', async () => {
@@ -90,6 +87,7 @@ describe('grouping the library', () => {
     await user.click(await screen.findByRole('radio', { name: 'Status' }))
 
     expect(await headings()).toEqual(['Reading · 1', 'Want to read · 1', 'Read · 1'])
+    expect(screen.queryByRole('button', { name: 'Refresh all metadata' })).toBeNull()
   })
 })
 
@@ -549,102 +547,5 @@ describe('arranging the bookshelf', () => {
     expect(dataTransfer.dropEffect).toBe('none')
     fireEvent.drop(first, { dataTransfer })
     expect(within(second).getByRole('button', { name: 'Book 12' })).toBe(lastBook)
-  })
-})
-
-describe('refreshing all metadata', () => {
-  it('confirms the permanent action and reports progress', async () => {
-    let finish:
-      | ((value: { refreshed: number; failures: []; cancelled: boolean; offline: boolean }) => void)
-      | null = null
-    const refreshAllMetadata = vi.fn(
-      () =>
-        new Promise<{
-          refreshed: number
-          failures: []
-          cancelled: boolean
-          offline: boolean
-        }>((resolve) => {
-          finish = resolve
-        })
-    )
-    const cancelMetadataRefresh = vi.fn(async () => undefined)
-    const bridge = installBridge(
-      { books: [SOLARIS, PICNIC, HALL] },
-      { refreshAllMetadata, cancelMetadataRefresh }
-    )
-    renderApp(
-      <>
-        <Library onAdd={() => {}} />
-        <ConfirmDialog />
-      </>
-    )
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('button', { name: 'Refresh all metadata' }))
-    expect(await screen.findByText('Refresh metadata for all 3 books?')).toBeTruthy()
-    expect(refreshAllMetadata).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: 'Refresh all' }))
-    await waitFor(() => expect(refreshAllMetadata).toHaveBeenCalledOnce())
-
-    act(() =>
-      bridge.emitMetadataRefreshProgress({ done: 1, total: 3, label: 'Refreshing “Solaris”' })
-    )
-    expect(await screen.findByRole('region', { name: 'Metadata refresh progress' })).toBeTruthy()
-    expect(screen.getByText('1 of 3')).toBeTruthy()
-
-    await user.click(screen.getByRole('button', { name: 'Cancel refresh' }))
-    expect(cancelMetadataRefresh).toHaveBeenCalledOnce()
-
-    act(() => finish?.({ refreshed: 1, failures: [], cancelled: true, offline: false }))
-    expect(await screen.findByText('Refresh stopped after 1 book.')).toBeTruthy()
-  })
-
-  it('lists books Open Library could not match', async () => {
-    const retryMetadataRefresh = vi.fn(async () => ({
-      refreshed: 1,
-      failures: [],
-      cancelled: false,
-      offline: false
-    }))
-    installBridge(
-      { books: [SOLARIS] },
-      {
-        refreshAllMetadata: async () => ({
-          refreshed: 0,
-          failures: [
-            {
-              bookId: 1,
-              title: 'Solaris',
-              reason: 'Open Library returned no result for this book.'
-            }
-          ],
-          cancelled: false,
-          offline: false
-        }),
-        retryMetadataRefresh
-      }
-    )
-    renderApp(
-      <>
-        <Library onAdd={() => {}} />
-        <ConfirmDialog />
-      </>
-    )
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('button', { name: 'Refresh all metadata' }))
-    await user.click(await screen.findByRole('button', { name: 'Refresh all' }))
-
-    expect(await screen.findByText(/0 books refreshed; 1 could not be matched/)).toBeTruthy()
-    await user.click(screen.getByText('Books needing attention (1)'))
-    expect(document.body.textContent).toContain('Open Library returned no result for this book.')
-
-    await user.click(screen.getByRole('button', { name: 'Retry failed books' }))
-    await waitFor(() => expect(retryMetadataRefresh).toHaveBeenCalledWith([1]))
-    await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Metadata refresh summary' })).toBeNull()
-    )
   })
 })

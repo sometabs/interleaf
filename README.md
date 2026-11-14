@@ -182,9 +182,10 @@ after Hybrid is enabled. Use **Data → Export library** for a portable library 
 
 Book data comes from [Open Library](https://openlibrary.org). When it is slow or unavailable,
 Interleaf distinguishes that from an empty search, allows manual book entry, and keeps cached
-recommendations available. Metadata refresh works only for books that already have an Open Library
-Work ID. It updates subjects and descriptions and fills missing page counts and publication years,
-without changing saved titles, authors, edition IDs, ISBNs or covers.
+recommendations available. Refresh metadata from a book's page or use **Data → Book metadata**
+to refresh the library. Both use the saved Open Library Work ID to update subjects and descriptions
+and fill missing page counts and publication years, while preserving saved titles, authors,
+edition IDs, ISBNs, and covers.
 
 An online Discover search makes up to eight catalogue queries, spaced to respect Open Library's
 request rate. It can take a minute or longer depending on response times and retries. Hybrid and its

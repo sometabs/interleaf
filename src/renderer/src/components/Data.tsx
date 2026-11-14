@@ -1,9 +1,13 @@
-import type { ReactNode } from 'react'
+import { useIsMutating } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
+import type { MetadataRefreshProgress, MetadataRefreshResult } from '@shared/api'
 
 import { importSummary } from '../lib/highlights'
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
 import {
+  bulkMetadataRefreshKey,
+  useCancelMetadataRefresh,
   useClearRecommendationCache,
   useDataCounts,
   useDeleteAllBooks,
@@ -14,9 +18,12 @@ import {
   useDismissed,
   useExportBackup,
   useImportHighlights,
+  useMetadataRefreshProgress,
   useReadHighlightExport,
+  useRefreshAllMetadata,
   useRestoreBackup,
-  useRestoreDismissed
+  useRestoreDismissed,
+  useRetryMetadataRefresh
 } from '../lib/queries'
 import { formatDate } from '../lib/dates'
 import { useView } from '../lib/view'
@@ -256,6 +263,8 @@ export default function Data(): ReactNode {
           </details>
         </section>
 
+        <MetadataMaintenance bookCount={counts?.books ?? 0} />
+
         <section className="flex flex-col gap-2">
           <div>
             <h2 className="text-[14px] font-medium">Delete library data</h2>
@@ -325,6 +334,161 @@ export default function Data(): ReactNode {
         <NotForMe />
       </div>
     </div>
+  )
+}
+
+function MetadataMaintenance({ bookCount }: { bookCount: number }): ReactNode {
+  const refresh = useRefreshAllMetadata()
+  const retry = useRetryMetadataRefresh()
+  const cancel = useCancelMetadataRefresh()
+  const refreshing = useIsMutating({ mutationKey: bulkMetadataRefreshKey }) > 0
+  const progress = useMetadataRefreshProgress(refreshing)
+  const [result, setResult] = useState<MetadataRefreshResult | null>(null)
+  const [stopRequested, setStopRequested] = useState(false)
+
+  function finish(next: MetadataRefreshResult): void {
+    setResult(next)
+    if (!next.cancelled && !next.offline && next.failures.length === 0) {
+      notify(`Refreshed metadata for ${next.refreshed} ${next.refreshed === 1 ? 'book' : 'books'}.`)
+    }
+  }
+
+  async function start(): Promise<void> {
+    const ok = await confirm({
+      title: `Refresh metadata for all ${bookCount} books?`,
+      body: 'Interleaf checks books with an Open Library Work ID one at a time, using up to two requests per book.',
+      confirmLabel: 'Refresh all'
+    })
+    if (!ok) return
+    setResult(null)
+    setStopRequested(false)
+    refresh.mutate(undefined, { onSuccess: finish })
+  }
+
+  return (
+    <section className="flex flex-col gap-2" aria-label="Book metadata">
+      <h2 className="text-[14px] font-medium">Book metadata</h2>
+      <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
+        <p className="text-[13px] text-ink-muted">
+          Update subjects and descriptions and fill missing book details from Open Library.
+        </p>
+        {refreshing ? (
+          <button
+            type="button"
+            className="btn btn-outline shrink-0"
+            disabled={stopRequested || cancel.isPending}
+            onClick={() => {
+              setStopRequested(true)
+              cancel.mutate(undefined, { onError: () => setStopRequested(false) })
+            }}
+          >
+            {stopRequested ? 'Stopping…' : 'Cancel refresh'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-outline shrink-0"
+            onClick={() => void start()}
+            disabled={bookCount === 0}
+          >
+            Refresh all metadata
+          </button>
+        )}
+      </div>
+      {refreshing && <MetadataProgressPanel progress={progress} />}
+      {!refreshing &&
+        result &&
+        (result.cancelled || result.offline || result.failures.length > 0) && (
+          <MetadataRefreshSummary
+            result={result}
+            onRetry={() => {
+              setResult(null)
+              setStopRequested(false)
+              retry.mutate(
+                result.failures.map(({ bookId }) => bookId),
+                { onSuccess: finish }
+              )
+            }}
+          />
+        )}
+    </section>
+  )
+}
+
+function MetadataProgressPanel({
+  progress
+}: {
+  progress: MetadataRefreshProgress | null
+}): ReactNode {
+  const total = progress?.total ?? 0
+  const done = progress?.done ?? 0
+  const share = total > 0 ? Math.min(done / total, 1) : 0
+
+  return (
+    <section aria-label="Metadata refresh progress" className="card px-5 py-4">
+      <div className="mb-2.5 flex items-baseline justify-between gap-4">
+        <p aria-live="polite" className="min-w-0 truncate text-[13px] text-ink">
+          {progress?.label ?? 'Contacting Open Library…'}
+        </p>
+        {total > 0 && (
+          <p className="shrink-0 text-[12px] tabular-nums text-ink-faint">
+            {done} of {total}
+          </p>
+        )}
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total || 1}
+        aria-valuenow={done}
+        className="h-1 overflow-hidden rounded-full bg-sunken"
+      >
+        <div
+          className="h-full rounded-full bg-accent transition-[width] duration-300"
+          style={{ width: `${Math.round(share * 100)}%` }}
+        />
+      </div>
+    </section>
+  )
+}
+
+function MetadataRefreshSummary({
+  result,
+  onRetry
+}: {
+  result: MetadataRefreshResult
+  onRetry: () => void
+}): ReactNode {
+  const refreshedBooks = `${result.refreshed} ${result.refreshed === 1 ? 'book' : 'books'}`
+  return (
+    <section aria-label="Metadata refresh summary" className="card px-5 py-4 text-[13px]">
+      <p className="text-ink">
+        {result.cancelled
+          ? `Refresh stopped after ${refreshedBooks}.`
+          : result.offline
+            ? `Refresh paused because Open Library became unreachable. ${refreshedBooks} refreshed.`
+            : `${refreshedBooks} refreshed. ${result.failures.length} could not be matched.`}
+      </p>
+      {result.failures.length > 0 && (
+        <>
+          <details className="mt-2 text-ink-muted">
+            <summary className="cursor-pointer">
+              Books needing attention ({result.failures.length})
+            </summary>
+            <ul className="mt-2 space-y-1 pl-5">
+              {result.failures.map((failure) => (
+                <li key={failure.bookId}>
+                  <span className="font-medium text-ink">{failure.title}</span> · {failure.reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+          <button type="button" className="btn mt-3" onClick={onRetry}>
+            Retry failed books
+          </button>
+        </>
+      )}
+    </section>
   )
 }
 

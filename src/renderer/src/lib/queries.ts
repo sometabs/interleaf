@@ -308,9 +308,12 @@ export function useEnrichBook(): UseMutationResult<Book | null, Error, number> {
   })
 }
 
+export const bulkMetadataRefreshKey = ['bulk-metadata-refresh'] as const
+
 export function useRefreshAllMetadata(): UseMutationResult<MetadataRefreshResult, Error, void> {
   const client = useQueryClient()
   return useMutation({
+    mutationKey: bulkMetadataRefreshKey,
     mutationFn: () => api().refreshAllMetadata(),
     onSuccess: () => {
       invalidateBooks(client)
@@ -327,6 +330,7 @@ export function useRetryMetadataRefresh(): UseMutationResult<
 > {
   const client = useQueryClient()
   return useMutation({
+    mutationKey: bulkMetadataRefreshKey,
     mutationFn: (bookIds: number[]) => api().retryMetadataRefresh(bookIds),
     onSuccess: () => {
       invalidateBooks(client)

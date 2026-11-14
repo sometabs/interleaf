@@ -1,5 +1,5 @@
 import type { DataCounts, DismissedBook } from '@shared/api'
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -244,5 +244,113 @@ describe('the Not for me list', () => {
     setup({}, [])
 
     expect(await screen.findByText(/Nothing turned down yet/)).toBeDefined()
+  })
+})
+
+function metadataCounts(books: number): DataCounts {
+  return { books, notes: 0, quotes: 0, reviews: 0, candidates: 0, dismissed: 0 }
+}
+
+describe('refreshing all metadata', () => {
+  it('confirms the permanent action and reports progress', async () => {
+    let finish:
+      | ((value: { refreshed: number; failures: []; cancelled: boolean; offline: boolean }) => void)
+      | null = null
+    const refreshAllMetadata = vi.fn(
+      () =>
+        new Promise<{
+          refreshed: number
+          failures: []
+          cancelled: boolean
+          offline: boolean
+        }>((resolve) => {
+          finish = resolve
+        })
+    )
+    const cancelMetadataRefresh = vi.fn(async () => undefined)
+    const bridge = installBridge(
+      {},
+      {
+        dataCounts: async () => metadataCounts(3),
+        listDismissed: async () => [],
+        refreshAllMetadata,
+        cancelMetadataRefresh
+      }
+    )
+    renderApp(
+      <>
+        <Data />
+        <ConfirmDialog />
+      </>
+    )
+    const user = userEvent.setup()
+
+    await press('Refresh all metadata')
+    expect(await screen.findByText('Refresh metadata for all 3 books?')).toBeTruthy()
+    expect(refreshAllMetadata).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Refresh all' }))
+    await waitFor(() => expect(refreshAllMetadata).toHaveBeenCalledOnce())
+
+    act(() =>
+      bridge.emitMetadataRefreshProgress({ done: 1, total: 3, label: 'Refreshing “Solaris”' })
+    )
+    expect(await screen.findByRole('region', { name: 'Metadata refresh progress' })).toBeTruthy()
+    expect(screen.getByText('1 of 3')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel refresh' }))
+    expect(cancelMetadataRefresh).toHaveBeenCalledOnce()
+
+    act(() => finish?.({ refreshed: 1, failures: [], cancelled: true, offline: false }))
+    expect(await screen.findByText('Refresh stopped after 1 book.')).toBeTruthy()
+  })
+
+  it('lists books Open Library could not match', async () => {
+    const retryMetadataRefresh = vi.fn(async () => ({
+      refreshed: 1,
+      failures: [],
+      cancelled: false,
+      offline: false
+    }))
+    installBridge(
+      {},
+      {
+        dataCounts: async () => metadataCounts(1),
+        listDismissed: async () => [],
+        refreshAllMetadata: async () => ({
+          refreshed: 0,
+          failures: [
+            {
+              bookId: 1,
+              title: 'Solaris',
+              reason: 'Open Library returned no result for this book.'
+            }
+          ],
+          cancelled: false,
+          offline: false
+        }),
+        retryMetadataRefresh
+      }
+    )
+    renderApp(
+      <>
+        <Data />
+        <ConfirmDialog />
+      </>
+    )
+    const user = userEvent.setup()
+
+    await press('Refresh all metadata')
+    await user.click(await screen.findByRole('button', { name: 'Refresh all' }))
+
+    expect(await screen.findByText(/0 books refreshed. 1 could not be matched/)).toBeTruthy()
+    await user.click(screen.getByText('Books needing attention (1)'))
+    expect(document.body.textContent).toContain('Open Library returned no result for this book.')
+
+    await user.click(screen.getByRole('button', { name: 'Retry failed books' }))
+    await waitFor(() => expect(retryMetadataRefresh).toHaveBeenCalledWith([1]))
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Metadata refresh summary' })).toBeNull()
+    )
   })
 })

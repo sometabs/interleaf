@@ -1,16 +1,8 @@
-import { type Book, type MetadataRefreshProgress, type MetadataRefreshResult } from '@shared/api'
+import type { Book } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
-import { confirm } from '../lib/confirm'
-import { notify } from '../lib/feedback'
 import { usePersistentState } from '../lib/persistent'
-import {
-  useBooks,
-  useCancelMetadataRefresh,
-  useMetadataRefreshProgress,
-  useRefreshAllMetadata,
-  useRetryMetadataRefresh
-} from '../lib/queries'
+import { useBooks } from '../lib/queries'
 import { groupBooks, GROUPINGS, type Grouping, type Shelf } from '../lib/shelves'
 import { useSettings } from '../lib/settings'
 import { useView } from '../lib/view'
@@ -27,21 +19,12 @@ export default function Library({ onAdd }: Props): ReactNode {
   const { libraryLayout: layout } = useSettings()
   const { navigate } = useView()
   const { data: books = [], isPending } = useBooks()
-  const refresh = useRefreshAllMetadata()
-  const retryRefresh = useRetryMetadataRefresh()
-  const cancelRefresh = useCancelMetadataRefresh()
-  const refreshing = refresh.isPending || retryRefresh.isPending
-  const progress = useMetadataRefreshProgress(refreshing)
-
   const [filter, setFilter] = useState('')
   const [grouping, setGrouping] = usePersistentState<Grouping>(
     'interleaf.libraryGrouping',
     'status',
     parseGrouping
   )
-  const [refreshResult, setRefreshResult] = useState<MetadataRefreshResult | null>(null)
-  const [stopRequested, setStopRequested] = useState(false)
-
   const query = filter.trim().toLowerCase()
   const matching = query
     ? books.filter(
@@ -68,64 +51,10 @@ export default function Library({ onAdd }: Props): ReactNode {
     )
   }
 
-  async function startMetadataRefresh(): Promise<void> {
-    const ok = await confirm({
-      title: `Refresh metadata for all ${books.length} books?`,
-      body: `Open Library will refresh each current book by its stored Work ID, one at a time, using about ${books.length * 2} metadata requests. Your ratings, status, notes, dates and categories will not change.`,
-      confirmLabel: 'Refresh all'
-    })
-    if (!ok) return
-
-    setRefreshResult(null)
-    setStopRequested(false)
-    refresh.mutate(undefined, {
-      onSuccess: finishMetadataRefresh,
-      onSettled: () => setStopRequested(false)
-    })
-  }
-
-  function finishMetadataRefresh(result: MetadataRefreshResult): void {
-    setRefreshResult(result)
-    if (!result.cancelled && !result.offline && result.failures.length === 0) {
-      notify(
-        `Refreshed metadata for ${result.refreshed} ${result.refreshed === 1 ? 'book' : 'books'}.`
-      )
-    }
-  }
-
-  function retryFailures(): void {
-    if (!refreshResult || refreshResult.failures.length === 0) return
-    const ids = refreshResult.failures.map((failure) => failure.bookId)
-    setRefreshResult(null)
-    setStopRequested(false)
-    retryRefresh.mutate(ids, {
-      onSuccess: finishMetadataRefresh,
-      onSettled: () => setStopRequested(false)
-    })
-  }
-
   return (
     <div className="h-full overflow-y-auto px-8 pt-7 pb-16">
       <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="mr-auto text-[22px]">Library</h1>
-
-        {refreshing ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={stopRequested}
-            onClick={() => {
-              setStopRequested(true)
-              cancelRefresh.mutate()
-            }}
-          >
-            {stopRequested ? 'Stopping…' : 'Cancel refresh'}
-          </button>
-        ) : (
-          <button type="button" className="btn" onClick={() => void startMetadataRefresh()}>
-            Refresh all metadata
-          </button>
-        )}
 
         {layout === 'grid' && (
           <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
@@ -139,13 +68,6 @@ export default function Library({ onAdd }: Props): ReactNode {
           onChange={(event) => setFilter(event.target.value)}
         />
       </header>
-
-      {refreshing && <MetadataProgressPanel progress={progress} />}
-      {!refreshing &&
-        refreshResult &&
-        (refreshResult.cancelled || refreshResult.offline || refreshResult.failures.length > 0) && (
-          <MetadataRefreshSummary result={refreshResult} onRetry={retryFailures} />
-        )}
 
       {matching.length === 0 ? (
         <p className="py-8 text-center text-ink-muted">
@@ -166,83 +88,6 @@ export default function Library({ onAdd }: Props): ReactNode {
 
 function parseGrouping(raw: unknown): Grouping | null {
   return raw === 'status' || raw === 'author' || raw === 'alphabet' ? raw : null
-}
-
-function MetadataProgressPanel({
-  progress
-}: {
-  progress: MetadataRefreshProgress | null
-}): ReactNode {
-  const total = progress?.total ?? 0
-  const done = progress?.done ?? 0
-  const share = total > 0 ? Math.min(done / total, 1) : 0
-
-  return (
-    <section aria-label="Metadata refresh progress" className="card mb-6 px-5 py-4">
-      <div className="mb-2.5 flex items-baseline justify-between gap-4">
-        <p aria-live="polite" className="min-w-0 truncate text-[13px] text-ink">
-          {progress?.label ?? 'Contacting Open Library…'}
-        </p>
-        {total > 0 && (
-          <p className="shrink-0 text-[12px] tabular-nums text-ink-faint">
-            {done} of {total}
-          </p>
-        )}
-      </div>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={total || 1}
-        aria-valuenow={done}
-        className="h-1 overflow-hidden rounded-full bg-sunken"
-      >
-        <div
-          className="h-full rounded-full bg-accent transition-[width] duration-300"
-          style={{ width: `${Math.round(share * 100)}%` }}
-        />
-      </div>
-    </section>
-  )
-}
-
-function MetadataRefreshSummary({
-  result,
-  onRetry
-}: {
-  result: MetadataRefreshResult
-  onRetry: () => void
-}): ReactNode {
-  const refreshedBooks = `${result.refreshed} ${result.refreshed === 1 ? 'book' : 'books'}`
-  return (
-    <section aria-label="Metadata refresh summary" className="card mb-6 px-5 py-4 text-[13px]">
-      <p className="text-ink">
-        {result.cancelled
-          ? `Refresh stopped after ${refreshedBooks}.`
-          : result.offline
-            ? `Refresh paused because Open Library became unreachable. ${refreshedBooks} refreshed.`
-            : `${refreshedBooks} refreshed; ${result.failures.length} could not be matched.`}
-      </p>
-      {result.failures.length > 0 && (
-        <>
-          <details className="mt-2 text-ink-muted">
-            <summary className="cursor-pointer">
-              Books needing attention ({result.failures.length})
-            </summary>
-            <ul className="mt-2 space-y-1 pl-5">
-              {result.failures.map((failure) => (
-                <li key={failure.bookId}>
-                  <span className="font-medium text-ink">{failure.title}</span> — {failure.reason}
-                </li>
-              ))}
-            </ul>
-          </details>
-          <button type="button" className="btn mt-3" onClick={onRetry}>
-            Retry failed books
-          </button>
-        </>
-      )}
-    </section>
-  )
 }
 
 // One control for both rows: a select would hide the options and make the two
