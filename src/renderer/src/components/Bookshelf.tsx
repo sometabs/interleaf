@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Book } from '@shared/api'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toPlainText } from '@shared/plaintext'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -8,20 +9,22 @@ import { sameOrder } from '../lib/bookOrder'
 import { paletteFor } from '../lib/bookPalette'
 import {
   arrangeShelves,
+  DEFAULT_SHELF_SPAN,
   parseFaceOutBooks,
   parseShelves,
   restoreShelf,
   saveShelves,
   SHELF_DECORATIONS,
-  SHELF_SPAN,
   shelfInsertion,
   spineWidth,
-  type DecorationKind,
+  wrapShelf,
   type Shelf,
-  type ShelfDecoration
+  type ShelfDecoration,
+  type ShelfRow
 } from '../lib/bookshelfLayout'
 import { usePersistentState } from '../lib/persistent'
-import { useSpineColors } from '../lib/queries'
+import { useNotes, useSpineColors } from '../lib/queries'
+import { isQuote } from '../lib/quotes'
 import Cover from './Cover'
 import EditableTitle from './EditableTitle'
 
@@ -32,7 +35,7 @@ interface Props {
 }
 
 interface Placement {
-  shelf: Shelf
+  row: ShelfRow
   outlineX: number
 }
 
@@ -64,6 +67,10 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   )
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [quotePickerOpen, setQuotePickerOpen] = useState(false)
+  const [quoteQuery, setQuoteQuery] = useState('')
+  const [span, setSpan] = useState(DEFAULT_SHELF_SPAN)
+  const shelfRef = useRef<HTMLDivElement>(null)
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
@@ -75,6 +82,30 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       ),
     [savedShelves]
   )
+  const hasQuoteFrame = [...decorations.values()].some(({ kind }) => kind === 'quote-frame')
+  const quoteNotes = useNotes(undefined, quotePickerOpen || hasQuoteFrame)
+  const quotes = useMemo(() => {
+    const booksById = new Map(books.map((book) => [book.id, book]))
+    return new Map(
+      (quoteNotes.data ?? []).filter(isQuote).map((note) => [
+        note.id,
+        {
+          text: toPlainText(note.bodyMd),
+          book: note.bookId === null ? undefined : booksById.get(note.bookId)
+        }
+      ])
+    )
+  }, [books, quoteNotes.data])
+  const trimmedQuoteQuery = quoteQuery.trim().toLowerCase()
+  const matchingQuotes = quotePickerOpen
+    ? [...quotes].filter(
+        ([, { text, book }]) =>
+          text.length > 0 &&
+          [text, book?.title, book?.author].some((value) =>
+            value?.toLowerCase().includes(trimmedQuoteQuery)
+          )
+      )
+    : []
   const widths = useMemo(() => {
     const sizes = new Map(
       books.map((book) => [
@@ -91,6 +122,18 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   )
   const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
   const previewBook = preview && matchingById.get(preview.bookId)
+
+  useLayoutEffect(() => {
+    const shelf = shelfRef.current
+    if (!shelf) return
+    const measure = (): void => {
+      if (shelf.clientWidth > 0) setSpan(shelf.clientWidth)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(shelf)
+    return () => observer.disconnect()
+  }, [])
 
   const hidePreview = useCallback((): void => {
     window.clearTimeout(previewTimer.current)
@@ -142,7 +185,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
 
   function placementAt(
     event: DragEvent<HTMLDivElement>,
-    shelf: Shelf
+    row: ShelfRow
   ): Placement | null | undefined {
     if (draggedItemId === null) return null
     const strip = event.currentTarget.querySelector('.bookshelf-spines')
@@ -162,10 +205,10 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     const neighbor = bounds
       ? { itemId: slotId, after: event.clientX >= bounds.left + bounds.width / 2 }
       : undefined
-    const insertion = shelfInsertion(shelf, draggedItemId, widths, left, neighbor)
+    const insertion = shelfInsertion(row, draggedItemId, widths, span, left, neighbor)
     if (!insertion) return null
     return {
-      shelf: insertion,
+      row: insertion,
       outlineX: origin - track.getBoundingClientRect().left + insertion.positions[draggedItemId]
     }
   }
@@ -195,22 +238,27 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     setSavedShelves(saveShelves(rows, decorations))
   }
 
-  function move(itemId: number, target: Shelf): void {
-    const source = shelves.find((shelf) => shelf.itemIds.includes(itemId))
-    const destination = shelves.find((shelf) => shelf.id === target.id)
-    if (!source || !destination) return
-
+  function move(itemId: number, shelfId: number, row: ShelfRow, target: ShelfRow): void {
     if (
-      destination.positions[itemId] === target.positions[itemId] &&
-      sameOrder(destination.itemIds, target.itemIds)
+      row.positions[itemId] === target.positions[itemId] &&
+      sameOrder(row.itemIds, target.itemIds)
     )
       return
 
     const updated = shelves.map((shelf) => {
-      if (shelf === destination) return target
-      if (shelf === source)
-        return { ...shelf, itemIds: shelf.itemIds.filter((id) => id !== itemId) }
-      return shelf
+      if (shelf.id !== shelfId) {
+        return shelf.itemIds.includes(itemId)
+          ? { ...shelf, itemIds: shelf.itemIds.filter((id) => id !== itemId) }
+          : shelf
+      }
+      // Replace the visible slice in the saved shelf, keeping its other rows together.
+      const before = shelf.itemIds.slice(0, row.start).filter((id) => id !== itemId)
+      const after = shelf.itemIds
+        .slice(row.start + row.itemIds.length)
+        .filter((id) => id !== itemId)
+      const positions = { ...shelf.positions }
+      for (const id of target.itemIds) positions[id] = row.origin + target.positions[id]
+      return { ...shelf, itemIds: [...before, ...target.itemIds, ...after], positions }
     })
     saveRows(arrangeShelves(updated, widths))
   }
@@ -234,15 +282,12 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     saveRows([...shelves, { id, itemIds: [], positions: {} }])
   }
 
-  function addDecorations(kinds: DecorationKind[]): void {
+  function addQuoteFrame(quoteId: number): void {
     const nextDecorations = new Map(decorations)
     const nextWidths = new Map(widths)
-    let id = Math.min(0, ...decorations.keys())
-    for (const kind of kinds) {
-      id -= 1
-      nextDecorations.set(id, { id, kind })
-      nextWidths.set(id, SHELF_DECORATIONS[kind].width)
-    }
+    const id = Math.min(0, ...decorations.keys()) - 1
+    nextDecorations.set(id, { id, kind: 'quote-frame', quoteId })
+    nextWidths.set(id, SHELF_DECORATIONS['quote-frame'].width)
     setSavedShelves(saveShelves(arrangeShelves(shelves, nextWidths), nextDecorations))
   }
 
@@ -331,8 +376,12 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     )
   }
 
-  function renderDecoration({ id, kind }: ShelfDecoration, left: number): ReactNode {
+  function renderDecoration(decoration: ShelfDecoration, left: number): ReactNode {
+    const { id, kind } = decoration
     const { label, width, height } = SHELF_DECORATIONS[kind]
+    const quote = decoration.kind === 'quote-frame' ? quotes.get(decoration.quoteId) : undefined
+    const passage = quote?.text || (quoteNotes.isPending ? 'Loading quote…' : 'Quote unavailable')
+    const caption = quote?.book?.author ?? quote?.book?.title
     return (
       <div
         key={id}
@@ -344,7 +393,10 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         <div className="group relative">
           <div
             role="img"
-            aria-label={label}
+            aria-label={kind === 'quote-frame' ? `${label}: ${passage}` : label}
+            title={
+              kind === 'quote-frame' ? [passage, caption].filter(Boolean).join('\n') : undefined
+            }
             className={`bookshelf-decoration bookshelf-decoration-${kind}`}
             style={{ width, height }}
             draggable
@@ -358,6 +410,12 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                 <span />
                 <span />
               </span>
+            )}
+            {kind === 'quote-frame' && (
+              <div className="bookshelf-frame-print" aria-hidden="true">
+                <span className="line-clamp-3 wrap-anywhere">{passage}</span>
+                {caption && <span className="bookshelf-frame-credit">{caption}</span>}
+              </div>
             )}
           </div>
           <button
@@ -375,15 +433,11 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   }
 
   return (
-    <section
-      aria-label="Bookshelf"
-      className="bookshelf-section"
-      style={{ '--shelf-span': `${SHELF_SPAN}px` } as CSSProperties}
-    >
+    <section aria-label="Bookshelf" className="bookshelf-section">
       <p className="mb-3 text-[13px] text-ink-muted">
         Drag items to arrange them. Right-click a book to show its cover or spine.
       </p>
-      <div className="bookshelf">
+      <div className="bookshelf" ref={shelfRef}>
         {shelves.map((shelf, index) => {
           const empty = shelf.itemIds.length === 0
           const defaultName = `Shelf ${index + 1}`
@@ -430,63 +484,70 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   </div>
                 )}
               </div>
-              <div
-                className="bookshelf-row"
-                onDragOver={(event) => {
-                  if (draggedItemId === null) return
-                  event.preventDefault()
-                  const target = placementAt(event, shelf)
-                  event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
-                  if (target) showDropOutline(event.currentTarget, target, draggedItemId)
-                  else hideDropOutline(event.currentTarget)
-                }}
-                onDragLeave={(event) => {
-                  if (
-                    !(event.relatedTarget instanceof Node) ||
-                    !event.currentTarget.contains(event.relatedTarget)
-                  ) {
-                    hideDropOutline(event.currentTarget)
-                  }
-                }}
-                onDrop={(event) => {
-                  if (draggedItemId === null) return
-                  event.preventDefault()
-                  const target = placementAt(event, shelf)
-                  if (target) move(draggedItemId, target.shelf)
-                  endDrag()
-                }}
-              >
-                <div role="list" aria-label={name} className="bookshelf-track">
-                  <div className="bookshelf-spines">
-                    {shelf.itemIds.map((id) => {
-                      const decoration = decorations.get(id)
-                      if (decoration) return renderDecoration(decoration, shelf.positions[id])
-                      const book = matchingById.get(id)
-                      return book && renderBook(book, shelf.positions[id])
-                    })}
+              {wrapShelf(shelf, widths, span).map((row, rowIndex) => (
+                <div
+                  key={rowIndex}
+                  className="bookshelf-row"
+                  onDragOver={(event) => {
+                    if (draggedItemId === null) return
+                    event.preventDefault()
+                    const target = placementAt(event, row)
+                    event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
+                    if (target) showDropOutline(event.currentTarget, target, draggedItemId)
+                    else hideDropOutline(event.currentTarget)
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      !(event.relatedTarget instanceof Node) ||
+                      !event.currentTarget.contains(event.relatedTarget)
+                    ) {
+                      hideDropOutline(event.currentTarget)
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (draggedItemId === null) return
+                    event.preventDefault()
+                    const target = placementAt(event, row)
+                    if (target) move(draggedItemId, shelf.id, row, target.row)
+                    endDrag()
+                  }}
+                >
+                  <div
+                    role="list"
+                    aria-label={rowIndex === 0 ? name : `${name}, row ${rowIndex + 1}`}
+                    className="bookshelf-track"
+                  >
+                    <div className="bookshelf-spines">
+                      {row.itemIds.map((id) => {
+                        const decoration = decorations.get(id)
+                        if (decoration) return renderDecoration(decoration, row.positions[id])
+                        const book = matchingById.get(id)
+                        return book && renderBook(book, row.positions[id])
+                      })}
+                    </div>
                   </div>
+                  <div aria-hidden="true" className="bookshelf-drop-layer">
+                    <span className="bookshelf-drop-preview" />
+                  </div>
+                  {empty && (
+                    <>
+                      <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
+                        Drag items here
+                      </p>
+                      {shelves.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Remove empty shelf ${index + 1}`}
+                          className="btn btn-ghost absolute top-2 right-2 text-[12px]"
+                          onClick={() => saveRows(shelves.filter((row) => row.id !== shelf.id))}
+                        >
+                          Remove shelf
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div aria-hidden="true" className="bookshelf-drop-layer">
-                  <span className="bookshelf-drop-preview" />
-                </div>
-                {empty && (
-                  <>
-                    <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
-                      Drag items here
-                    </p>
-                    {shelves.length > 1 && (
-                      <button
-                        type="button"
-                        aria-label={`Remove empty shelf ${index + 1}`}
-                        className="btn btn-ghost absolute top-2 right-2 text-[12px]"
-                        onClick={() => saveRows(shelves.filter((row) => row.id !== shelf.id))}
-                      >
-                        Remove shelf
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
+              ))}
             </div>
           )
         })}
@@ -495,30 +556,60 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         <button type="button" className="btn btn-outline" onClick={addShelf}>
           Add shelf
         </button>
-        <div className="relative">
-          <Dialog.Root modal={false}>
-            <Dialog.Trigger className="btn btn-outline">Add decoration</Dialog.Trigger>
+        <Dialog.Root
+          open={quotePickerOpen}
+          onOpenChange={(open) => {
+            setQuotePickerOpen(open)
+            if (open) hidePreview()
+            else setQuoteQuery('')
+          }}
+        >
+          <Dialog.Trigger className="btn btn-outline">Add quote frame</Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
             <Dialog.Content
               aria-describedby={undefined}
               onEscapeKeyDown={(event) => event.stopPropagation()}
-              className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-card border border-hairline bg-surface p-1 shadow-pop"
+              className="fixed top-1/2 left-1/2 z-50 flex max-h-[min(540px,calc(100vh-32px))] w-[min(480px,calc(100vw-32px))] -translate-1/2 flex-col rounded-card border border-hairline bg-surface p-4 shadow-pop"
             >
-              <Dialog.Title className="sr-only">Add decoration</Dialog.Title>
-              <Dialog.Close
-                className="btn w-full justify-start"
-                onClick={() => addDecorations(['plant'])}
-              >
-                Plant
-              </Dialog.Close>
-              <Dialog.Close
-                className="btn w-full justify-start"
-                onClick={() => addDecorations(['left-bookend', 'right-bookend'])}
-              >
-                Bookends
-              </Dialog.Close>
+              <Dialog.Title className="mb-3 text-[16px] font-semibold">Choose a quote</Dialog.Title>
+              <input
+                className="field"
+                aria-label="Filter quotes"
+                placeholder="Filter by quote, book, or author…"
+                value={quoteQuery}
+                onChange={(event) => setQuoteQuery(event.target.value)}
+              />
+              <div className="my-2 min-h-0 overflow-y-auto">
+                {quoteNotes.isPending ? (
+                  <p className="px-2 py-3 text-sm text-ink-muted">Loading quotes…</p>
+                ) : quoteNotes.isError ? (
+                  <p role="alert" className="px-2 py-3 text-sm text-danger">
+                    Couldn’t load quotes.
+                  </p>
+                ) : matchingQuotes.length === 0 ? (
+                  <p className="px-2 py-3 text-sm text-ink-muted">
+                    {trimmedQuoteQuery ? 'No matching quotes.' : 'Save a quote to frame it here.'}
+                  </p>
+                ) : (
+                  matchingQuotes.map(([quoteId, { text, book }]) => (
+                    <Dialog.Close
+                      key={quoteId}
+                      className="block w-full rounded-control px-2 py-2 text-left hover:bg-hover"
+                      onClick={() => addQuoteFrame(quoteId)}
+                    >
+                      <span className="line-clamp-2 wrap-anywhere text-sm">{text}</span>
+                      {book && (
+                        <span className="block truncate text-xs text-ink-muted">{book.title}</span>
+                      )}
+                    </Dialog.Close>
+                  ))
+                )}
+              </div>
+              <Dialog.Close className="btn btn-outline self-end">Cancel</Dialog.Close>
             </Dialog.Content>
-          </Dialog.Root>
-        </div>
+          </Dialog.Portal>
+        </Dialog.Root>
       </div>
       {preview &&
         previewBook &&

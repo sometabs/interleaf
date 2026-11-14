@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import Library from '../src/renderer/src/components/Library'
 import { resetConfirm } from '../src/renderer/src/lib/confirm'
-import { installBridge, makeBook, renderApp } from './helpers/render'
+import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
 
 afterEach(resetConfirm)
 
@@ -347,62 +347,143 @@ describe('arranging the bookshelf', () => {
     expect(within(first).getAllByRole('button')).toHaveLength(10)
     expect(within(book).getByTestId('cover')).toBeTruthy()
     expect(
-      within(screen.getByRole('list', { name: 'Shelf 2' })).getByRole('button', { name: 'Book 11' })
+      within(screen.getByRole('list', { name: 'Shelf 1, row 2' })).getByRole('button', {
+        name: 'Book 11'
+      })
     ).toBeTruthy()
 
     fireEvent.contextMenu(book)
-    expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Shelf 1, row 2' })).toBeNull()
     expect(within(first).getAllByRole('button')).toHaveLength(11)
   })
 
-  it('adds, moves, and removes decorations while preserving the books on each shelf', async () => {
+  it('wraps with the available width and keeps edits in the same named shelf', async () => {
+    let width = 700
+    let resize: () => void = () => {}
+    const clientWidth = vi
+      .spyOn(Element.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: Element) {
+        return this.classList.contains('bookshelf') ? width : 0
+      })
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          resize = callback
+        }
+        observe = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+    const books = Array.from({ length: 8 }, (_, index) =>
+      makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
+    )
+    const storageKey = 'interleaf.bookshelves'
+    const saved = JSON.stringify([
+      { id: 1, name: 'Favorites', bookIds: [1, 2, 3, 4, 5, 6, 7], positions: { 7: 360 } },
+      { id: 2, name: 'Other books', bookIds: [8], positions: {} }
+    ])
+    window.localStorage.setItem(storageKey, saved)
+    installBridge({ books })
+
+    try {
+      renderApp(<Library onAdd={() => {}} />)
+      const favorites = await screen.findByRole('list', { name: 'Favorites' })
+      const bookLabels = (list: HTMLElement): (string | null)[] =>
+        within(list)
+          .getAllByRole('button')
+          .map((book) => book.getAttribute('aria-label'))
+      expect(bookLabels(favorites)).toHaveLength(7)
+
+      width = 220
+      act(() => resize())
+      const continuation = screen.getByRole('list', { name: 'Favorites, row 2' })
+      expect(bookLabels(favorites)).toEqual(['Book 1', 'Book 2', 'Book 3', 'Book 4'])
+      expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7'])
+      expect(window.localStorage.getItem(storageKey)).toBe(saved)
+
+      const book = screen.getByRole('button', { name: 'Book 8' })
+      const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+      fireEvent.dragStart(book, { dataTransfer })
+      const drop = new MouseEvent('drop', { bubbles: true, clientX: 216 })
+      fireEvent(continuation.firstElementChild!, Object.assign(drop, { dataTransfer }))
+      expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7', 'Book 8'])
+      expect(JSON.parse(window.localStorage.getItem(storageKey)!)).toMatchObject([
+        { id: 1, name: 'Favorites', bookIds: [1, 2, 3, 4, 5, 6, 7, 8] },
+        { id: 2, name: 'Other books', bookIds: [] }
+      ])
+
+      width = 700
+      act(() => resize())
+      expect(screen.queryByRole('list', { name: 'Favorites, row 2' })).toBeNull()
+      expect(bookLabels(favorites)).toEqual(books.map(({ title }) => title))
+    } finally {
+      clientWidth.mockRestore()
+    }
+  })
+
+  it('adds, moves, and removes a quote frame while preserving the books on each shelf', async () => {
     window.localStorage.setItem(
       'interleaf.bookshelves',
       JSON.stringify([
-        { id: 1, name: 'Favorites', bookIds: [1], positions: { 1: 110 } },
-        { id: 2, bookIds: [2], positions: { 2: 250 } }
+        { id: 1, name: 'Favorites', bookIds: [1], positions: { 1: 180 } },
+        {
+          id: 2,
+          bookIds: [2],
+          positions: { 2: 250, '-1': 310 },
+          decorations: [{ id: -1, kind: 'plant' }]
+        }
       ])
     )
-    installBridge({ books: [SOLARIS, PICNIC] })
+    const bridge = installBridge({
+      books: [SOLARIS, PICNIC],
+      notes: [
+        makeNote({ id: 10, kind: 'highlight', bookId: 1, bodyMd: '**The ocean remembers.**' }),
+        makeNote({ id: 11, kind: 'highlight', bookId: 2, bodyMd: 'This is another quote.' }),
+        makeNote({ id: 12, kind: 'thought', bookId: 1, bodyMd: 'A private note.' })
+      ]
+    })
     const first = renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
-    const add = await screen.findByRole('button', { name: 'Add decoration' })
+    const add = await screen.findByRole('button', { name: 'Add quote frame' })
     await user.click(add)
-    await user.click(screen.getByRole('button', { name: 'Plant' }))
-    await user.click(add)
-    await user.click(screen.getByRole('button', { name: 'Bookends' }))
+    const picker = screen.getByRole('dialog', { name: 'Choose a quote' })
+    expect(await within(picker).findByText('This is another quote.')).toBeTruthy()
+    expect(within(picker).queryByText('A private note.')).toBeNull()
+    await user.type(within(picker).getByRole('textbox', { name: 'Filter quotes' }), 'solaris')
+    expect(within(picker).queryByText('This is another quote.')).toBeNull()
+    await user.click(within(picker).getByRole('button', { name: /The ocean remembers/ }))
 
     const lastShelf = within(screen.getByRole('list', { name: 'Shelf 2' }))
-    const plant = lastShelf.getByRole('img', { name: 'Plant' })
-    expect(lastShelf.getByRole('img', { name: 'Left bookend' })).toBeTruthy()
-    expect(lastShelf.getByRole('img', { name: 'Right bookend' })).toBeTruthy()
+    const label = 'Quote frame: The ocean remembers.'
+    const frame = lastShelf.getByRole('img', { name: label })
+    expect(frame.getAttribute('title')).toContain('Stanisław Lem')
+    expect(lastShelf.getByRole('img', { name: 'Plant' })).toBeTruthy()
 
     const favorites = screen.getByRole('list', { name: 'Favorites' })
     const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
-    fireEvent.dragStart(plant, { dataTransfer })
+    fireEvent.dragStart(frame, { dataTransfer })
     const drop = new MouseEvent('drop', { bubbles: true, clientX: 35 })
     fireEvent(favorites.firstElementChild!, Object.assign(drop, { dataTransfer }))
-    expect(within(favorites).getByRole('img', { name: 'Plant' })).toBeTruthy()
-    expect(lastShelf.queryByRole('img', { name: 'Plant' })).toBeNull()
+    expect(within(favorites).getByRole('img', { name: label })).toBeTruthy()
+    expect(lastShelf.queryByRole('img', { name: label })).toBeNull()
 
     first.unmount()
     renderApp(<Library onAdd={() => {}} />)
     const restored = within(await screen.findByRole('list', { name: 'Favorites' }))
+    const restoredFrame = await restored.findByRole('img', { name: label })
     expect(
-      restored
-        .getByRole('img', { name: 'Plant' })
-        .closest<HTMLElement>('[role="listitem"]')
-        ?.style.getPropertyValue('--shelf-x')
+      restoredFrame.closest<HTMLElement>('[role="listitem"]')?.style.getPropertyValue('--shelf-x')
     ).toBe('35px')
     expect(
       restored
         .getByRole('button', { name: 'Solaris by Stanisław Lem' })
         .parentElement?.style.getPropertyValue('--shelf-x')
-    ).toBe('110px')
-    await user.click(restored.getByRole('button', { name: 'Remove plant' }))
-    expect(restored.queryByRole('img', { name: 'Plant' })).toBeNull()
-    expect(screen.getByRole('img', { name: 'Left bookend' })).toBeTruthy()
-    expect(screen.getByRole('img', { name: 'Right bookend' })).toBeTruthy()
+    ).toBe('180px')
+    await user.click(restored.getByRole('button', { name: 'Remove quote frame' }))
+    expect(restored.queryByRole('img', { name: label })).toBeNull()
+    expect(screen.getByRole('img', { name: 'Plant' })).toBeTruthy()
+    expect(bridge.notes).toHaveLength(3)
   })
 
   it('fits an older wide row and rejects drops onto a full shelf', async () => {
@@ -416,7 +497,7 @@ describe('arranging the bookshelf', () => {
     installBridge({ books })
     renderApp(<Library onAdd={() => {}} />)
     const first = await screen.findByRole('list', { name: 'Shelf 1' })
-    const second = screen.getByRole('list', { name: 'Shelf 2' })
+    const second = screen.getByRole('list', { name: 'Shelf 1, row 2' })
     expect(within(first).getAllByRole('button')).toHaveLength(11)
     expect(
       within(first)
@@ -424,7 +505,7 @@ describe('arranging the bookshelf', () => {
         .parentElement?.style.getPropertyValue('--shelf-x')
     ).toBe('54px')
     const lastBook = within(second).getByRole('button', { name: 'Book 12' })
-    expect(lastBook.parentElement?.style.getPropertyValue('--shelf-x')).toBe('0px')
+    expect(lastBook.parentElement?.style.getPropertyValue('--shelf-x')).toBe('206px')
 
     const dataTransfer = { effectAllowed: 'none', dropEffect: 'move', setData: vi.fn() }
     fireEvent.dragStart(lastBook, { dataTransfer })

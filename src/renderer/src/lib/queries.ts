@@ -120,10 +120,11 @@ export function useBook(id: number | null): Book | null {
   return data?.find((b) => b.id === id) ?? null
 }
 
-export function useNotes(bookId?: number | null): UseQueryResult<Note[]> {
+export function useNotes(bookId?: number | null, enabled = true): UseQueryResult<Note[]> {
   return useQuery({
     queryKey: keys.notesFor(bookId),
-    queryFn: () => (bookId === undefined ? api().listNotes() : api().listNotes(bookId))
+    queryFn: () => (bookId === undefined ? api().listNotes() : api().listNotes(bookId)),
+    enabled
   })
 }
 

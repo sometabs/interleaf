@@ -5,25 +5,30 @@ export interface Shelf {
   positions: Record<number, number>
 }
 
+export interface ShelfRow extends Pick<Shelf, 'itemIds' | 'positions'> {
+  start: number
+  origin: number
+}
+
 export const SHELF_DECORATIONS = {
   plant: { label: 'Plant', width: 48, height: 66 },
   'left-bookend': { label: 'Left bookend', width: 26, height: 58 },
-  'right-bookend': { label: 'Right bookend', width: 26, height: 58 }
+  'right-bookend': { label: 'Right bookend', width: 26, height: 58 },
+  'quote-frame': { label: 'Quote frame', width: 120, height: 94 }
 } as const
 
 export type DecorationKind = keyof typeof SHELF_DECORATIONS
 
-export interface ShelfDecoration {
-  id: number
-  kind: DecorationKind
-}
+export type ShelfDecoration =
+  | { id: number; kind: Exclude<DecorationKind, 'quote-frame'> }
+  | { id: number; kind: 'quote-frame'; quoteId: number }
 
 interface SavedShelf extends Omit<Shelf, 'itemIds'> {
   bookIds: number[]
   decorations?: ShelfDecoration[]
 }
 
-export const SHELF_SPAN = 628
+export const DEFAULT_SHELF_SPAN = 628
 const SPINE_GAP = 0
 
 export function spineWidth(pageCount: number | null): number {
@@ -76,8 +81,14 @@ export function parseShelves(raw: unknown): SavedShelf[] | null {
         ) {
           continue
         }
+        if (kind === 'quote-frame') {
+          const quoteId: unknown = decoration.quoteId
+          if (!isId(quoteId)) continue
+          decorations.push({ id, kind, quoteId })
+        } else {
+          decorations.push({ id, kind: kind as Exclude<DecorationKind, 'quote-frame'> })
+        }
         itemIds.add(id)
-        decorations.push({ id, kind: kind as DecorationKind })
       }
     }
     for (const id of [...bookIds, ...decorations.map(({ id }) => id)]) {
@@ -124,6 +135,7 @@ function fitPositions(
   itemIds: number[],
   preferred: Shelf['positions'],
   widths: ReadonlyMap<number, number>,
+  span: number,
   origin = 0
 ): Shelf['positions'] {
   const positions: Shelf['positions'] = {}
@@ -131,7 +143,7 @@ function fitPositions(
   let remaining = packedWidth(itemIds, widths)
   for (const id of itemIds) {
     // Preserve the saved gap when there is still room for the rest of the row.
-    const left = Math.min(SHELF_SPAN - remaining, Math.max(nextLeft, (preferred[id] ?? 0) - origin))
+    const left = Math.min(span - remaining, Math.max(nextLeft, (preferred[id] ?? 0) - origin))
     positions[id] = left
     const step = widths.get(id)! + SPINE_GAP
     nextLeft = left + step
@@ -146,60 +158,58 @@ export function arrangeShelves(saved: Shelf[], widths: ReadonlyMap<number, numbe
     .filter((id) => !assigned.has(id))
     .sort((a, b) => Math.abs(a) - Math.abs(b))
   const initial: Shelf[] = saved.length ? saved : [{ id: 1, itemIds: [], positions: {} }]
-  let nextId = Math.max(...initial.map((shelf) => shelf.id)) + 1
-
-  const rows = initial.flatMap<Shelf>((shelf) => {
-    let group: number[] = []
-    const groups = [group]
-    let nextLeft = 0
-    for (const id of shelf.itemIds) {
-      const width = widths.get(id)
-      if (width === undefined) continue
-      if (nextLeft + width > SHELF_SPAN) {
-        group = []
-        groups.push(group)
-        nextLeft = 0
-      }
-      group.push(id)
-      nextLeft += width + SPINE_GAP
-    }
-
-    return groups.map((itemIds, index) => ({
-      id: index === 0 ? shelf.id : nextId++,
-      name: index === 0 ? shelf.name : undefined,
+  return initial.map((shelf, index) => {
+    const itemIds = shelf.itemIds.filter((id) => widths.has(id))
+    if (index === initial.length - 1) itemIds.push(...added)
+    return {
+      ...shelf,
       itemIds,
-      positions: fitPositions(
-        itemIds,
-        shelf.positions,
-        widths,
-        index === 0 ? 0 : (shelf.positions[itemIds[0]] ?? 0)
-      )
-    }))
-  })
-
-  let last = rows.at(-1)!
-  for (const id of added) {
-    const previous = last.itemIds.at(-1)
-    let left =
-      previous === undefined ? 0 : last.positions[previous] + widths.get(previous)! + SPINE_GAP
-    if (left + widths.get(id)! > SHELF_SPAN) {
-      last = { id: nextId++, itemIds: [], positions: {} }
-      rows.push(last)
-      left = 0
+      positions: fitPositions(itemIds, shelf.positions, widths, Infinity)
     }
-    last.itemIds.push(id)
-    last.positions[id] = left
+  })
+}
+
+export function wrapShelf(
+  shelf: Shelf,
+  widths: ReadonlyMap<number, number>,
+  span: number
+): ShelfRow[] {
+  const rows: ShelfRow[] = []
+  let start = 0
+  let used = 0
+  function addRow(end: number): void {
+    const itemIds = shelf.itemIds.slice(start, end)
+    const previous = shelf.itemIds[start - 1]
+    const origin = start === 0 ? 0 : shelf.positions[previous] + widths.get(previous)!
+    rows.push({
+      start,
+      origin,
+      itemIds,
+      positions: fitPositions(itemIds, shelf.positions, widths, span, origin)
+    })
+    start = end
+    used = 0
   }
+
+  shelf.itemIds.forEach((id, index) => {
+    const width = widths.get(id)!
+    if (used > 0 && used + width > span) {
+      addRow(index)
+    }
+    used += width + SPINE_GAP
+  })
+  addRow(shelf.itemIds.length)
   return rows
 }
 
 export function shelfInsertion(
-  shelf: Shelf,
+  shelf: ShelfRow,
   itemId: number,
   widths: ReadonlyMap<number, number>,
+  span: number,
   desiredLeft: number,
   neighbor?: { itemId: number; after: boolean }
-): Shelf | null {
+): ShelfRow | null {
   const otherIds = shelf.itemIds.filter((id) => id !== itemId)
   const target = neighbor
     ? otherIds.indexOf(neighbor.itemId)
@@ -214,14 +224,15 @@ export function shelfInsertion(
       : shelf.positions[neighbor.itemId] - widths.get(itemId)! - SPINE_GAP
     : desiredLeft
   otherIds.splice(index, 0, itemId)
-  if (packedWidth(otherIds, widths) > SHELF_SPAN) return null
+  if (packedWidth(otherIds, widths) > span) return null
   return {
     ...shelf,
     itemIds: otherIds,
     positions: fitPositions(
       otherIds,
       { ...shelf.positions, [itemId]: Math.max(minimum, preferred) },
-      widths
+      widths,
+      span
     )
   }
 }
