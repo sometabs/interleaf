@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { STATUS_LABELS, type Book } from '@shared/api'
+import type { BookshelfLayout } from '@shared/bookshelf'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   CSSProperties,
@@ -17,8 +18,6 @@ import {
   detachShelfBook,
   nextStackId,
   packShelves,
-  parseShelfBookIds,
-  parseShelves,
   STACK_HEIGHT,
   shelfInsertion,
   shelfWidths,
@@ -33,8 +32,7 @@ import {
   type ShelfStacks
 } from '../lib/bookshelfLayout'
 import { notify } from '../lib/feedback'
-import { usePersistentState } from '../lib/persistent'
-import { useSpineColors } from '../lib/queries'
+import { useBookshelfLayout, useSaveBookshelfLayout, useSpineColors } from '../lib/queries'
 import { useSettings } from '../lib/settings'
 import Cover from './Cover'
 import EditableTitle from './EditableTitle'
@@ -89,25 +87,35 @@ const BOOK_MENU_HEIGHT = 144
 const DESTINATION_MENU_HEIGHT = 240
 const menuItemClass = 'btn w-full justify-start px-2 py-1.5 text-sm'
 
-export default function Bookshelf({ books, matching, query, tools, onOpen }: Props): ReactNode {
+export default function Bookshelf(props: Props): ReactNode {
+  const { data: layout, isError, refetch } = useBookshelfLayout()
+  if (!layout) {
+    return isError ? (
+      <div className="flex items-center gap-3 py-4 text-sm">
+        <p role="alert">Couldn’t load the bookshelf layout.</p>
+        <button type="button" className="btn btn-outline" onClick={() => void refetch()}>
+          Retry
+        </button>
+      </div>
+    ) : null
+  }
+  return <BookshelfView {...props} layout={layout} />
+}
+
+function BookshelfView({
+  books,
+  matching,
+  query,
+  tools,
+  onOpen,
+  layout
+}: Props & {
+  layout: BookshelfLayout
+}): ReactNode {
   const { data: spineColors } = useSpineColors(books)
   const { motionEnabled } = useSettings()
-  const [savedShelves, setSavedShelves] = usePersistentState(
-    'interleaf.bookshelves',
-    [],
-    parseShelves,
-    'interleaf.bookshelfOrder'
-  )
-  const [faceOutBooks, setFaceOutBooks] = usePersistentState(
-    'interleaf.bookshelfFaceOut',
-    [],
-    parseShelfBookIds
-  )
-  const [hiddenBookIds, setHiddenBookIds] = usePersistentState(
-    'interleaf.bookshelfHidden',
-    [],
-    parseShelfBookIds
-  )
+  const { mutate: saveLayout } = useSaveBookshelfLayout()
+  const { shelves: savedShelves, faceOutBookIds, hiddenBookIds } = layout
   const [undo, setUndo] = useState<HiddenPlacement | null>(null)
   const [bookMenu, setBookMenu] = useState<BookMenu | null>(null)
   const [choosingShelf, setChoosingShelf] = useState(false)
@@ -121,7 +129,7 @@ export default function Bookshelf({ books, matching, query, tools, onOpen }: Pro
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
-  const faceOutIds = useMemo(() => new Set(faceOutBooks), [faceOutBooks])
+  const faceOutIds = useMemo(() => new Set(faceOutBookIds), [faceOutBookIds])
   const hiddenIds = useMemo(() => new Set(hiddenBookIds), [hiddenBookIds])
   const hiddenBooks = useMemo(
     () =>
@@ -343,11 +351,14 @@ export default function Bookshelf({ books, matching, query, tools, onOpen }: Pro
   function saveRows(
     rows: Shelf[],
     nextStacks: ShelfStacks = stacks,
-    nextSizes: ReadonlyMap<number, ShelfBookSize> = sizes
+    nextSizes: ReadonlyMap<number, ShelfBookSize> = sizes,
+    nextHiddenBookIds = hiddenBookIds
   ): void {
-    setSavedShelves(
-      packShelves(arrangeShelves(rows, shelfWidths(nextSizes, nextStacks)), nextStacks)
-    )
+    saveLayout({
+      ...layout,
+      shelves: packShelves(arrangeShelves(rows, shelfWidths(nextSizes, nextStacks)), nextStacks),
+      hiddenBookIds: nextHiddenBookIds
+    })
   }
 
   function move(shelfId: number, row: ShelfRow, target: ShelfRow): void {
@@ -466,19 +477,28 @@ export default function Bookshelf({ books, matching, query, tools, onOpen }: Pro
 
   function turnBook(bookId: number): void {
     hidePreview()
-    setFaceOutBooks(
-      faceOutIds.has(bookId)
-        ? faceOutBooks.filter((id) => id !== bookId)
-        : [...faceOutBooks, bookId]
-    )
+    saveLayout({
+      ...layout,
+      faceOutBookIds: faceOutIds.has(bookId)
+        ? faceOutBookIds.filter((id) => id !== bookId)
+        : [...faceOutBookIds, bookId]
+    })
   }
 
   function hideBook(book: Book, shelf: Shelf): void {
     hidePreview()
     // Save the visible positions before excluding the book, leaving its gap in place.
-    setSavedShelves(packShelves(shelves, stacks))
+    saveLayout(
+      {
+        ...layout,
+        shelves: packShelves(shelves, stacks),
+        hiddenBookIds: [...hiddenBookIds, book.id]
+      },
+      {
+        onError: () => setUndo(null)
+      }
+    )
     const stackId = stackForBook(stacks, book.id)
-    setHiddenBookIds([...hiddenBookIds, book.id])
     setUndo({
       bookId: book.id,
       title: book.title,
@@ -527,8 +547,12 @@ export default function Bookshelf({ books, matching, query, tools, onOpen }: Pro
         }
       }
     }
-    saveRows(rows, nextStacks, nextSizes)
-    setHiddenBookIds(hiddenBookIds.filter((id) => id !== bookId))
+    saveRows(
+      rows,
+      nextStacks,
+      nextSizes,
+      hiddenBookIds.filter((id) => id !== bookId)
+    )
     if (undo?.bookId === bookId) setUndo(null)
   }
 

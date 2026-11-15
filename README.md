@@ -139,7 +139,8 @@ backed up once the 24-hour window ends, or at the next launch if it was closed. 
 verified copy of the database and its covers in the `backups` folder beside the database. After a
 successful manual restore, Interleaf refreshes that copy. If the database is missing or damaged at
 startup, Interleaf offers to restore the automatic backup and preserves any damaged database.
-UI preferences, the downloaded model, and the embedding cache are outside these backups.
+Library exports and automatic backups include your shelf layout. UI preferences, the downloaded
+model, and the embedding cache are stored separately.
 
 **Your data, in plain text.** The Markdown in that folder is yours to read in any editor or keep in
 Git: each book with its status and rating, its review, its notes and its quotes, each dated. It is

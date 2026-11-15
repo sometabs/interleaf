@@ -68,6 +68,7 @@ export function clearRecommendationCache(db: Database): number {
 // rather than an un-migrated one.
 export function deleteEverything(db: Database): void {
   db.transaction(() => {
+    db.prepare('DELETE FROM bookshelf_layout').run()
     db.prepare('DELETE FROM note').run()
     db.prepare('DELETE FROM book').run()
     db.prepare('DELETE FROM book_candidate').run()

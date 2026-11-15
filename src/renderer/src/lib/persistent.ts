@@ -9,9 +9,9 @@ export function usePersistentState<T>(
   legacyKey?: string
 ): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
-    const stored = read(key, null, parse)
+    const stored = readPersistentState(key, null, parse)
     if (stored !== null) return stored
-    return legacyKey ? read(legacyKey, fallback, parse) : fallback
+    return legacyKey ? readPersistentState(legacyKey, fallback, parse) : fallback
   })
 
   const store = useCallback(
@@ -30,7 +30,11 @@ export function usePersistentState<T>(
   return [value, store]
 }
 
-function read<T>(key: string, fallback: T, parse: (raw: unknown) => T | null): T {
+export function readPersistentState<T>(
+  key: string,
+  fallback: T,
+  parse: (raw: unknown) => T | null
+): T {
   try {
     const raw = window.localStorage.getItem(key)
     if (raw === null) return fallback

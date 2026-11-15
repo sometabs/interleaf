@@ -16,6 +16,7 @@ import {
 import { closeDb, getDb } from '../db/connection'
 import { assertTrustedIpcSender } from '../security'
 import * as books from '../repos/books'
+import * as bookshelf from '../repos/bookshelf'
 import * as data from '../repos/data'
 import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
@@ -47,6 +48,8 @@ let pendingIpc = 0
 let restarting = false
 
 const libraryWrites = new Set<keyof InterleafApi>([
+  'getBookshelfLayout',
+  'saveBookshelfLayout',
   'createBook',
   'updateBook',
   'reorderPriority',
@@ -139,6 +142,12 @@ async function runMetadataRefresh(bookIds?: number[]): Promise<MetadataRefreshRe
 const api: InterleafApi = {
   async listBooks() {
     return books.listBooks(getDb())
+  },
+  async getBookshelfLayout(legacy) {
+    return bookshelf.getBookshelfLayout(getDb(), legacy)
+  },
+  async saveBookshelfLayout(layout) {
+    return bookshelf.saveBookshelfLayout(getDb(), layout)
   },
   getSpineColors,
   async createBook(input) {

@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query'
 
 import { useEffect, useState } from 'react'
+import type { BookshelfLayout } from '@shared/bookshelf'
 
 import type {
   Book,
@@ -40,6 +41,7 @@ import type {
   SearchHit,
   SpineColors
 } from '@shared/api'
+import { clearLegacyBookshelf, readLegacyBookshelf } from './legacyBookshelf'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
 // rather than patching a local copy.
@@ -47,6 +49,7 @@ const api = (): InterleafBridge => window.interleaf
 
 const keys = {
   books: ['books'] as const,
+  bookshelf: ['bookshelf'] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
@@ -98,6 +101,42 @@ function invalidateRecommendations(client: QueryClient): void {
 
 export function useBooks(): UseQueryResult<Book[]> {
   return useQuery({ queryKey: keys.books, queryFn: () => api().listBooks() })
+}
+
+const bookshelfQuery = {
+  queryKey: keys.bookshelf,
+  staleTime: Infinity,
+  queryFn: async (): Promise<BookshelfLayout> => {
+    const legacy = readLegacyBookshelf()
+    const layout = await api().getBookshelfLayout(legacy)
+    if (legacy) clearLegacyBookshelf()
+    return layout
+  }
+}
+
+export function useBookshelfLayout(): UseQueryResult<BookshelfLayout> {
+  return useQuery(bookshelfQuery)
+}
+
+export function useSaveBookshelfLayout(): UseMutationResult<
+  BookshelfLayout,
+  Error,
+  BookshelfLayout
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationKey: keys.bookshelf,
+    mutationFn: (layout) => api().saveBookshelfLayout(layout),
+    onMutate: (layout) => {
+      void client.cancelQueries({ queryKey: keys.bookshelf })
+      client.setQueryData(keys.bookshelf, layout)
+    },
+    onSettled: () => {
+      if (client.isMutating({ mutationKey: keys.bookshelf }) === 1) {
+        void client.invalidateQueries({ queryKey: keys.bookshelf })
+      }
+    }
+  })
 }
 
 export function useSpineColors(books: Book[]): UseQueryResult<Record<string, SpineColors>> {
@@ -570,7 +609,13 @@ export function useDeleteEverything(): UseMutationResult<void, Error, void> {
 }
 
 export function useExportBackup(): UseMutationResult<BackupResult | null, Error, void> {
-  return useMutation({ mutationFn: () => api().exportBackup() })
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      await client.ensureQueryData(bookshelfQuery)
+      return api().exportBackup()
+    }
+  })
 }
 
 // Reads the file and reports what it holds; nothing is written until the

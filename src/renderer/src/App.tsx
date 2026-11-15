@@ -23,10 +23,11 @@ import Stats from './components/Stats'
 import Toasts from './components/Toasts'
 import { usePendingConfirm } from './lib/confirm'
 import { usePersistentState } from './lib/persistent'
-import { useBook } from './lib/queries'
+import { useBook, useBookshelfLayout } from './lib/queries'
 import { useView } from './lib/view'
 
 export default function App(): ReactNode {
+  useBookshelfLayout()
   const { view, back } = useView()
   const [addOpen, setAddOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)

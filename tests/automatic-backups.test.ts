@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createDatabase } from '../src/main/db/database'
 import { createBook, listBooks, updateBook } from '../src/main/repos/books'
+import { getBookshelfLayout, saveBookshelfLayout } from '../src/main/repos/bookshelf'
 import { createNote, listNotes } from '../src/main/repos/notes'
 import {
   AutomaticBackups,
@@ -70,6 +71,25 @@ function bookCount(): number | null {
 }
 
 describe('automatic backups', () => {
+  it('backs up a shelf-only change after the previous backup', () => {
+    save('First')
+    const [book] = listBooks(db)
+    const layout = saveBookshelfLayout(db, {
+      shelves: [{ id: 1, name: 'Favorites', bookIds: [book.id], positions: { [book.id]: 120 } }],
+      faceOutBookIds: [book.id],
+      hiddenBookIds: []
+    })
+    backups.schedule()
+    vi.advanceTimersByTime(BACKUP_INTERVAL)
+    const snapshot = latestRecoverySnapshot(root)!
+    const copy = createDatabase(join(snapshot.dir, DB_NAME))
+    try {
+      expect(getBookshelfLayout(copy)).toEqual(layout)
+    } finally {
+      copy.close()
+    }
+  })
+
   it('skips idle time, saves the first edit, and groups further edits until the deadline', () => {
     vi.advanceTimersByTime(2 * BACKUP_INTERVAL)
     expect(snapshotDirectories()).toEqual([])

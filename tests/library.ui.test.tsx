@@ -134,7 +134,7 @@ describe('arranging the bookshelf', () => {
     ])
     window.localStorage.setItem('interleaf.bookshelves', saved)
     window.localStorage.setItem('interleaf.bookshelfHidden', '[4]')
-    installBridge({
+    const bridge = installBridge({
       books: [
         SOLARIS,
         { ...PICNIC, author: 'Stanisław Strugatsky' },
@@ -147,7 +147,9 @@ describe('arranging the bookshelf', () => {
 
     try {
       const search = await screen.findByRole('textbox', { name: 'Find books on shelves' })
-      const picnic = screen.getByRole('button', { name: 'Roadside Picnic by Stanisław Strugatsky' })
+      const picnic = await screen.findByRole('button', {
+        name: 'Roadside Picnic by Stanisław Strugatsky'
+      })
       const solaris = screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
       const wolf = screen.getByRole('button', { name: 'Wolf Hall by Hilary Mantel' })
       await user.type(search, 'stanisław')
@@ -177,7 +179,9 @@ describe('arranging the bookshelf', () => {
       expect(solaris.hasAttribute('data-search-match')).toBe(false)
       await user.clear(search)
       expect(screen.getByRole('status').textContent).toBe('')
-      expect(window.localStorage.getItem('interleaf.bookshelves')).toBe(saved)
+      expect(window.localStorage.getItem('interleaf.bookshelves')).toBeNull()
+      expect(window.localStorage.getItem('interleaf.bookshelfHidden')).toBeNull()
+      expect(bridge.bookshelf).toMatchObject({ shelves: JSON.parse(saved), hiddenBookIds: [4] })
     } finally {
       scroll.mockRestore()
     }
@@ -215,7 +219,10 @@ describe('arranging the bookshelf', () => {
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
       fireEvent.dragEnd(spine)
 
+      vi.useRealTimers()
       chooseBookAction(spine, 'Show cover')
+      await within(spine).findByTestId('cover')
+      vi.useFakeTimers()
       fireEvent.mouseEnter(spine)
       act(() => vi.advanceTimersByTime(399))
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
@@ -252,11 +259,13 @@ describe('arranging the bookshelf', () => {
 
     fireEvent.dragStart(wolf, { dataTransfer })
     fireEvent.drop(solaris, { dataTransfer, clientX: -1 })
-    expect(titles()).toEqual([
-      'Wolf Hall by Hilary Mantel',
-      'Solaris by Stanisław Lem',
-      'Roadside Picnic by Strugatsky'
-    ])
+    await waitFor(() =>
+      expect(titles()).toEqual([
+        'Wolf Hall by Hilary Mantel',
+        'Solaris by Stanisław Lem',
+        'Roadside Picnic by Strugatsky'
+      ])
+    )
 
     first.unmount()
     renderApp(<Library onAdd={() => {}} />)
@@ -301,7 +310,9 @@ describe('arranging the bookshelf', () => {
     expect(outline.style.transform).toBe('translateX(400px)')
     dragAt('Shelf 2', 500)
     expect(outline.hasAttribute('data-active')).toBe(false)
-    expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('386px')
+    await waitFor(() =>
+      expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('386px')
+    )
 
     first.unmount()
     renderApp(<Library onAdd={() => {}} />)
@@ -315,11 +326,13 @@ describe('arranging the bookshelf', () => {
 
     fireEvent.dragStart(solaris(), { dataTransfer })
     dragAt('Shelf 2', 600)
-    expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('486px')
+    await waitFor(() =>
+      expect(solaris().parentElement?.style.getPropertyValue('--shelf-x')).toBe('486px')
+    )
 
     fireEvent.dragStart(solaris(), { dataTransfer })
     dragAt('Shelf 1', 600)
-    expect(titles('Shelf 2')).toEqual([])
+    await waitFor(() => expect(titles('Shelf 2')).toEqual([]))
     await user.click(screen.getByRole('button', { name: 'Remove empty shelf 2' }))
     expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
     expect(titles('Shelf 1').at(-1)).toBe('Solaris by Stanisław Lem')
@@ -361,7 +374,9 @@ describe('arranging the bookshelf', () => {
     const solaris = screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
     fireEvent.dragStart(solaris, { dataTransfer })
     fireEvent.drop(favorites.firstElementChild!, { dataTransfer })
-    expect(within(favorites).getByRole('button', { name: 'Solaris by Stanisław Lem' })).toBeTruthy()
+    expect(
+      await within(favorites).findByRole('button', { name: 'Solaris by Stanisław Lem' })
+    ).toBeTruthy()
     expect(lists()).toEqual(['Favorites', 'Shelf 2'])
 
     await user.click(screen.getByRole('button', { name: 'Move Favorites down' }))
@@ -377,6 +392,7 @@ describe('arranging the bookshelf', () => {
     const label = 'Solaris by Stanisław Lem'
     const solaris = await screen.findByRole('button', { name: label })
     chooseBookAction(solaris, 'Show cover')
+    await within(solaris).findByTestId('cover')
     expect(solaris.style.width).toBe('112px')
     expect(within(solaris).getByTestId('cover').querySelector('img')?.getAttribute('src')).toBe(
       'bookcover://covers/book-1-test.jpg'
@@ -392,7 +408,7 @@ describe('arranging the bookshelf', () => {
     const restored = await screen.findByRole('button', { name: label })
     expect(within(restored).getByTestId('cover')).toBeTruthy()
     chooseBookAction(restored, 'Show spine')
-    expect(within(restored).queryByTestId('cover')).toBeNull()
+    await waitFor(() => expect(within(restored).queryByTestId('cover')).toBeNull())
     expect(restored.style.width).toBe('43px')
   })
 
@@ -405,6 +421,7 @@ describe('arranging the bookshelf', () => {
     const book = await screen.findByRole('button', { name: 'Book 1' })
     const first = screen.getByRole('list', { name: 'Shelf 1' })
     chooseBookAction(book, 'Show cover')
+    await within(book).findByTestId('cover')
     expect(within(first).getAllByRole('listitem')).toHaveLength(10)
     expect(within(book).getByTestId('cover')).toBeTruthy()
     expect(
@@ -414,7 +431,7 @@ describe('arranging the bookshelf', () => {
     ).toBeTruthy()
 
     chooseBookAction(book, 'Show spine')
-    expect(screen.queryByRole('list', { name: 'Shelf 1, row 2' })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Shelf 1, row 2' })).toBeNull())
     expect(within(first).getAllByRole('listitem')).toHaveLength(11)
   })
 
@@ -431,7 +448,7 @@ describe('arranging the bookshelf', () => {
     const first = renderApp(<Library onAdd={() => {}} />)
     const label = 'Solaris by Stanisław Lem'
     chooseBookAction(await screen.findByRole('button', { name: label }), 'Hide from shelf')
-    expect(screen.queryByRole('button', { name: label })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('button', { name: label })).toBeNull())
     expect(library.deleted).toEqual([])
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     const favorites = within(screen.getByRole('list', { name: 'Favorites' }))
@@ -442,10 +459,12 @@ describe('arranging the bookshelf', () => {
     ).toBe('110px')
 
     chooseBookAction(screen.getByRole('button', { name: label }), 'Hide from shelf')
+    await waitFor(() => expect(screen.queryByRole('button', { name: label })).toBeNull())
     chooseBookAction(
       screen.getByRole('button', { name: 'Roadside Picnic by Strugatsky' }),
       'Hide from shelf'
     )
+    await waitFor(() => expect(library.bookshelf?.hiddenBookIds).toEqual([1, 2]))
     first.unmount()
     renderApp(<Library onAdd={() => {}} />)
     await user.click(await screen.findByRole('button', { name: 'Add to shelf' }))
@@ -483,9 +502,12 @@ describe('arranging the bookshelf', () => {
     await waitFor(() => expect(document.activeElement).toBe(solaris))
 
     await user.keyboard('{Shift>}{F10}{/Shift}{ArrowDown}{Enter}')
-    const stacked = within(screen.getByRole('group', { name: 'Book stack' })).getByRole('button', {
-      name: 'Solaris by Stanisław Lem'
-    })
+    const stacked = within(await screen.findByRole('group', { name: 'Book stack' })).getByRole(
+      'button',
+      {
+        name: 'Solaris by Stanisław Lem'
+      }
+    )
     await waitFor(() => expect(document.activeElement).toBe(stacked))
   })
 
@@ -501,7 +523,7 @@ describe('arranging the bookshelf', () => {
     const first = renderApp(<Library onAdd={() => {}} />)
     const solaris = await screen.findByRole('button', { name: 'Solaris by Stanisław Lem' })
     chooseBookAction(solaris, 'Start a stack')
-    const pile = screen.getByRole('group', { name: 'Book stack' })
+    const pile = await screen.findByRole('group', { name: 'Book stack' })
     expect(
       within(pile).getByRole('button', { name: 'Solaris by Stanisław Lem' }).style.height
     ).toBe('43px')
@@ -509,7 +531,7 @@ describe('arranging the bookshelf', () => {
     const wolf = 'Wolf Hall by Hilary Mantel'
     fireEvent.dragStart(screen.getByRole('button', { name: wolf }), { dataTransfer })
     fireEvent.drop(within(pile).getByText('Drop onto stack'), { dataTransfer })
-    expect(shelfTitles(pile)).toEqual(['Solaris by Stanisław Lem', wolf])
+    await waitFor(() => expect(shelfTitles(pile)).toEqual(['Solaris by Stanisław Lem', wolf]))
 
     first.unmount()
     renderApp(<Library onAdd={() => {}} />)
@@ -517,7 +539,7 @@ describe('arranging the bookshelf', () => {
     expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem', wolf])
     const user = userEvent.setup()
     chooseBookAction(within(restored).getByRole('button', { name: wolf }), 'Hide from shelf')
-    expect(within(restored).queryByRole('button', { name: wolf })).toBeNull()
+    await waitFor(() => expect(within(restored).queryByRole('button', { name: wolf })).toBeNull())
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem', wolf])
 
@@ -531,7 +553,7 @@ describe('arranging the bookshelf', () => {
     expect(outline.style.height).toBe(height)
     const drop = new MouseEvent('drop', { bubbles: true, clientX: 175 })
     fireEvent(second.firstElementChild!, Object.assign(drop, { dataTransfer }))
-    expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem'])
+    await waitFor(() => expect(shelfTitles(restored)).toEqual(['Solaris by Stanisław Lem']))
     const flat = within(second).getByRole('group', { name: 'Book stack' })
     const flatWolf = within(flat).getByRole('button', { name: wolf })
     expect(flatWolf.classList.contains('book-spine-horizontal')).toBe(true)
@@ -540,15 +562,20 @@ describe('arranging the bookshelf', () => {
     fireEvent.dragStart(flatWolf, { dataTransfer })
     const slide = new MouseEvent('drop', { bubbles: true, clientX: 210 })
     fireEvent(flatWolf, Object.assign(slide, { dataTransfer }))
-    expect(flat.parentElement?.style.getPropertyValue('--shelf-x')).toBe('210px')
+    await waitFor(() =>
+      expect(flat.parentElement?.style.getPropertyValue('--shelf-x')).toBe('210px')
+    )
     expect(shelfTitles(flat)).toEqual([wolf])
 
     chooseBookAction(flatWolf, 'Stand upright')
+    await waitFor(() =>
+      expect(within(second).queryByRole('group', { name: 'Book stack' })).toBeNull()
+    )
     chooseBookAction(
       within(restored).getByRole('button', { name: 'Solaris by Stanisław Lem' }),
       'Stand upright'
     )
-    expect(screen.queryByRole('group', { name: 'Book stack' })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Book stack' })).toBeNull())
     expect(shelfTitles(screen.getByRole('list', { name: 'Favorites' }))).toEqual([
       'Solaris by Stanisław Lem',
       'Roadside Picnic by Strugatsky'
@@ -562,11 +589,12 @@ describe('arranging the bookshelf', () => {
     installBridge({ books })
     renderApp(<Library onAdd={() => {}} />)
     chooseBookAction(await screen.findByRole('button', { name: 'Book 1' }), 'Start a stack')
-    const pile = within(screen.getByRole('group', { name: 'Book stack' }))
+    const pile = within(await screen.findByRole('group', { name: 'Book stack' }))
     const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
     for (const name of ['Book 2', 'Book 3']) {
       fireEvent.dragStart(screen.getByRole('button', { name }), { dataTransfer })
       fireEvent.drop(pile.getByText('Drop onto stack'), { dataTransfer })
+      await pile.findByRole('button', { name })
     }
     const fourth = screen.getByRole('button', { name: 'Book 4' })
     fireEvent.dragStart(fourth, { dataTransfer })
@@ -606,7 +634,7 @@ describe('arranging the bookshelf', () => {
       { id: 2, name: 'Other books', bookIds: [8], positions: {} }
     ])
     window.localStorage.setItem(storageKey, saved)
-    installBridge({ books })
+    const bridge = installBridge({ books })
 
     try {
       renderApp(<Library onAdd={() => {}} />)
@@ -624,15 +652,17 @@ describe('arranging the bookshelf', () => {
       expect(continuation.closest('.bookshelf-row')?.hasAttribute('data-continues')).toBe(false)
       expect(bookLabels(favorites)).toEqual(['Book 1', 'Book 2', 'Book 3', 'Book 4'])
       expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7'])
-      expect(window.localStorage.getItem(storageKey)).toBe(saved)
+      expect(bridge.bookshelf?.shelves).toMatchObject(JSON.parse(saved))
 
       const book = screen.getByRole('button', { name: 'Book 8' })
       const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
       fireEvent.dragStart(book, { dataTransfer })
       const drop = new MouseEvent('drop', { bubbles: true, clientX: 216 })
       fireEvent(continuation.firstElementChild!, Object.assign(drop, { dataTransfer }))
-      expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7', 'Book 8'])
-      expect(JSON.parse(window.localStorage.getItem(storageKey)!)).toMatchObject([
+      await waitFor(() =>
+        expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7', 'Book 8'])
+      )
+      expect(bridge.bookshelf?.shelves).toMatchObject([
         { id: 1, name: 'Favorites', bookIds: [1, 2, 3, 4, 5, 6, 7, 8] },
         { id: 2, name: 'Other books', bookIds: [] }
       ])

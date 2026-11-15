@@ -1,6 +1,8 @@
 // The IPC surface. Main and preload both import it, so a signature change is a
 // compile error rather than a runtime mismatch.
 
+import type { BookshelfLayout } from './bookshelf'
+
 export type BookStatus = 'want' | 'reading' | 'read' | 'abandoned'
 export type NoteKind = 'review' | 'thought' | 'highlight'
 
@@ -291,6 +293,8 @@ export interface AppDiagnostics {
 // is synchronous.
 export interface InterleafApi {
   listBooks(): Promise<Book[]>
+  getBookshelfLayout(legacy?: BookshelfLayout): Promise<BookshelfLayout>
+  saveBookshelfLayout(layout: BookshelfLayout): Promise<BookshelfLayout>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
@@ -364,6 +368,8 @@ export interface InterleafBridge extends InterleafApi {
 // Derived from the interface so the two cannot drift.
 export const IPC_CHANNELS = [
   'listBooks',
+  'getBookshelfLayout',
+  'saveBookshelfLayout',
   'getSpineColors',
   'createBook',
   'updateBook',

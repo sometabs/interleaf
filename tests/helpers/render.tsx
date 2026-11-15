@@ -12,6 +12,7 @@ import type {
   SemanticProgress,
   Note
 } from '../../src/shared/api'
+import { EMPTY_BOOKSHELF_LAYOUT, type BookshelfLayout } from '../../src/shared/bookshelf'
 import { fail } from '../../src/renderer/src/lib/feedback'
 import { SettingsProvider } from '../../src/renderer/src/lib/settings'
 import { ViewProvider, type View } from '../../src/renderer/src/lib/view'
@@ -58,6 +59,7 @@ export function makeNote(overrides: Partial<Note> = {}): Note {
 export interface FakeBridge {
   books: Book[]
   notes: Note[]
+  bookshelf: BookshelfLayout | null
   created: unknown[]
   deleted: number[]
   emitHarvestProgress: (progress: HarvestProgress) => void
@@ -66,7 +68,7 @@ export interface FakeBridge {
 }
 
 export function installBridge(
-  initial: { books?: Book[]; notes?: Note[] } = {},
+  initial: { books?: Book[]; notes?: Note[]; bookshelf?: BookshelfLayout } = {},
   overrides: Partial<InterleafApi> = {}
 ): FakeBridge {
   const listeners = new Set<(progress: HarvestProgress) => void>()
@@ -76,6 +78,7 @@ export function installBridge(
   const state: FakeBridge = {
     books: initial.books ?? [],
     notes: initial.notes ?? [],
+    bookshelf: initial.bookshelf ?? null,
     created: [],
     deleted: [],
     emitHarvestProgress: (progress) => {
@@ -105,6 +108,14 @@ export function installBridge(
     },
 
     listBooks: async () => state.books.map((book) => ({ ...book })),
+    getBookshelfLayout: async (legacy) => {
+      if (legacy) state.bookshelf ??= legacy
+      return state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT
+    },
+    saveBookshelfLayout: async (layout) => {
+      state.bookshelf = layout
+      return layout
+    },
     listNotes: async (bookId?: number | null) =>
       state.notes
         .filter((note) => bookId === undefined || note.bookId === bookId)

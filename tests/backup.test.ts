@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createDatabase, MIGRATIONS } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
+import { getBookshelfLayout, saveBookshelfLayout } from '../src/main/repos/bookshelf'
 import * as notes from '../src/main/repos/notes'
 import {
   BackupError,
@@ -198,6 +199,40 @@ describe('finding a backup', () => {
 })
 
 describe('restoring a backup', () => {
+  it('restores named shelves, stack positions, and book display choices without a local profile', () => {
+    const db = seed()
+    const [first] = books.listBooks(db)
+    const second = books.createBook(db, { title: 'Solaris' })
+    const hidden = books.createBook(db, { title: 'Wolf Hall' })
+    const layout = {
+      shelves: [
+        {
+          id: 1,
+          name: 'Favorites',
+          bookIds: [first.id, second.id],
+          positions: { '-1': 120 },
+          stacks: [{ id: -1, bookIds: [first.id, second.id] }]
+        }
+      ],
+      faceOutBookIds: [second.id],
+      hiddenBookIds: [hidden.id]
+    }
+    saveBookshelfLayout(db, layout)
+    const { dir } = exportBackup(db, parent)
+    db.close()
+
+    const freshDir = join(parent, 'new-profile')
+    mkdirSync(freshDir)
+    const freshPath = join(freshDir, 'interleaf.db')
+    restoreBackup(dir, freshPath)
+    const restored = createDatabase(freshPath)
+    try {
+      expect(getBookshelfLayout(restored, { ...layout, shelves: [] })).toEqual(layout)
+    } finally {
+      restored.close()
+    }
+  })
+
   it('upgrades a valid older backup on a copy without modifying the original backup', () => {
     const db = seed()
     db.close()
@@ -218,6 +253,13 @@ describe('restoring a backup', () => {
         title: 'From an older build',
         rating: 4
       })
+      expect(
+        getBookshelfLayout(restored, {
+          shelves: [{ id: 1, name: 'Old profile', bookIds: [1], positions: {} }],
+          faceOutBookIds: [1],
+          hiddenBookIds: []
+        })
+      ).toEqual({ shelves: [], faceOutBookIds: [], hiddenBookIds: [] })
       expect(readFileSync(oldPath)).toEqual(original)
     } finally {
       restored.close()
