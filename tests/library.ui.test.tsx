@@ -126,6 +126,63 @@ describe('arranging the bookshelf', () => {
     fireEvent.click(screen.getByRole('menuitem', { name }))
   }
 
+  it('finds books in shelf order while keeping their neighbors and shelf navigation visible', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const saved = JSON.stringify([
+      { id: 1, name: 'Favorites', bookIds: [2, 3], positions: {} },
+      { id: 2, name: 'Favorites from this year', bookIds: [1], positions: {} }
+    ])
+    window.localStorage.setItem('interleaf.bookshelves', saved)
+    window.localStorage.setItem('interleaf.bookshelfHidden', '[4]')
+    installBridge({
+      books: [
+        SOLARIS,
+        { ...PICNIC, author: 'Stanisław Strugatsky' },
+        HALL,
+        makeBook({ id: 4, title: 'Hidden book', author: 'Stanisław Lem' })
+      ]
+    })
+    renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+
+    try {
+      const search = await screen.findByRole('textbox', { name: 'Find books on shelves' })
+      const picnic = screen.getByRole('button', { name: 'Roadside Picnic by Stanisław Strugatsky' })
+      const solaris = screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
+      const wolf = screen.getByRole('button', { name: 'Wolf Hall by Hilary Mantel' })
+      await user.type(search, 'stanisław')
+      await waitFor(() =>
+        expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
+      )
+      expect(scroll.mock.contexts.at(-1)).toBe(picnic)
+      expect(picnic.hasAttribute('data-search-match')).toBe(true)
+      expect(solaris.hasAttribute('data-search-match')).toBe(true)
+      expect(wolf.hasAttribute('data-search-match')).toBe(false)
+      expect(screen.getByRole('status').textContent).toBe('2 matches')
+
+      await user.click(screen.getByRole('button', { name: 'Jump to shelf' }))
+      const picker = screen.getByRole('dialog', { name: 'Jump to shelf' })
+      await user.click(within(picker).getByRole('button', { name: 'Favorites from this year' }))
+      expect(scroll).toHaveBeenLastCalledWith({
+        block: 'start',
+        inline: 'nearest',
+        behavior: 'smooth'
+      })
+      expect(scroll.mock.contexts.at(-1)).toBe(solaris.closest('[data-shelf-id]'))
+      expect(search).toHaveProperty('value', 'stanisław')
+
+      await user.type(search, 'zzz')
+      expect(screen.getByRole('status').textContent).toBe('No matches')
+      expect(solaris.isConnected).toBe(true)
+      expect(solaris.hasAttribute('data-search-match')).toBe(false)
+      await user.clear(search)
+      expect(screen.getByRole('status').textContent).toBe('')
+      expect(window.localStorage.getItem('interleaf.bookshelves')).toBe(saved)
+    } finally {
+      scroll.mockRestore()
+    }
+  })
+
   it('shows the right hover preview for both orientations and hides it when a drag starts', async () => {
     const coverPath = 'book-1-test.jpg'
     installBridge(
@@ -351,11 +408,13 @@ describe('arranging the bookshelf', () => {
     expect(within(first).getAllByRole('listitem')).toHaveLength(10)
     expect(within(book).getByTestId('cover')).toBeTruthy()
     expect(
-      within(screen.getByRole('list', { name: 'Shelf 2' })).getByRole('button', { name: 'Book 11' })
+      within(screen.getByRole('list', { name: 'Shelf 1, row 2' })).getByRole('button', {
+        name: 'Book 11'
+      })
     ).toBeTruthy()
 
     chooseBookAction(book, 'Show spine')
-    expect(screen.queryByRole('list', { name: 'Shelf 2' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Shelf 1, row 2' })).toBeNull()
     expect(within(first).getAllByRole('listitem')).toHaveLength(11)
   })
 
@@ -520,6 +579,151 @@ describe('arranging the bookshelf', () => {
     expect(fourth.isConnected).toBe(true)
   })
 
+  it('wraps with the available width and keeps edits in the same named shelf', async () => {
+    let width = 700
+    let resize: () => void = () => {}
+    const clientWidth = vi
+      .spyOn(Element.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: Element) {
+        return this.classList.contains('bookshelf') ? width : 0
+      })
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          resize = callback
+        }
+        observe = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+    const books = Array.from({ length: 8 }, (_, index) =>
+      makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
+    )
+    const storageKey = 'interleaf.bookshelves'
+    const saved = JSON.stringify([
+      { id: 1, name: 'Favorites', bookIds: [1, 2, 3, 4, 5, 6, 7], positions: { 7: 360 } },
+      { id: 2, name: 'Other books', bookIds: [8], positions: {} }
+    ])
+    window.localStorage.setItem(storageKey, saved)
+    installBridge({ books })
+
+    try {
+      renderApp(<Library onAdd={() => {}} />)
+      const favorites = await screen.findByRole('list', { name: 'Favorites' })
+      const bookLabels = (list: HTMLElement): (string | null)[] =>
+        within(list)
+          .getAllByRole('button')
+          .map((book) => book.getAttribute('aria-label'))
+      expect(bookLabels(favorites)).toHaveLength(7)
+
+      width = 220
+      act(() => resize())
+      const continuation = screen.getByRole('list', { name: 'Favorites, row 2' })
+      expect(favorites.closest('.bookshelf-row')?.hasAttribute('data-continues')).toBe(true)
+      expect(continuation.closest('.bookshelf-row')?.hasAttribute('data-continues')).toBe(false)
+      expect(bookLabels(favorites)).toEqual(['Book 1', 'Book 2', 'Book 3', 'Book 4'])
+      expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7'])
+      expect(window.localStorage.getItem(storageKey)).toBe(saved)
+
+      const book = screen.getByRole('button', { name: 'Book 8' })
+      const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+      fireEvent.dragStart(book, { dataTransfer })
+      const drop = new MouseEvent('drop', { bubbles: true, clientX: 216 })
+      fireEvent(continuation.firstElementChild!, Object.assign(drop, { dataTransfer }))
+      expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7', 'Book 8'])
+      expect(JSON.parse(window.localStorage.getItem(storageKey)!)).toMatchObject([
+        { id: 1, name: 'Favorites', bookIds: [1, 2, 3, 4, 5, 6, 7, 8] },
+        { id: 2, name: 'Other books', bookIds: [] }
+      ])
+
+      width = 700
+      act(() => resize())
+      expect(screen.queryByRole('list', { name: 'Favorites, row 2' })).toBeNull()
+      expect(bookLabels(favorites)).toEqual(books.map(({ title }) => title))
+    } finally {
+      clientWidth.mockRestore()
+    }
+  })
+
+  it('moves a book to the end of a named shelf from its keyboard menu and remembers the move', async () => {
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        { id: 1, name: 'To sort', bookIds: [1, 2], positions: { 2: 170 } },
+        { id: 2, name: 'Favorites', bookIds: [3], positions: { 3: 90 } }
+      ])
+    )
+    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    const label = 'Solaris by Stanisław Lem'
+    const solaris = await screen.findByRole('button', { name: label })
+
+    act(() => solaris.focus())
+    await user.keyboard('{Shift>}{F10}{/Shift}{ArrowDown}{ArrowDown}{Enter}')
+    const destinations = screen.getByRole('menu', { name: 'Move to shelf' })
+    expect(within(destinations).queryByRole('menuitem', { name: 'To sort' })).toBeNull()
+    expect(document.activeElement).toBe(
+      within(destinations).getByRole('menuitem', { name: 'Favorites' })
+    )
+    await user.keyboard('{Enter}')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(
+      within(screen.getByRole('list', { name: 'To sort' })).queryByRole('button', { name: label })
+    ).toBeNull()
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const favorites = await screen.findByRole('list', { name: 'Favorites' })
+    expect(
+      within(favorites)
+        .getAllByRole('button')
+        .map((book) => book.getAttribute('aria-label'))
+    ).toEqual(['Wolf Hall by Hilary Mantel', label])
+  })
+
+  it('wraps a saved stack together and moves only the selected member to another shelf', async () => {
+    const books = Array.from({ length: 13 }, (_, index) =>
+      makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
+    )
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        {
+          id: 1,
+          name: 'First shelf',
+          bookIds: books.slice(0, 12).map(({ id }) => id),
+          positions: { '-1': 486 },
+          stacks: [{ id: -1, bookIds: [10, 11] }]
+        },
+        { id: 2, name: 'Favorites', bookIds: [13], positions: {} }
+      ])
+    )
+    installBridge({ books })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    const continuation = await screen.findByRole('list', { name: 'First shelf, row 2' })
+    const stack = within(continuation).getByRole('group', { name: 'Book stack' })
+    expect(shelfTitles(stack)).toEqual(['Book 10', 'Book 11'])
+
+    chooseBookAction(within(stack).getByRole('button', { name: 'Book 11' }), 'Move to shelf…')
+    await user.click(screen.getByRole('menuitem', { name: 'Favorites' }))
+    expect(shelfTitles(stack)).toEqual(['Book 10'])
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const favorites = await screen.findByRole('list', { name: 'Favorites' })
+    expect(shelfTitles(favorites)).toEqual(['Book 13', 'Book 11'])
+    expect(shelfTitles(within(favorites).getByRole('group', { name: 'Book stack' }))).toEqual([
+      'Book 11'
+    ])
+    const restored = screen.getByRole('list', { name: 'First shelf, row 2' })
+    expect(shelfTitles(within(restored).getByRole('group', { name: 'Book stack' }))).toEqual([
+      'Book 10'
+    ])
+  })
+
   it('fits an older wide row and rejects drops onto a full shelf', async () => {
     const books = Array.from({ length: 12 }, (_, index) =>
       makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
@@ -531,7 +735,7 @@ describe('arranging the bookshelf', () => {
     installBridge({ books })
     renderApp(<Library onAdd={() => {}} />)
     const first = await screen.findByRole('list', { name: 'Shelf 1' })
-    const second = screen.getByRole('list', { name: 'Shelf 2' })
+    const second = screen.getByRole('list', { name: 'Shelf 1, row 2' })
     expect(within(first).getAllByRole('listitem')).toHaveLength(11)
     expect(
       within(first)
@@ -539,7 +743,7 @@ describe('arranging the bookshelf', () => {
         .parentElement?.style.getPropertyValue('--shelf-x')
     ).toBe('54px')
     const lastBook = within(second).getByRole('button', { name: 'Book 12' })
-    expect(lastBook.parentElement?.style.getPropertyValue('--shelf-x')).toBe('0px')
+    expect(lastBook.parentElement?.style.getPropertyValue('--shelf-x')).toBe('206px')
 
     const dataTransfer = { effectAllowed: 'none', dropEffect: 'move', setData: vi.fn() }
     fireEvent.dragStart(lastBook, { dataTransfer })

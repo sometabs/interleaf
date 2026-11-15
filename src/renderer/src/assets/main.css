@@ -311,13 +311,10 @@
   .bookshelf-section {
     --shelf-padding: 0px;
     --shelf-frame: 7px;
-    width: calc(var(--shelf-span) + 2 * (var(--shelf-padding) + var(--shelf-frame)));
-    margin-inline: auto;
   }
 
   .bookshelf {
-    --shelf-row-height: 230px;
-    --shelf-ledge: 13px;
+    --shelf-clearance: 217px;
     --shelf-lip: light-dark(#c6af96, #735d4c);
     --shelf-wood: light-dark(#b0967a, #564438);
     --shelf-shadow: light-dark(#947b63, #392e27);
@@ -334,22 +331,31 @@
   }
 
   .bookshelf-row {
+    --shelf-ledge: 13px;
+    --shelf-edge: 2px;
+    --shelf-face: 10px;
     position: relative;
-    height: var(--shelf-row-height);
+    height: calc(var(--shelf-clearance) + var(--shelf-ledge));
     background:
       linear-gradient(
         to top,
-        var(--shelf-shadow) 0 2px,
-        var(--shelf-wood) 2px 10px,
-        var(--shelf-lip) 10px var(--shelf-ledge),
+        var(--shelf-shadow) 0 var(--shelf-edge),
+        var(--shelf-wood) var(--shelf-edge) var(--shelf-face),
+        var(--shelf-lip) var(--shelf-face) var(--shelf-ledge),
         transparent var(--shelf-ledge)
       ),
       light-dark(#eee9e2, #292420);
     box-shadow: inset 0 2px 8px rgb(0 0 0 / 0.1);
   }
 
+  .bookshelf-row[data-continues] {
+    --shelf-ledge: 6px;
+    --shelf-edge: 1px;
+    --shelf-face: 5px;
+  }
+
   .bookshelf-track {
-    height: calc(var(--shelf-row-height) - var(--shelf-ledge));
+    height: var(--shelf-clearance);
     padding-inline: var(--shelf-padding);
   }
 
@@ -395,6 +401,17 @@
     cursor: grab;
     user-select: none;
     transition: transform 150ms ease;
+  }
+
+  .bookshelf-book[data-search-match] {
+    z-index: 1;
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .bookshelf-section[data-searching]
+    .bookshelf-book:not([data-search-match], :hover, :focus-visible, [data-dragging]) {
+    opacity: 0.65;
   }
 
   .book-spine {

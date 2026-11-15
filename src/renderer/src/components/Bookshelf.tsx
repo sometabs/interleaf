@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { STATUS_LABELS, type Book } from '@shared/api'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   CSSProperties,
   DragEvent,
@@ -13,12 +13,12 @@ import { sameOrder } from '../lib/bookOrder'
 import { paletteFor } from '../lib/bookPalette'
 import {
   arrangeShelves,
+  DEFAULT_SHELF_SPAN,
   detachShelfBook,
   nextStackId,
   packShelves,
   parseShelfBookIds,
   parseShelves,
-  SHELF_SPAN,
   STACK_HEIGHT,
   shelfInsertion,
   shelfWidths,
@@ -26,12 +26,16 @@ import {
   stackForBook,
   stackHeight,
   unpackShelves,
+  wrapShelf,
   type Shelf,
   type ShelfBookSize,
+  type ShelfRow,
   type ShelfStacks
 } from '../lib/bookshelfLayout'
+import { notify } from '../lib/feedback'
 import { usePersistentState } from '../lib/persistent'
 import { useSpineColors } from '../lib/queries'
+import { useSettings } from '../lib/settings'
 import Cover from './Cover'
 import EditableTitle from './EditableTitle'
 import FilterPicker from './FilterPicker'
@@ -39,11 +43,13 @@ import FilterPicker from './FilterPicker'
 interface Props {
   books: Book[]
   matching: Book[]
+  query: string
+  tools: HTMLDivElement | null
   onOpen: (book: Book) => void
 }
 
 interface Placement {
-  shelf: Shelf
+  row: ShelfRow
   outlineX: number
   width: number
   height: number
@@ -78,11 +84,14 @@ const PREVIEW_MAX_HEIGHT = 144
 const PREVIEW_GAP = 10
 const FACE_OUT_WIDTH = 112
 const UNDO_DURATION = 8000
-const BOOK_MENU_WIDTH = 172
-const BOOK_MENU_HEIGHT = 108
+const BOOK_MENU_WIDTH = 200
+const BOOK_MENU_HEIGHT = 144
+const DESTINATION_MENU_HEIGHT = 240
+const menuItemClass = 'btn w-full justify-start px-2 py-1.5 text-sm'
 
-export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode {
+export default function Bookshelf({ books, matching, query, tools, onOpen }: Props): ReactNode {
   const { data: spineColors } = useSpineColors(books)
+  const { motionEnabled } = useSettings()
   const [savedShelves, setSavedShelves] = usePersistentState(
     'interleaf.bookshelves',
     [],
@@ -101,9 +110,14 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   )
   const [undo, setUndo] = useState<HiddenPlacement | null>(null)
   const [bookMenu, setBookMenu] = useState<BookMenu | null>(null)
+  const [choosingShelf, setChoosingShelf] = useState(false)
+  const [span, setSpan] = useState(DEFAULT_SHELF_SPAN)
   const [draggedBookId, setDraggedBookId] = useState<number | null>(null)
   const [stackTarget, setStackTarget] = useState<number | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const shelfRef = useRef<HTMLDivElement>(null)
+  const bookMenuRef = useRef<HTMLDivElement>(null)
+  const searchScrollTimer = useRef<number | undefined>(undefined)
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
@@ -142,34 +156,50 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   }, [savedShelves, sizes])
   const dragLayout = useMemo(() => {
     if (draggedBookId === null || !sizes.has(draggedBookId)) return null
-    const draft = detachShelfBook(shelves, stacks, draggedBookId)
-    const sourceStackId = stackForBook(stacks, draggedBookId)
-    const horizontal = sourceStackId !== undefined
-    const placementId = horizontal
-      ? draft.stacks.has(sourceStackId)
-        ? nextStackId(stacks, undo?.stackId)
-        : sourceStackId
-      : draggedBookId
-    const placementStacks = horizontal
-      ? new Map(draft.stacks).set(placementId, [draggedBookId])
-      : draft.stacks
-    return {
-      ...draft,
-      horizontal,
-      placementId,
-      placementStacks,
-      widths: shelfWidths(sizes, placementStacks)
-    }
+    const draft = prepareShelfMove(shelves, stacks, draggedBookId, undo?.stackId)
+    return { ...draft, widths: shelfWidths(sizes, draft.placementStacks) }
   }, [draggedBookId, shelves, stacks, sizes, undo?.stackId])
-  const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
-  const previewBook = preview && matchingById.get(preview.bookId)
+  const booksById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books])
+  const matchingIds = useMemo(
+    () => new Set(matching.map(({ id }) => id).filter((id) => !hiddenIds.has(id))),
+    [matching, hiddenIds]
+  )
+  const previewBook = preview && booksById.get(preview.bookId)
   const previewShowsCover =
     previewBook &&
     (!faceOutIds.has(previewBook.id) || stackForBook(stacks, previewBook.id) !== undefined)
-  const menuBook = bookMenu && matchingById.get(bookMenu.bookId)
+  const menuBook = bookMenu && booksById.get(bookMenu.bookId)
   const menuStack = menuBook ? stackForBook(stacks, menuBook.id) : undefined
   const menuShelf =
     menuBook && shelves.find((shelf) => shelf.slotIds.includes(menuStack ?? menuBook.id))
+  const firstMatchId = query
+    ? shelves
+        .flatMap((shelf) => shelf.slotIds.flatMap((id) => stacks.get(id) ?? id))
+        .find((id) => matchingIds.has(id))
+    : undefined
+
+  useLayoutEffect(() => {
+    const shelf = shelfRef.current
+    if (!shelf) return
+    const measure = (): void => {
+      if (shelf.clientWidth > 0) setSpan(shelf.clientWidth)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(shelf)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (firstMatchId === undefined) return
+    searchScrollTimer.current = window.setTimeout(() => {
+      shelfRef.current?.querySelector(`[data-shelf-book="${firstMatchId}"]`)?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest'
+      })
+    }, 200)
+    return () => window.clearTimeout(searchScrollTimer.current)
+  }, [query, firstMatchId])
 
   const hidePreview = useCallback((): void => {
     window.clearTimeout(previewTimer.current)
@@ -177,7 +207,8 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   }, [])
 
   useEffect(() => {
-    function dismissFloatingContent(): void {
+    function dismissFloatingContent(event: Event): void {
+      if (event.target instanceof Node && bookMenuRef.current?.contains(event.target)) return
       hidePreview()
       setBookMenu(null)
     }
@@ -202,6 +233,19 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     const timer = window.setTimeout(() => setUndo(null), UNDO_DURATION)
     return () => window.clearTimeout(timer)
   }, [undo])
+
+  useLayoutEffect(() => {
+    if (choosingShelf) bookMenuRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+  }, [choosingShelf])
+
+  function jumpToShelf(id: string): void {
+    window.clearTimeout(searchScrollTimer.current)
+    shelfRef.current?.querySelector(`[data-shelf-id="${id}"]`)?.scrollIntoView({
+      block: 'start',
+      inline: 'nearest',
+      behavior: motionEnabled ? 'smooth' : 'instant'
+    })
+  }
 
   function queuePreview(bookId: number, button: HTMLButtonElement, showCover: boolean): void {
     hidePreview()
@@ -232,11 +276,13 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
 
   function placementAt(
     event: DragEvent<HTMLDivElement>,
-    shelf: Shelf
+    row: ShelfRow
   ): Placement | null | undefined {
     if (draggedBookId === null || !dragLayout || !sizes.has(draggedBookId)) return null
-    const destination = dragLayout.rows.find((row) => row.id === shelf.id)
-    if (!destination) return null
+    const destination = {
+      ...row,
+      slotIds: row.slotIds.filter((id) => id !== dragLayout.removedSlot)
+    }
     const strip = event.currentTarget.querySelector('.bookshelf-spines')
     const track = strip?.parentElement
     if (!strip || !track) return null
@@ -258,12 +304,13 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       destination,
       dragLayout.placementId,
       dragLayout.widths,
+      span,
       left,
       neighbor
     )
     if (!insertion) return null
     return {
-      shelf: insertion,
+      row: insertion,
       outlineX:
         origin - track.getBoundingClientRect().left + insertion.positions[dragLayout.placementId],
       width: dragLayout.widths.get(dragLayout.placementId)!,
@@ -303,20 +350,41 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     )
   }
 
-  function move(target: Shelf): void {
-    const destination = shelves.find((shelf) => shelf.id === target.id)
-    if (!dragLayout || !destination) return
+  function move(shelfId: number, row: ShelfRow, target: ShelfRow): void {
+    if (!dragLayout) return
+    const { removedSlot, placementId } = dragLayout
 
     if (
-      destination.positions[dragLayout.placementId] === target.positions[dragLayout.placementId] &&
-      sameOrder(destination.slotIds, target.slotIds)
+      row.positions[placementId] === target.positions[placementId] &&
+      sameOrder(row.slotIds, target.slotIds)
     )
       return
 
     saveRows(
-      dragLayout.rows.map((shelf) => (shelf.id === target.id ? target : shelf)),
+      shelves.map((shelf, index) => {
+        if (shelf.id !== shelfId) return dragLayout.rows[index]
+        const before = shelf.slotIds.slice(0, row.start).filter((id) => id !== removedSlot)
+        const after = shelf.slotIds
+          .slice(row.start + row.slotIds.length)
+          .filter((id) => id !== removedSlot)
+        const positions = { ...shelf.positions }
+        for (const id of target.slotIds) positions[id] = row.origin + target.positions[id]
+        return { ...shelf, slotIds: [...before, ...target.slotIds, ...after], positions }
+      }),
       dragLayout.placementStacks
     )
+  }
+
+  function moveBookToShelf(book: Book, shelfId: number, shelfName: string): void {
+    const draft = prepareShelfMove(shelves, stacks, book.id, undo?.stackId)
+    saveRows(
+      draft.rows.map((shelf) =>
+        shelf.id === shelfId ? { ...shelf, slotIds: [...shelf.slotIds, draft.placementId] } : shelf
+      ),
+      draft.placementStacks
+    )
+    setBookMenu(null)
+    notify(`Moved ${book.title} to ${shelfName}.`)
   }
 
   function endDrag(): void {
@@ -367,6 +435,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
       row,
       bookId,
       shelfWidths(sizes, draft.stacks),
+      Infinity,
       shelf.positions[stackId],
       neighbor
     )
@@ -386,6 +455,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
 
   function openBookMenu(bookId: number, trigger: HTMLButtonElement, x: number, y: number): void {
     hidePreview()
+    setChoosingShelf(false)
     setBookMenu({
       bookId,
       trigger,
@@ -447,6 +517,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
             source,
             slotId,
             shelfWidths(nextSizes, candidate),
+            Infinity,
             previous.left
           )
           if (restored) {
@@ -489,6 +560,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         aria-expanded={bookMenu?.bookId === book.id}
         data-shelf-book={book.id}
         data-dragging={draggedBookId === book.id || undefined}
+        data-search-match={(query && matchingIds.has(book.id)) || undefined}
         onMouseEnter={(event) => queuePreview(book.id, event.currentTarget, !faceOut)}
         onMouseLeave={hidePreview}
         onClick={() => onOpen(book)}
@@ -527,9 +599,9 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     )
   }
 
-  function renderSlot(slotId: number, shelf: Shelf): ReactNode {
+  function renderSlot(slotId: number, left: number): ReactNode {
     const members = stacks.get(slotId)
-    const books = (members ?? [slotId]).flatMap((id) => matchingById.get(id) ?? [])
+    const books = (members ?? [slotId]).flatMap((id) => booksById.get(id) ?? [])
     if (!books.length) return null
     const canStack = members && membersAfterDrop(slotId) !== null
     return (
@@ -537,7 +609,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         key={slotId}
         role="listitem"
         data-shelf-slot={slotId}
-        style={{ '--shelf-x': `${shelf.positions[slotId]}px` } as CSSProperties}
+        style={{ '--shelf-x': `${left}px` } as CSSProperties}
         className="bookshelf-slot"
       >
         {members ? (
@@ -586,18 +658,44 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     <section
       aria-label="Bookshelf"
       className="bookshelf-section"
-      style={{ '--shelf-span': `${SHELF_SPAN}px` } as CSSProperties}
+      data-searching={(query && matchingIds.size > 0) || undefined}
     >
+      {tools &&
+        createPortal(
+          <>
+            {shelves.length > 1 && (
+              <FilterPicker
+                label="Jump to shelf"
+                options={shelves.map((shelf, index) => ({
+                  value: String(shelf.id),
+                  label: shelf.name ?? `Shelf ${index + 1}`
+                }))}
+                onChange={jumpToShelf}
+                align="end"
+              />
+            )}
+            <p
+              role="status"
+              className={query && matchingIds.size === 0 ? 'text-xs text-ink-muted' : 'sr-only'}
+            >
+              {query &&
+                (matchingIds.size === 0
+                  ? 'No matches'
+                  : `${matchingIds.size} ${matchingIds.size === 1 ? 'match' : 'matches'}`)}
+            </p>
+          </>,
+          tools
+        )}
       <p className="mb-3 text-[13px] text-ink-muted">
-        Drag books to arrange them. Right-click a book to turn it or hide it from the shelf.
+        Drag books to arrange them. Right-click a book for options.
       </p>
-      <div className="bookshelf">
+      <div className="bookshelf" ref={shelfRef}>
         {shelves.map((shelf, index) => {
           const empty = shelf.slotIds.length === 0
           const defaultName = `Shelf ${index + 1}`
           const name = shelf.name ?? defaultName
           return (
-            <div key={shelf.id}>
+            <div key={shelf.id} data-shelf-id={shelf.id}>
               <div className="bookshelf-header flex items-center justify-between gap-2 px-3">
                 <EditableTitle
                   label={`Name for shelf ${index + 1}`}
@@ -638,59 +736,67 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   </div>
                 )}
               </div>
-              <div
-                className="bookshelf-row"
-                onDragOver={(event) => {
-                  if (draggedBookId === null) return
-                  event.preventDefault()
-                  setStackTarget(null)
-                  const target = placementAt(event, shelf)
-                  event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
-                  if (target) showDropOutline(event.currentTarget, target)
-                  else hideDropOutline(event.currentTarget)
-                }}
-                onDragLeave={(event) => {
-                  if (
-                    !(event.relatedTarget instanceof Node) ||
-                    !event.currentTarget.contains(event.relatedTarget)
-                  ) {
-                    hideDropOutline(event.currentTarget)
-                  }
-                }}
-                onDrop={(event) => {
-                  if (draggedBookId === null) return
-                  event.preventDefault()
-                  const target = placementAt(event, shelf)
-                  if (target) move(target.shelf)
-                  endDrag()
-                }}
-              >
-                <div role="list" aria-label={name} className="bookshelf-track">
-                  <div className="bookshelf-spines">
-                    {shelf.slotIds.map((slotId) => renderSlot(slotId, shelf))}
+              {wrapShelf(shelf, widths, span).map((row, rowIndex, rows) => (
+                <div
+                  key={rowIndex}
+                  className="bookshelf-row"
+                  data-continues={rowIndex < rows.length - 1 || undefined}
+                  onDragOver={(event) => {
+                    if (draggedBookId === null) return
+                    event.preventDefault()
+                    setStackTarget(null)
+                    const target = placementAt(event, row)
+                    event.dataTransfer.dropEffect = target === null ? 'none' : 'move'
+                    if (target) showDropOutline(event.currentTarget, target)
+                    else hideDropOutline(event.currentTarget)
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      !(event.relatedTarget instanceof Node) ||
+                      !event.currentTarget.contains(event.relatedTarget)
+                    ) {
+                      hideDropOutline(event.currentTarget)
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (draggedBookId === null) return
+                    event.preventDefault()
+                    const target = placementAt(event, row)
+                    if (target) move(shelf.id, row, target.row)
+                    endDrag()
+                  }}
+                >
+                  <div
+                    role="list"
+                    aria-label={rowIndex === 0 ? name : `${name}, row ${rowIndex + 1}`}
+                    className="bookshelf-track"
+                  >
+                    <div className="bookshelf-spines">
+                      {row.slotIds.map((slotId) => renderSlot(slotId, row.positions[slotId]))}
+                    </div>
                   </div>
+                  <div aria-hidden="true" className="bookshelf-drop-layer">
+                    <span className="bookshelf-drop-preview" />
+                  </div>
+                  {empty && (
+                    <>
+                      <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
+                        Drag books here
+                      </p>
+                      {shelves.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Remove empty shelf ${index + 1}`}
+                          className="btn btn-ghost absolute top-2 right-2 text-[12px]"
+                          onClick={() => saveRows(shelves.filter((row) => row.id !== shelf.id))}
+                        >
+                          Remove shelf
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div aria-hidden="true" className="bookshelf-drop-layer">
-                  <span className="bookshelf-drop-preview" />
-                </div>
-                {empty && (
-                  <>
-                    <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
-                      Drag books here
-                    </p>
-                    {shelves.length > 1 && (
-                      <button
-                        type="button"
-                        aria-label={`Remove empty shelf ${index + 1}`}
-                        className="btn btn-ghost absolute top-2 right-2 text-[12px]"
-                        onClick={() => saveRows(shelves.filter((row) => row.id !== shelf.id))}
-                      >
-                        Remove shelf
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
+              ))}
             </div>
           )
         })}
@@ -699,10 +805,21 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         <Dialog.Root open modal={false} onOpenChange={() => setBookMenu(null)}>
           <Dialog.Portal>
             <Dialog.Content
+              ref={bookMenuRef}
               role="menu"
               aria-describedby={undefined}
-              className="fixed z-50 rounded-card border border-hairline bg-surface p-1 shadow-pop"
-              style={{ left: bookMenu.left, top: bookMenu.top, width: BOOK_MENU_WIDTH }}
+              className="fixed z-50 overflow-y-auto overscroll-contain rounded-card border border-hairline bg-surface p-1 shadow-pop"
+              style={{
+                left: bookMenu.left,
+                top: choosingShelf
+                  ? Math.max(
+                      8,
+                      Math.min(bookMenu.top, window.innerHeight - DESTINATION_MENU_HEIGHT - 8)
+                    )
+                  : bookMenu.top,
+                width: BOOK_MENU_WIDTH,
+                maxHeight: DESTINATION_MENU_HEIGHT
+              }}
               onKeyDown={moveMenuFocus}
               onEscapeKeyDown={(event) => event.stopPropagation()}
               onCloseAutoFocus={(event) => {
@@ -717,33 +834,68 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                 }
               }}
             >
-              <Dialog.Title className="sr-only">Options for {menuBook.title}</Dialog.Title>
-              {menuStack === undefined && (
-                <Dialog.Close
-                  role="menuitem"
-                  className="btn w-full justify-start px-2 py-1.5 text-sm"
-                  onClick={() => turnBook(menuBook.id)}
-                >
-                  {faceOutIds.has(menuBook.id) ? 'Show spine' : 'Show cover'}
-                </Dialog.Close>
+              <Dialog.Title
+                className={choosingShelf ? 'px-2 py-1 text-xs text-ink-muted' : 'sr-only'}
+              >
+                {choosingShelf ? 'Move to shelf' : `Options for ${menuBook.title}`}
+              </Dialog.Title>
+              {choosingShelf ? (
+                shelves.map((shelf, index) => {
+                  if (shelf.id === menuShelf.id) return null
+                  const name = shelf.name ?? `Shelf ${index + 1}`
+                  return (
+                    <button
+                      key={shelf.id}
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      title={name}
+                      onClick={() => moveBookToShelf(menuBook, shelf.id, name)}
+                    >
+                      <span className="truncate">{name}</span>
+                    </button>
+                  )
+                })
+              ) : (
+                <>
+                  {menuStack === undefined && (
+                    <Dialog.Close
+                      role="menuitem"
+                      className={menuItemClass}
+                      onClick={() => turnBook(menuBook.id)}
+                    >
+                      {faceOutIds.has(menuBook.id) ? 'Show spine' : 'Show cover'}
+                    </Dialog.Close>
+                  )}
+                  <Dialog.Close
+                    role="menuitem"
+                    className={menuItemClass}
+                    onClick={() => {
+                      if (menuStack === undefined) startStack(menuBook.id, menuShelf)
+                      else standBook(menuBook.id, menuShelf, menuStack)
+                    }}
+                  >
+                    {menuStack === undefined ? 'Start a stack' : 'Stand upright'}
+                  </Dialog.Close>
+                  {shelves.length > 1 && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      onClick={() => setChoosingShelf(true)}
+                    >
+                      Move to shelf…
+                    </button>
+                  )}
+                  <Dialog.Close
+                    role="menuitem"
+                    className={menuItemClass}
+                    onClick={() => hideBook(menuBook, menuShelf)}
+                  >
+                    Hide from shelf
+                  </Dialog.Close>
+                </>
               )}
-              <Dialog.Close
-                role="menuitem"
-                className="btn w-full justify-start px-2 py-1.5 text-sm"
-                onClick={() => {
-                  if (menuStack === undefined) startStack(menuBook.id, menuShelf)
-                  else standBook(menuBook.id, menuShelf, menuStack)
-                }}
-              >
-                {menuStack === undefined ? 'Start a stack' : 'Stand upright'}
-              </Dialog.Close>
-              <Dialog.Close
-                role="menuitem"
-                className="btn w-full justify-start px-2 py-1.5 text-sm"
-                onClick={() => hideBook(menuBook, menuShelf)}
-              >
-                Hide from shelf
-              </Dialog.Close>
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
@@ -821,6 +973,38 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         )}
     </section>
   )
+}
+
+function prepareShelfMove(
+  shelves: Shelf[],
+  stacks: ShelfStacks,
+  bookId: number,
+  reservedStackId?: number
+): {
+  rows: Shelf[]
+  stacks: ShelfStacks
+  horizontal: boolean
+  removedSlot: number | undefined
+  placementId: number
+  placementStacks: ShelfStacks
+} {
+  const detached = detachShelfBook(shelves, stacks, bookId)
+  const sourceStackId = stackForBook(stacks, bookId)
+  const removedSlot =
+    sourceStackId !== undefined && detached.stacks.has(sourceStackId)
+      ? undefined
+      : (sourceStackId ?? bookId)
+  const placementId = removedSlot ?? nextStackId(stacks, reservedStackId)
+  const horizontal = sourceStackId !== undefined
+  return {
+    ...detached,
+    horizontal,
+    removedSlot,
+    placementId,
+    placementStacks: horizontal
+      ? new Map(detached.stacks).set(placementId, [bookId])
+      : detached.stacks
+  }
 }
 
 function moveMenuFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {

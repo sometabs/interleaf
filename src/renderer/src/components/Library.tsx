@@ -20,12 +20,14 @@ export default function Library({ onAdd }: Props): ReactNode {
   const { navigate } = useView()
   const { data: books = [], isPending } = useBooks()
   const [filter, setFilter] = useState('')
+  const [shelfTools, setShelfTools] = useState<HTMLDivElement | null>(null)
   const [grouping, setGrouping] = usePersistentState<Grouping>(
     'interleaf.libraryGrouping',
     'status',
     parseGrouping
   )
   const query = filter.trim().toLowerCase()
+  const shelfLayout = layout === 'shelf'
   const matching = query
     ? books.filter(
         (book) =>
@@ -52,8 +54,14 @@ export default function Library({ onAdd }: Props): ReactNode {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 pt-7 pb-16">
-      <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
+    <div
+      className={
+        shelfLayout ? 'flex h-full flex-col pt-7' : 'h-full overflow-y-auto px-8 pt-7 pb-16'
+      }
+    >
+      <header
+        className={`mb-5 flex flex-wrap items-center gap-x-4 gap-y-3${shelfLayout ? ' shrink-0 px-8' : ''}`}
+      >
         <h1 className="mr-auto text-[22px]">Library</h1>
 
         {layout === 'grid' && (
@@ -62,21 +70,30 @@ export default function Library({ onAdd }: Props): ReactNode {
 
         <input
           className="field max-w-64"
-          placeholder="Filter by title or author…"
-          aria-label="Filter library"
+          placeholder={shelfLayout ? 'Find a book on the shelves…' : 'Filter by title or author…'}
+          aria-label={shelfLayout ? 'Find books on shelves' : 'Filter library'}
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
+        {shelfLayout && <div ref={setShelfTools} className="contents" />}
       </header>
 
-      {matching.length === 0 ? (
+      {shelfLayout ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-16">
+          <div className="-mx-6">
+            <Bookshelf
+              books={books}
+              matching={matching}
+              query={query}
+              tools={shelfTools}
+              onOpen={openBook}
+            />
+          </div>
+        </div>
+      ) : matching.length === 0 ? (
         <p className="py-8 text-center text-ink-muted">
           {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
         </p>
-      ) : layout === 'shelf' ? (
-        <div className="-mx-6">
-          <Bookshelf books={books} matching={matching} onOpen={openBook} />
-        </div>
       ) : (
         groupBooks(matching, grouping).map((shelf) => (
           <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />

@@ -169,7 +169,7 @@ export default function FilterPicker({
                 <button
                   key={option.value}
                   type="button"
-                  aria-pressed={option.value === value}
+                  aria-pressed={value === undefined ? undefined : option.value === value}
                   data-current={option.value === value}
                   className={rowClass}
                   onClick={() => choose(option.value)}
