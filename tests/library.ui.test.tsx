@@ -148,7 +148,7 @@ describe('arranging the bookshelf', () => {
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
       fireEvent.dragEnd(spine)
 
-      fireEvent.contextMenu(spine)
+      chooseBookAction(spine, 'Show cover')
       fireEvent.mouseEnter(spine)
       act(() => vi.advanceTimersByTime(399))
       expect(screen.queryByText('Solaris', { selector: 'p' })).toBeNull()
@@ -315,7 +315,7 @@ describe('arranging the bookshelf', () => {
     const first = renderApp(<Library onAdd={() => {}} />)
     const label = 'Solaris by Stanisław Lem'
     const solaris = await screen.findByRole('button', { name: label })
-    fireEvent.contextMenu(solaris)
+    chooseBookAction(solaris, 'Show cover')
     expect(solaris.style.width).toBe('112px')
     expect(within(solaris).getByTestId('cover').querySelector('img')?.getAttribute('src')).toBe(
       'bookcover://covers/book-1-test.jpg'
@@ -330,7 +330,7 @@ describe('arranging the bookshelf', () => {
     renderApp(<Library onAdd={() => {}} />)
     const restored = await screen.findByRole('button', { name: label })
     expect(within(restored).getByTestId('cover')).toBeTruthy()
-    fireEvent.contextMenu(restored)
+    chooseBookAction(restored, 'Show spine')
     expect(within(restored).queryByTestId('cover')).toBeNull()
     expect(restored.style.width).toBe('43px')
   })
@@ -343,7 +343,7 @@ describe('arranging the bookshelf', () => {
     renderApp(<Library onAdd={() => {}} />)
     const book = await screen.findByRole('button', { name: 'Book 1' })
     const first = screen.getByRole('list', { name: 'Shelf 1' })
-    fireEvent.contextMenu(book)
+    chooseBookAction(book, 'Show cover')
     expect(within(first).getAllByRole('button')).toHaveLength(10)
     expect(within(book).getByTestId('cover')).toBeTruthy()
     expect(
@@ -352,7 +352,7 @@ describe('arranging the bookshelf', () => {
       })
     ).toBeTruthy()
 
-    fireEvent.contextMenu(book)
+    chooseBookAction(book, 'Show spine')
     expect(screen.queryByRole('list', { name: 'Shelf 1, row 2' })).toBeNull()
     expect(within(first).getAllByRole('button')).toHaveLength(11)
   })
@@ -398,6 +398,8 @@ describe('arranging the bookshelf', () => {
       width = 220
       act(() => resize())
       const continuation = screen.getByRole('list', { name: 'Favorites, row 2' })
+      expect(favorites.closest('.bookshelf-row')?.hasAttribute('data-continues')).toBe(true)
+      expect(continuation.closest('.bookshelf-row')?.hasAttribute('data-continues')).toBe(false)
       expect(bookLabels(favorites)).toEqual(['Book 1', 'Book 2', 'Book 3', 'Book 4'])
       expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7'])
       expect(window.localStorage.getItem(storageKey)).toBe(saved)
@@ -420,6 +422,43 @@ describe('arranging the bookshelf', () => {
     } finally {
       clientWidth.mockRestore()
     }
+  })
+
+  it('moves a book to the end of a named shelf from its keyboard menu and remembers the move', async () => {
+    window.localStorage.setItem(
+      'interleaf.bookshelves',
+      JSON.stringify([
+        { id: 1, name: 'To sort', bookIds: [1, 2], positions: { 2: 170 } },
+        { id: 2, name: 'Favorites', bookIds: [3], positions: { 3: 90 } }
+      ])
+    )
+    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    const first = renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+    const label = 'Solaris by Stanisław Lem'
+    const solaris = await screen.findByRole('button', { name: label })
+
+    act(() => solaris.focus())
+    await user.keyboard('{Shift>}{F10}{/Shift}{ArrowDown}{Enter}')
+    const destinations = screen.getByRole('menu', { name: 'Move to shelf' })
+    expect(within(destinations).queryByRole('menuitem', { name: 'To sort' })).toBeNull()
+    expect(document.activeElement).toBe(
+      within(destinations).getByRole('menuitem', { name: 'Favorites' })
+    )
+    await user.keyboard('{Enter}')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(
+      within(screen.getByRole('list', { name: 'To sort' })).queryByRole('button', { name: label })
+    ).toBeNull()
+
+    first.unmount()
+    renderApp(<Library onAdd={() => {}} />)
+    const favorites = await screen.findByRole('list', { name: 'Favorites' })
+    expect(
+      within(favorites)
+        .getAllByRole('button')
+        .map((book) => book.getAttribute('aria-label'))
+    ).toEqual(['Wolf Hall by Hilary Mantel', label])
   })
 
   it('adds, moves, and removes a quote frame while preserving the books on each shelf', async () => {
@@ -515,6 +554,11 @@ describe('arranging the bookshelf', () => {
     expect(within(second).getByRole('button', { name: 'Book 12' })).toBe(lastBook)
   })
 })
+
+function chooseBookAction(book: HTMLElement, action: string): void {
+  fireEvent.contextMenu(book)
+  fireEvent.click(screen.getByRole('menuitem', { name: action }))
+}
 
 describe('refreshing all metadata', () => {
   it('confirms the permanent action and reports progress', async () => {

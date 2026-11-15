@@ -2,7 +2,12 @@ import * as Dialog from '@radix-ui/react-dialog'
 import type { Book } from '@shared/api'
 import { toPlainText } from '@shared/plaintext'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, ReactNode } from 'react'
+import type {
+  CSSProperties,
+  DragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactNode
+} from 'react'
 import { createPortal } from 'react-dom'
 
 import { sameOrder } from '../lib/bookOrder'
@@ -22,6 +27,7 @@ import {
   type ShelfDecoration,
   type ShelfRow
 } from '../lib/bookshelfLayout'
+import { notify } from '../lib/feedback'
 import { usePersistentState } from '../lib/persistent'
 import { useNotes, useSpineColors } from '../lib/queries'
 import { isQuote } from '../lib/quotes'
@@ -46,11 +52,21 @@ interface Preview {
   width: number
 }
 
+interface BookMenu {
+  bookId: number
+  trigger: HTMLButtonElement
+  left: number
+  top: number
+}
+
 const PREVIEW_WIDTH = 248
 const TEXT_PREVIEW_WIDTH = 196
 const PREVIEW_MAX_HEIGHT = 144
 const PREVIEW_GAP = 10
 const FACE_OUT_WIDTH = 112
+const BOOK_MENU_WIDTH = 200
+const DESTINATION_MENU_HEIGHT = 240
+const menuItemClass = 'btn w-full justify-start px-2 py-1.5 text-sm'
 
 export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode {
   const { data: spineColors } = useSpineColors(books)
@@ -67,10 +83,13 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   )
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [bookMenu, setBookMenu] = useState<BookMenu | null>(null)
+  const [choosingShelf, setChoosingShelf] = useState(false)
   const [quotePickerOpen, setQuotePickerOpen] = useState(false)
   const [quoteQuery, setQuoteQuery] = useState('')
   const [span, setSpan] = useState(DEFAULT_SHELF_SPAN)
   const shelfRef = useRef<HTMLDivElement>(null)
+  const bookMenuRef = useRef<HTMLDivElement>(null)
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
@@ -122,6 +141,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   )
   const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
   const previewBook = preview && matchingById.get(preview.bookId)
+  const menuBook = bookMenu && matchingById.get(bookMenu.bookId)
 
   useLayoutEffect(() => {
     const shelf = shelfRef.current
@@ -141,24 +161,34 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   }, [])
 
   useEffect(() => {
+    function dismissFloatingContent(event: Event): void {
+      if (event.target instanceof Node && bookMenuRef.current?.contains(event.target)) return
+      hidePreview()
+      setBookMenu(null)
+    }
+
     function dismissOnEscape(event: KeyboardEvent): void {
       if (event.key === 'Escape') hidePreview()
     }
 
-    window.addEventListener('scroll', hidePreview, true)
-    window.addEventListener('resize', hidePreview)
+    window.addEventListener('scroll', dismissFloatingContent, true)
+    window.addEventListener('resize', dismissFloatingContent)
     window.addEventListener('keydown', dismissOnEscape)
     return () => {
       window.clearTimeout(previewTimer.current)
-      window.removeEventListener('scroll', hidePreview, true)
-      window.removeEventListener('resize', hidePreview)
+      window.removeEventListener('scroll', dismissFloatingContent, true)
+      window.removeEventListener('resize', dismissFloatingContent)
       window.removeEventListener('keydown', dismissOnEscape)
     }
   }, [hidePreview])
 
+  useLayoutEffect(() => {
+    if (choosingShelf) bookMenuRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+  }, [choosingShelf])
+
   function queuePreview(bookId: number, button: HTMLButtonElement): void {
     hidePreview()
-    if (draggedItemId !== null) return
+    if (draggedItemId !== null || bookMenu) return
 
     previewTimer.current = window.setTimeout(() => {
       if (!button.isConnected) return
@@ -263,6 +293,25 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     saveRows(arrangeShelves(updated, widths))
   }
 
+  function moveBookToShelf(book: Book, shelfId: number, shelfName: string): void {
+    const updated = shelves.map((shelf) => {
+      if (shelf.id === shelfId) return { ...shelf, itemIds: [...shelf.itemIds, book.id] }
+      if (shelf.itemIds.includes(book.id)) {
+        return { ...shelf, itemIds: shelf.itemIds.filter((id) => id !== book.id) }
+      }
+      return shelf
+    })
+    saveRows(arrangeShelves(updated, widths))
+    setBookMenu(null)
+    notify(`Moved ${book.title} to ${shelfName}.`)
+  }
+
+  function openBookMenu(bookId: number, trigger: HTMLButtonElement, x: number, y: number): void {
+    hidePreview()
+    setChoosingShelf(false)
+    setBookMenu({ bookId, trigger, left: x, top: y })
+  }
+
   function startDrag(event: DragEvent<HTMLElement>, itemId: number): void {
     hidePreview()
     const { left } = event.currentTarget.getBoundingClientRect()
@@ -350,13 +399,22 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           style={style}
           draggable
           aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={bookMenu?.bookId === book.id}
           data-dragging={draggedItemId === book.id || undefined}
           onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
           onMouseLeave={hidePreview}
           onClick={() => onOpen(book)}
           onContextMenu={(event) => {
             event.preventDefault()
-            turnBook(book.id)
+            openBookMenu(book.id, event.currentTarget, event.clientX, event.clientY)
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+            event.preventDefault()
+            event.stopPropagation()
+            const { left, bottom } = event.currentTarget.getBoundingClientRect()
+            openBookMenu(book.id, event.currentTarget, left, bottom)
           }}
           onDragStart={(event) => startDrag(event, book.id)}
           onDragEnd={endDrag}
@@ -435,7 +493,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   return (
     <section aria-label="Bookshelf" className="bookshelf-section">
       <p className="mb-3 text-[13px] text-ink-muted">
-        Drag items to arrange them. Right-click a book to show its cover or spine.
+        Drag items to arrange them. Right-click a book for options.
       </p>
       <div className="bookshelf" ref={shelfRef}>
         {shelves.map((shelf, index) => {
@@ -484,10 +542,11 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   </div>
                 )}
               </div>
-              {wrapShelf(shelf, widths, span).map((row, rowIndex) => (
+              {wrapShelf(shelf, widths, span).map((row, rowIndex, rows) => (
                 <div
                   key={rowIndex}
                   className="bookshelf-row"
+                  data-continues={rowIndex < rows.length - 1 || undefined}
                   onDragOver={(event) => {
                     if (draggedItemId === null) return
                     event.preventDefault()
@@ -552,6 +611,86 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           )
         })}
       </div>
+      {menuBook && bookMenu && (
+        <Dialog.Root open modal={false} onOpenChange={() => setBookMenu(null)}>
+          <Dialog.Portal>
+            <Dialog.Content
+              ref={bookMenuRef}
+              role="menu"
+              aria-describedby={undefined}
+              className="fixed z-50 overflow-y-auto overscroll-contain rounded-card border border-hairline bg-surface p-1 shadow-pop"
+              style={{
+                left: Math.max(8, Math.min(bookMenu.left, window.innerWidth - BOOK_MENU_WIDTH - 8)),
+                top: Math.max(
+                  8,
+                  Math.min(
+                    bookMenu.top,
+                    window.innerHeight - (choosingShelf ? DESTINATION_MENU_HEIGHT : 80) - 8
+                  )
+                ),
+                width: BOOK_MENU_WIDTH,
+                maxHeight: DESTINATION_MENU_HEIGHT
+              }}
+              onKeyDown={moveMenuFocus}
+              onEscapeKeyDown={(event) => event.stopPropagation()}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault()
+                if (document.activeElement !== document.body) return
+                const trigger = bookMenu.trigger.isConnected
+                  ? bookMenu.trigger
+                  : shelfRef.current?.querySelector<HTMLButtonElement>(
+                      `[data-shelf-item="${bookMenu.bookId}"] > button`
+                    )
+                trigger?.focus({ preventScroll: true })
+              }}
+            >
+              <Dialog.Title
+                className={choosingShelf ? 'px-2 py-1 text-xs text-ink-muted' : 'sr-only'}
+              >
+                {choosingShelf ? 'Move to shelf' : `Options for ${menuBook.title}`}
+              </Dialog.Title>
+              {choosingShelf ? (
+                shelves.map((shelf, index) => {
+                  if (shelf.itemIds.includes(menuBook.id)) return null
+                  const name = shelf.name ?? `Shelf ${index + 1}`
+                  return (
+                    <button
+                      key={shelf.id}
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      title={name}
+                      onClick={() => moveBookToShelf(menuBook, shelf.id, name)}
+                    >
+                      <span className="truncate">{name}</span>
+                    </button>
+                  )
+                })
+              ) : (
+                <>
+                  <Dialog.Close
+                    role="menuitem"
+                    className={menuItemClass}
+                    onClick={() => turnBook(menuBook.id)}
+                  >
+                    {faceOutIds.has(menuBook.id) ? 'Show spine' : 'Show cover'}
+                  </Dialog.Close>
+                  {shelves.length > 1 && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      onClick={() => setChoosingShelf(true)}
+                    >
+                      Move to shelf…
+                    </button>
+                  )}
+                </>
+              )}
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
       <div className="mt-3 flex items-center gap-2">
         <button type="button" className="btn btn-outline" onClick={addShelf}>
           Add shelf
@@ -648,4 +787,15 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
         )}
     </section>
   )
+}
+
+function moveMenuFocus(event: ReactKeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+  const items = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+  )
+  const index = items.findIndex((item) => item === event.target)
+  const direction = event.key === 'ArrowDown' ? 1 : -1
+  event.preventDefault()
+  items[(index + direction + items.length) % items.length]?.focus()
 }
