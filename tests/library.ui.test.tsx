@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import Library from '../src/renderer/src/components/Library'
 import { resetConfirm } from '../src/renderer/src/lib/confirm'
-import { installBridge, makeBook, makeNote, renderApp } from './helpers/render'
+import { installBridge, makeBook, renderApp } from './helpers/render'
 
 afterEach(resetConfirm)
 
@@ -115,6 +115,55 @@ describe('filtering inside a grouping', () => {
 describe('arranging the bookshelf', () => {
   beforeEach(() => {
     window.localStorage.setItem('interleaf.libraryLayout', '"shelf"')
+  })
+
+  it('finds books in shelf order while keeping their neighbors and shelf navigation visible', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+    const saved = JSON.stringify([
+      { id: 1, name: 'Favorites', bookIds: [2, 3], positions: {} },
+      { id: 2, name: 'Favorites from this year', bookIds: [1], positions: {} }
+    ])
+    window.localStorage.setItem('interleaf.bookshelves', saved)
+    installBridge({ books: [SOLARIS, { ...PICNIC, author: 'Stanisław Strugatsky' }, HALL] })
+    renderApp(<Library onAdd={() => {}} />)
+    const user = userEvent.setup()
+
+    try {
+      const search = await screen.findByRole('textbox', { name: 'Find books on shelves' })
+      const picnic = screen.getByRole('button', { name: 'Roadside Picnic by Stanisław Strugatsky' })
+      const solaris = screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })
+      const wolf = screen.getByRole('button', { name: 'Wolf Hall by Hilary Mantel' })
+      await user.type(search, 'stanisław')
+      await waitFor(() =>
+        expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
+      )
+      expect(scroll.mock.contexts.at(-1)).toBe(picnic.closest('[data-shelf-item]'))
+      expect(picnic.hasAttribute('data-search-match')).toBe(true)
+      expect(solaris.hasAttribute('data-search-match')).toBe(true)
+      expect(wolf.hasAttribute('data-search-match')).toBe(false)
+      expect(screen.getByRole('status').textContent).toBe('2 matches')
+
+      await user.click(screen.getByRole('button', { name: 'Jump to shelf' }))
+      const picker = screen.getByRole('dialog', { name: 'Jump to shelf' })
+      await user.click(within(picker).getByRole('button', { name: 'Favorites from this year' }))
+      expect(scroll).toHaveBeenLastCalledWith({
+        block: 'start',
+        inline: 'nearest',
+        behavior: 'smooth'
+      })
+      expect(scroll.mock.contexts.at(-1)).toBe(solaris.closest('[data-shelf-id]'))
+      expect(search).toHaveProperty('value', 'stanisław')
+
+      await user.type(search, 'zzz')
+      expect(screen.getByRole('status').textContent).toBe('No matches')
+      expect(solaris.isConnected).toBe(true)
+      expect(solaris.hasAttribute('data-search-match')).toBe(false)
+      await user.clear(search)
+      expect(screen.getByRole('status').textContent).toBe('')
+      expect(window.localStorage.getItem('interleaf.bookshelves')).toBe(saved)
+    } finally {
+      scroll.mockRestore()
+    }
   })
 
   it('shows the right hover preview for both orientations and hides it when a drag starts', async () => {
@@ -459,70 +508,6 @@ describe('arranging the bookshelf', () => {
         .getAllByRole('button')
         .map((book) => book.getAttribute('aria-label'))
     ).toEqual(['Wolf Hall by Hilary Mantel', label])
-  })
-
-  it('adds, moves, and removes a quote frame while preserving the books on each shelf', async () => {
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([
-        { id: 1, name: 'Favorites', bookIds: [1], positions: { 1: 180 } },
-        {
-          id: 2,
-          bookIds: [2],
-          positions: { 2: 250, '-1': 310 },
-          decorations: [{ id: -1, kind: 'plant' }]
-        }
-      ])
-    )
-    const bridge = installBridge({
-      books: [SOLARIS, PICNIC],
-      notes: [
-        makeNote({ id: 10, kind: 'highlight', bookId: 1, bodyMd: '**The ocean remembers.**' }),
-        makeNote({ id: 11, kind: 'highlight', bookId: 2, bodyMd: 'This is another quote.' }),
-        makeNote({ id: 12, kind: 'thought', bookId: 1, bodyMd: 'A private note.' })
-      ]
-    })
-    const first = renderApp(<Library onAdd={() => {}} />)
-    const user = userEvent.setup()
-    const add = await screen.findByRole('button', { name: 'Add quote frame' })
-    await user.click(add)
-    const picker = screen.getByRole('dialog', { name: 'Choose a quote' })
-    expect(await within(picker).findByText('This is another quote.')).toBeTruthy()
-    expect(within(picker).queryByText('A private note.')).toBeNull()
-    await user.type(within(picker).getByRole('textbox', { name: 'Filter quotes' }), 'solaris')
-    expect(within(picker).queryByText('This is another quote.')).toBeNull()
-    await user.click(within(picker).getByRole('button', { name: /The ocean remembers/ }))
-
-    const lastShelf = within(screen.getByRole('list', { name: 'Shelf 2' }))
-    const label = 'Quote frame: The ocean remembers.'
-    const frame = lastShelf.getByRole('img', { name: label })
-    expect(frame.getAttribute('title')).toContain('Stanisław Lem')
-    expect(lastShelf.getByRole('img', { name: 'Plant' })).toBeTruthy()
-
-    const favorites = screen.getByRole('list', { name: 'Favorites' })
-    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
-    fireEvent.dragStart(frame, { dataTransfer })
-    const drop = new MouseEvent('drop', { bubbles: true, clientX: 35 })
-    fireEvent(favorites.firstElementChild!, Object.assign(drop, { dataTransfer }))
-    expect(within(favorites).getByRole('img', { name: label })).toBeTruthy()
-    expect(lastShelf.queryByRole('img', { name: label })).toBeNull()
-
-    first.unmount()
-    renderApp(<Library onAdd={() => {}} />)
-    const restored = within(await screen.findByRole('list', { name: 'Favorites' }))
-    const restoredFrame = await restored.findByRole('img', { name: label })
-    expect(
-      restoredFrame.closest<HTMLElement>('[role="listitem"]')?.style.getPropertyValue('--shelf-x')
-    ).toBe('35px')
-    expect(
-      restored
-        .getByRole('button', { name: 'Solaris by Stanisław Lem' })
-        .parentElement?.style.getPropertyValue('--shelf-x')
-    ).toBe('180px')
-    await user.click(restored.getByRole('button', { name: 'Remove quote frame' }))
-    expect(restored.queryByRole('img', { name: label })).toBeNull()
-    expect(screen.getByRole('img', { name: 'Plant' })).toBeTruthy()
-    expect(bridge.notes).toHaveLength(3)
   })
 
   it('fits an older wide row and rejects drops onto a full shelf', async () => {

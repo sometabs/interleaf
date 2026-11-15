@@ -1,6 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import type { Book } from '@shared/api'
-import { toPlainText } from '@shared/plaintext'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   CSSProperties,
@@ -19,24 +18,25 @@ import {
   parseShelves,
   restoreShelf,
   saveShelves,
-  SHELF_DECORATIONS,
   shelfInsertion,
   spineWidth,
   wrapShelf,
   type Shelf,
-  type ShelfDecoration,
   type ShelfRow
 } from '../lib/bookshelfLayout'
 import { notify } from '../lib/feedback'
 import { usePersistentState } from '../lib/persistent'
-import { useNotes, useSpineColors } from '../lib/queries'
-import { isQuote } from '../lib/quotes'
+import { useSpineColors } from '../lib/queries'
+import { useSettings } from '../lib/settings'
 import Cover from './Cover'
 import EditableTitle from './EditableTitle'
+import FilterPicker from './FilterPicker'
 
 interface Props {
   books: Book[]
   matching: Book[]
+  query: string
+  tools: HTMLDivElement | null
   onOpen: (book: Book) => void
 }
 
@@ -68,8 +68,9 @@ const BOOK_MENU_WIDTH = 200
 const DESTINATION_MENU_HEIGHT = 240
 const menuItemClass = 'btn w-full justify-start px-2 py-1.5 text-sm'
 
-export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode {
+export default function Bookshelf({ books, matching, query, tools, onOpen }: Props): ReactNode {
   const { data: spineColors } = useSpineColors(books)
+  const { motionEnabled } = useSettings()
   const [savedShelves, setSavedShelves] = usePersistentState(
     'interleaf.bookshelves',
     [],
@@ -85,63 +86,46 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   const [preview, setPreview] = useState<Preview | null>(null)
   const [bookMenu, setBookMenu] = useState<BookMenu | null>(null)
   const [choosingShelf, setChoosingShelf] = useState(false)
-  const [quotePickerOpen, setQuotePickerOpen] = useState(false)
-  const [quoteQuery, setQuoteQuery] = useState('')
   const [span, setSpan] = useState(DEFAULT_SHELF_SPAN)
   const shelfRef = useRef<HTMLDivElement>(null)
+  const searchScrollTimer = useRef<number | undefined>(undefined)
   const bookMenuRef = useRef<HTMLDivElement>(null)
   const previewTimer = useRef<number | undefined>(undefined)
   const grabOffset = useRef(0)
   const dropOutline = useRef<HTMLElement | null>(null)
   const faceOutIds = useMemo(() => new Set(faceOutBooks), [faceOutBooks])
-  const decorations = useMemo(
+  const booksById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books])
+  const widths = useMemo(
     () =>
       new Map(
-        savedShelves.flatMap((shelf) => (shelf.decorations ?? []).map((item) => [item.id, item]))
+        books.map((book) => [
+          book.id,
+          faceOutIds.has(book.id) ? FACE_OUT_WIDTH : spineWidth(book.pageCount)
+        ])
       ),
-    [savedShelves]
+    [books, faceOutIds]
   )
-  const hasQuoteFrame = [...decorations.values()].some(({ kind }) => kind === 'quote-frame')
-  const quoteNotes = useNotes(undefined, quotePickerOpen || hasQuoteFrame)
-  const quotes = useMemo(() => {
-    const booksById = new Map(books.map((book) => [book.id, book]))
-    return new Map(
-      (quoteNotes.data ?? []).filter(isQuote).map((note) => [
-        note.id,
-        {
-          text: toPlainText(note.bodyMd),
-          book: note.bookId === null ? undefined : booksById.get(note.bookId)
-        }
-      ])
-    )
-  }, [books, quoteNotes.data])
-  const trimmedQuoteQuery = quoteQuery.trim().toLowerCase()
-  const matchingQuotes = quotePickerOpen
-    ? [...quotes].filter(
-        ([, { text, book }]) =>
-          text.length > 0 &&
-          [text, book?.title, book?.author].some((value) =>
-            value?.toLowerCase().includes(trimmedQuoteQuery)
-          )
-      )
-    : []
-  const widths = useMemo(() => {
-    const sizes = new Map(
-      books.map((book) => [
-        book.id,
-        faceOutIds.has(book.id) ? FACE_OUT_WIDTH : spineWidth(book.pageCount)
-      ])
-    )
-    for (const { id, kind } of decorations.values()) sizes.set(id, SHELF_DECORATIONS[kind].width)
-    return sizes
-  }, [books, faceOutIds, decorations])
   const shelves = useMemo(
     () => arrangeShelves(savedShelves.map(restoreShelf), widths),
     [savedShelves, widths]
   )
-  const matchingById = useMemo(() => new Map(matching.map((book) => [book.id, book])), [matching])
-  const previewBook = preview && matchingById.get(preview.bookId)
-  const menuBook = bookMenu && matchingById.get(bookMenu.bookId)
+  const matchingIds = useMemo(() => new Set(matching.map((book) => book.id)), [matching])
+  const previewBook = preview && booksById.get(preview.bookId)
+  const menuBook = bookMenu && booksById.get(bookMenu.bookId)
+  const firstMatchId = query
+    ? shelves.flatMap((shelf) => shelf.itemIds).find((id) => matchingIds.has(id))
+    : undefined
+
+  useEffect(() => {
+    if (firstMatchId === undefined) return
+    searchScrollTimer.current = window.setTimeout(() => {
+      shelfRef.current?.querySelector(`[data-shelf-item="${firstMatchId}"]`)?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest'
+      })
+    }, 200)
+    return () => window.clearTimeout(searchScrollTimer.current)
+  }, [query, firstMatchId])
 
   useLayoutEffect(() => {
     const shelf = shelfRef.current
@@ -185,6 +169,15 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   useLayoutEffect(() => {
     if (choosingShelf) bookMenuRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
   }, [choosingShelf])
+
+  function jumpToShelf(id: string): void {
+    window.clearTimeout(searchScrollTimer.current)
+    shelfRef.current?.querySelector(`[data-shelf-id="${id}"]`)?.scrollIntoView({
+      block: 'start',
+      inline: 'nearest',
+      behavior: motionEnabled ? 'smooth' : 'instant'
+    })
+  }
 
   function queuePreview(bookId: number, button: HTMLButtonElement): void {
     hidePreview()
@@ -256,8 +249,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     if (changedRow) {
       hideDropOutline()
       outline.style.width = `${widths.get(itemId)}px`
-      const decoration = decorations.get(itemId)
-      outline.style.height = `${decoration ? SHELF_DECORATIONS[decoration.kind].height : bookHeight(itemId)}px`
+      outline.style.height = `${bookHeight(itemId)}px`
       dropOutline.current = outline
     }
     outline.style.transform = `translateX(${target.outlineX}px)`
@@ -265,7 +257,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
   }
 
   function saveRows(rows: Shelf[]): void {
-    setSavedShelves(saveShelves(rows, decorations))
+    setSavedShelves(saveShelves(rows))
   }
 
   function move(itemId: number, shelfId: number, row: ShelfRow, target: ShelfRow): void {
@@ -331,21 +323,6 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     saveRows([...shelves, { id, itemIds: [], positions: {} }])
   }
 
-  function addQuoteFrame(quoteId: number): void {
-    const nextDecorations = new Map(decorations)
-    const nextWidths = new Map(widths)
-    const id = Math.min(0, ...decorations.keys()) - 1
-    nextDecorations.set(id, { id, kind: 'quote-frame', quoteId })
-    nextWidths.set(id, SHELF_DECORATIONS['quote-frame'].width)
-    setSavedShelves(saveShelves(arrangeShelves(shelves, nextWidths), nextDecorations))
-  }
-
-  function removeDecoration(id: number): void {
-    const nextWidths = new Map(widths)
-    nextWidths.delete(id)
-    saveRows(arrangeShelves(shelves, nextWidths))
-  }
-
   function moveShelf(index: number, offset: -1 | 1): void {
     const destination = index + offset
     if (destination < 0 || destination >= shelves.length) return
@@ -402,6 +379,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           aria-haspopup="menu"
           aria-expanded={bookMenu?.bookId === book.id}
           data-dragging={draggedItemId === book.id || undefined}
+          data-search-match={(query && matchingIds.has(book.id)) || undefined}
           onMouseEnter={(event) => queuePreview(book.id, event.currentTarget)}
           onMouseLeave={hidePreview}
           onClick={() => onOpen(book)}
@@ -434,66 +412,28 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
     )
   }
 
-  function renderDecoration(decoration: ShelfDecoration, left: number): ReactNode {
-    const { id, kind } = decoration
-    const { label, width, height } = SHELF_DECORATIONS[kind]
-    const quote = decoration.kind === 'quote-frame' ? quotes.get(decoration.quoteId) : undefined
-    const passage = quote?.text || (quoteNotes.isPending ? 'Loading quote…' : 'Quote unavailable')
-    const caption = quote?.book?.author ?? quote?.book?.title
-    return (
-      <div
-        key={id}
-        role="listitem"
-        data-shelf-item={id}
-        style={{ '--shelf-x': `${left}px` } as CSSProperties}
-        className="bookshelf-slot"
-      >
-        <div className="group relative">
-          <div
-            role="img"
-            aria-label={kind === 'quote-frame' ? `${label}: ${passage}` : label}
-            title={
-              kind === 'quote-frame' ? [passage, caption].filter(Boolean).join('\n') : undefined
-            }
-            className={`bookshelf-decoration bookshelf-decoration-${kind}`}
-            style={{ width, height }}
-            draggable
-            data-dragging={draggedItemId === id || undefined}
-            onDragStart={(event) => startDrag(event, id)}
-            onDragEnd={endDrag}
-          >
-            {kind === 'plant' && (
-              <span aria-hidden="true" className="bookshelf-plant-leaves">
-                <span />
-                <span />
-                <span />
-              </span>
-            )}
-            {kind === 'quote-frame' && (
-              <div className="bookshelf-frame-print" aria-hidden="true">
-                <span className="line-clamp-3 wrap-anywhere">{passage}</span>
-                {caption && <span className="bookshelf-frame-credit">{caption}</span>}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label={`Remove ${label.toLowerCase()}`}
-            title={`Remove ${label.toLowerCase()}`}
-            className="bookshelf-decoration-remove absolute -top-2 right-0 z-10 grid size-5 place-items-center rounded-full border border-hairline bg-surface text-sm text-ink-muted shadow-card hover:text-ink"
-            onClick={() => removeDecoration(id)}
-          >
-            ×
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <section aria-label="Bookshelf" className="bookshelf-section">
+    <section
+      aria-label="Bookshelf"
+      className="bookshelf-section"
+      data-searching={(query && matching.length > 0) || undefined}
+    >
+      {tools &&
+        shelves.length > 1 &&
+        createPortal(
+          <FilterPicker
+            label="Jump to shelf"
+            options={shelves.map((shelf, index) => ({
+              value: String(shelf.id),
+              label: shelf.name ?? `Shelf ${index + 1}`
+            }))}
+            onChange={jumpToShelf}
+            align="end"
+          />,
+          tools
+        )}
       <p className="mb-3 text-[13px] text-ink-muted">
-        Drag items to arrange them. Right-click a book for options.
+        Drag books to arrange them. Right-click a book for options.
       </p>
       <div className="bookshelf" ref={shelfRef}>
         {shelves.map((shelf, index) => {
@@ -501,7 +441,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           const defaultName = `Shelf ${index + 1}`
           const name = shelf.name ?? defaultName
           return (
-            <div key={shelf.id}>
+            <div key={shelf.id} data-shelf-id={shelf.id}>
               <div className="bookshelf-header flex items-center justify-between gap-2 px-3">
                 <EditableTitle
                   label={`Name for shelf ${index + 1}`}
@@ -578,9 +518,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   >
                     <div className="bookshelf-spines">
                       {row.itemIds.map((id) => {
-                        const decoration = decorations.get(id)
-                        if (decoration) return renderDecoration(decoration, row.positions[id])
-                        const book = matchingById.get(id)
+                        const book = booksById.get(id)
                         return book && renderBook(book, row.positions[id])
                       })}
                     </div>
@@ -591,7 +529,7 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
                   {empty && (
                     <>
                       <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] text-ink-muted">
-                        Drag items here
+                        Drag books here
                       </p>
                       {shelves.length > 1 && (
                         <button
@@ -691,65 +629,9 @@ export default function Bookshelf({ books, matching, onOpen }: Props): ReactNode
           </Dialog.Portal>
         </Dialog.Root>
       )}
-      <div className="mt-3 flex items-center gap-2">
-        <button type="button" className="btn btn-outline" onClick={addShelf}>
-          Add shelf
-        </button>
-        <Dialog.Root
-          open={quotePickerOpen}
-          onOpenChange={(open) => {
-            setQuotePickerOpen(open)
-            if (open) hidePreview()
-            else setQuoteQuery('')
-          }}
-        >
-          <Dialog.Trigger className="btn btn-outline">Add quote frame</Dialog.Trigger>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
-            <Dialog.Content
-              aria-describedby={undefined}
-              onEscapeKeyDown={(event) => event.stopPropagation()}
-              className="fixed top-1/2 left-1/2 z-50 flex max-h-[min(540px,calc(100vh-32px))] w-[min(480px,calc(100vw-32px))] -translate-1/2 flex-col rounded-card border border-hairline bg-surface p-4 shadow-pop"
-            >
-              <Dialog.Title className="mb-3 text-[16px] font-semibold">Choose a quote</Dialog.Title>
-              <input
-                className="field"
-                aria-label="Filter quotes"
-                placeholder="Filter by quote, book, or author…"
-                value={quoteQuery}
-                onChange={(event) => setQuoteQuery(event.target.value)}
-              />
-              <div className="my-2 min-h-0 overflow-y-auto">
-                {quoteNotes.isPending ? (
-                  <p className="px-2 py-3 text-sm text-ink-muted">Loading quotes…</p>
-                ) : quoteNotes.isError ? (
-                  <p role="alert" className="px-2 py-3 text-sm text-danger">
-                    Couldn’t load quotes.
-                  </p>
-                ) : matchingQuotes.length === 0 ? (
-                  <p className="px-2 py-3 text-sm text-ink-muted">
-                    {trimmedQuoteQuery ? 'No matching quotes.' : 'Save a quote to frame it here.'}
-                  </p>
-                ) : (
-                  matchingQuotes.map(([quoteId, { text, book }]) => (
-                    <Dialog.Close
-                      key={quoteId}
-                      className="block w-full rounded-control px-2 py-2 text-left hover:bg-hover"
-                      onClick={() => addQuoteFrame(quoteId)}
-                    >
-                      <span className="line-clamp-2 wrap-anywhere text-sm">{text}</span>
-                      {book && (
-                        <span className="block truncate text-xs text-ink-muted">{book.title}</span>
-                      )}
-                    </Dialog.Close>
-                  ))
-                )}
-              </div>
-              <Dialog.Close className="btn btn-outline self-end">Cancel</Dialog.Close>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
-      </div>
+      <button type="button" className="btn btn-outline mt-3" onClick={addShelf}>
+        Add shelf
+      </button>
       {preview &&
         previewBook &&
         createPortal(

@@ -10,22 +10,8 @@ export interface ShelfRow extends Pick<Shelf, 'itemIds' | 'positions'> {
   origin: number
 }
 
-export const SHELF_DECORATIONS = {
-  plant: { label: 'Plant', width: 48, height: 66 },
-  'left-bookend': { label: 'Left bookend', width: 26, height: 58 },
-  'right-bookend': { label: 'Right bookend', width: 26, height: 58 },
-  'quote-frame': { label: 'Quote frame', width: 120, height: 94 }
-} as const
-
-export type DecorationKind = keyof typeof SHELF_DECORATIONS
-
-export type ShelfDecoration =
-  | { id: number; kind: Exclude<DecorationKind, 'quote-frame'> }
-  | { id: number; kind: 'quote-frame'; quoteId: number }
-
 interface SavedShelf extends Omit<Shelf, 'itemIds'> {
   bookIds: number[]
-  decorations?: ShelfDecoration[]
 }
 
 export const DEFAULT_SHELF_SPAN = 628
@@ -60,66 +46,29 @@ export function parseShelves(raw: unknown): SavedShelf[] | null {
     }
     shelfIds.add(shelf.id)
     const bookIds: number[] = []
-    const decorations: ShelfDecoration[] = []
     const positions: Shelf['positions'] = {}
     for (const id of shelf.bookIds) {
       if (!isId(id) || itemIds.has(id)) continue
       itemIds.add(id)
       bookIds.push(id)
-    }
-    if (Array.isArray(shelf.decorations)) {
-      for (const decoration of shelf.decorations) {
-        const id = decoration?.id
-        const kind = decoration?.kind
-        // Book IDs are positive. Decorations use negative IDs in the same layout.
-        if (
-          !Number.isSafeInteger(id) ||
-          id >= 0 ||
-          itemIds.has(id) ||
-          typeof kind !== 'string' ||
-          !Object.hasOwn(SHELF_DECORATIONS, kind)
-        ) {
-          continue
-        }
-        if (kind === 'quote-frame') {
-          const quoteId: unknown = decoration.quoteId
-          if (!isId(quoteId)) continue
-          decorations.push({ id, kind, quoteId })
-        } else {
-          decorations.push({ id, kind: kind as Exclude<DecorationKind, 'quote-frame'> })
-        }
-        itemIds.add(id)
-      }
-    }
-    for (const id of [...bookIds, ...decorations.map(({ id }) => id)]) {
       const left: unknown = shelf.positions?.[id]
       if (typeof left === 'number' && Number.isSafeInteger(left) && left >= 0) positions[id] = left
     }
     const name = typeof shelf.name === 'string' ? shelf.name.trim() : ''
-    shelves.push({ id: shelf.id, name: name || undefined, bookIds, decorations, positions })
+    shelves.push({ id: shelf.id, name: name || undefined, bookIds, positions })
   }
   return shelves
 }
 
-export function restoreShelf({ id, name, bookIds, decorations, positions }: SavedShelf): Shelf {
-  // Undecorated shelves can have a legacy order without positions.
-  const itemIds = decorations?.length
-    ? [...bookIds, ...decorations.map(({ id }) => id)].sort(
-        (a, b) => (positions[a] ?? 0) - (positions[b] ?? 0)
-      )
-    : bookIds
-  return { id, name, itemIds, positions }
+export function restoreShelf({ id, name, bookIds, positions }: SavedShelf): Shelf {
+  return { id, name, itemIds: bookIds, positions }
 }
 
-export function saveShelves(
-  shelves: Shelf[],
-  decorations: ReadonlyMap<number, ShelfDecoration>
-): SavedShelf[] {
+export function saveShelves(shelves: Shelf[]): SavedShelf[] {
   return shelves.map(({ id, name, itemIds, positions }) => ({
     id,
     name,
-    bookIds: itemIds.filter((itemId) => itemId > 0),
-    decorations: itemIds.flatMap((itemId) => decorations.get(itemId) ?? []),
+    bookIds: itemIds,
     positions
   }))
 }
@@ -154,9 +103,7 @@ function fitPositions(
 
 export function arrangeShelves(saved: Shelf[], widths: ReadonlyMap<number, number>): Shelf[] {
   const assigned = new Set(saved.flatMap((shelf) => shelf.itemIds))
-  const added = [...widths.keys()]
-    .filter((id) => !assigned.has(id))
-    .sort((a, b) => Math.abs(a) - Math.abs(b))
+  const added = [...widths.keys()].filter((id) => !assigned.has(id)).sort((a, b) => a - b)
   const initial: Shelf[] = saved.length ? saved : [{ id: 1, itemIds: [], positions: {} }]
   return initial.map((shelf, index) => {
     const itemIds = shelf.itemIds.filter((id) => widths.has(id))
