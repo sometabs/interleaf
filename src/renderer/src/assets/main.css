@@ -315,11 +315,14 @@
 
   .bookshelf {
     --shelf-clearance: 217px;
-    --shelf-lip: light-dark(#c6af96, #735d4c);
-    --shelf-wood: light-dark(#b0967a, #564438);
-    --shelf-shadow: light-dark(#947b63, #392e27);
-    border-inline: var(--shelf-frame) solid var(--shelf-wood);
-    border-top: var(--shelf-frame) solid var(--shelf-wood);
+    --shelf-lip: light-dark(#dfbd96, #8b634a);
+    --shelf-wood: light-dark(#bb9166, #684731);
+    --shelf-shadow: light-dark(#956f4b, #3f2b20);
+    --shelf-grain: light-dark(rgb(109 70 31 / 0.14), rgb(22 11 5 / 0.2));
+    --shelf-back: light-dark(#f2ebdd, #382f28);
+    --shelf-back-edge: light-dark(#e4d7c4, #29221d);
+    --shelf-recess: light-dark(rgb(92 62 32 / 0.25), rgb(0 0 0 / 0.42));
+    border: var(--shelf-frame) solid var(--shelf-wood);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
   }
@@ -336,16 +339,35 @@
     --shelf-face: 10px;
     position: relative;
     height: calc(var(--shelf-clearance) + var(--shelf-ledge));
+    background: radial-gradient(ellipse at 50% 60%, var(--shelf-back) 20%, var(--shelf-back-edge));
+    box-shadow: inset 0 7px 14px -7px var(--shelf-recess);
+  }
+
+  .bookshelf-row::after {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: var(--shelf-ledge);
     background:
+      repeating-linear-gradient(
+        to top,
+        transparent 0 2px,
+        var(--shelf-grain) 2px 3px,
+        transparent 3px 5px
+      ),
       linear-gradient(
         to top,
         var(--shelf-shadow) 0 var(--shelf-edge),
-        var(--shelf-wood) var(--shelf-edge) var(--shelf-face),
-        var(--shelf-lip) var(--shelf-face) var(--shelf-ledge),
-        transparent var(--shelf-ledge)
-      ),
-      light-dark(#eee9e2, #292420);
-    box-shadow: inset 0 2px 8px rgb(0 0 0 / 0.1);
+        var(--shelf-wood) var(--shelf-edge),
+        color-mix(in srgb, var(--shelf-wood), var(--shelf-lip) 40%) var(--shelf-face),
+        var(--shelf-lip) var(--shelf-face)
+      );
+    pointer-events: none;
+    content: '';
+  }
+
+  .bookshelf > :last-child > .bookshelf-row:last-child {
+    --shelf-ledge: 0px;
   }
 
   .bookshelf-row[data-continues] {
