@@ -32,14 +32,15 @@ title in your library.
 
 Download the Windows installer, AppImage or `.deb` from
 [Releases](https://github.com/sometabs/interleaf/releases). From 1.20.0 on, Interleaf checks for a
-new version when it starts and offers to restart into it.
+new version when it starts and offers to restart into it. The Windows installer isn't signed, so
+Windows may warn the first time: click **More info**, then **Run anyway**.
 
 To build from source, install [Node.js 22.12 or newer](https://nodejs.org) and Git.
 
 ```bash
 git clone https://github.com/sometabs/interleaf.git
 cd interleaf
-npm install
+npm ci
 ```
 
 Run `npm run build:win` for a Windows installer or `npm run build:linux` for a Linux AppImage and
