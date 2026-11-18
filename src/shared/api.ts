@@ -211,6 +211,7 @@ export interface MetadataRefreshResult {
 export const HARVEST_PROGRESS_CHANNEL = 'harvest:progress'
 export const METADATA_REFRESH_PROGRESS_CHANNEL = 'metadata-refresh:progress'
 export const SEMANTIC_PROGRESS_CHANNEL = 'semantic:progress'
+export const UPDATE_READY_CHANNEL = 'update:ready'
 
 export interface BackupResult {
   dir: string
@@ -343,6 +344,9 @@ export interface InterleafApi {
 
   getAppDiagnostics(): Promise<AppDiagnostics>
   checkOpenLibrary(): Promise<boolean>
+  // The version of a downloaded update waiting to install, or null.
+  getReadyUpdate(): Promise<string | null>
+  restartToUpdate(): Promise<void>
 
   dataCounts(): Promise<DataCounts>
   // Notes not attached to a book survive.
@@ -361,6 +365,7 @@ export interface InterleafBridge extends InterleafApi {
   onHarvestProgress(listener: (progress: HarvestProgress) => void): () => void
   onMetadataRefreshProgress(listener: (progress: MetadataRefreshProgress) => void): () => void
   onSemanticProgress(listener: (progress: SemanticProgress) => void): () => void
+  onUpdateReady(listener: (version: string) => void): () => void
 }
 
 // Derived from the interface so the two cannot drift.
@@ -404,6 +409,8 @@ export const IPC_CHANNELS = [
   'importHighlights',
   'getAppDiagnostics',
   'checkOpenLibrary',
+  'getReadyUpdate',
+  'restartToUpdate',
   'dataCounts',
   'deleteAllBooks',
   'deleteAllThoughts',

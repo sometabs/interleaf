@@ -24,7 +24,8 @@ import {
   startAutomaticBackups,
   stopAutomaticBackups
 } from './services/libraryRecovery'
-import { askToRestart, watchForUpdates } from './services/updates'
+import { watchForUpdates } from './services/updates'
+import { UPDATE_READY_CHANNEL } from '../shared/api'
 
 // Must run before anything touches disk.
 app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged))
@@ -131,12 +132,18 @@ app.whenReady().then(() => {
   registerIpcHandlers()
 
   createWindow()
-  if (app.isPackaged) watchForUpdates(autoUpdater, askToRestart)
+  if (app.isPackaged) watchForUpdates(autoUpdater, announceUpdate)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+function announceUpdate(version: string): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(UPDATE_READY_CHANNEL, version)
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

@@ -1,7 +1,12 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 
-import { watchForUpdates, type Updater } from '../src/main/services/updates'
+import {
+  installReadyUpdate,
+  readyUpdate,
+  watchForUpdates,
+  type Updater
+} from '../src/main/services/updates'
 
 type FakeUpdater = EventEmitter &
   Updater & {
@@ -16,8 +21,6 @@ function fakeUpdater(check: () => Promise<unknown> = () => Promise.resolve(null)
   }) as FakeUpdater
 }
 
-const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
-
 describe('watching for updates', () => {
   it('checks once when started', () => {
     const updater = fakeUpdater()
@@ -25,24 +28,33 @@ describe('watching for updates', () => {
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
   })
 
-  it('restarts into a downloaded update when the reader agrees', async () => {
+  it('announces a downloaded update and remembers it for a window that asks later', () => {
     const updater = fakeUpdater()
-    const ask = vi.fn().mockResolvedValue(true)
-    watchForUpdates(updater, ask)
+    const announce = vi.fn()
+    watchForUpdates(updater, announce)
+    expect(readyUpdate()).toBeNull()
 
     updater.emit('update-downloaded', { version: '1.21.0' })
-    await flush()
 
-    expect(ask).toHaveBeenCalledWith('1.21.0')
+    expect(announce).toHaveBeenCalledWith('1.21.0')
+    expect(readyUpdate()).toBe('1.21.0')
+  })
+
+  it('restarts into the update silently and reopens the app', () => {
+    const updater = fakeUpdater()
+    watchForUpdates(updater, vi.fn())
+    updater.emit('update-downloaded', { version: '1.21.0' })
+
+    installReadyUpdate()
+
     expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true)
   })
 
-  it('leaves the update for the next quit when the reader says later', async () => {
+  it('ignores a restart request when nothing has downloaded', () => {
     const updater = fakeUpdater()
-    watchForUpdates(updater, vi.fn().mockResolvedValue(false))
+    watchForUpdates(updater, vi.fn())
 
-    updater.emit('update-downloaded', { version: '1.21.0' })
-    await flush()
+    installReadyUpdate()
 
     expect(updater.quitAndInstall).not.toHaveBeenCalled()
   })
@@ -51,13 +63,13 @@ describe('watching for updates', () => {
   it('stays quiet when the check fails', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const updater = fakeUpdater(() => Promise.reject(new Error('net::ERR_INTERNET_DISCONNECTED')))
-    const ask = vi.fn()
-    watchForUpdates(updater, ask)
+    const announce = vi.fn()
+    watchForUpdates(updater, announce)
 
     expect(() => updater.emit('error', new Error('net::ERR_INTERNET_DISCONNECTED'))).not.toThrow()
-    await flush()
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(ask).not.toHaveBeenCalled()
+    expect(announce).not.toHaveBeenCalled()
     warn.mockRestore()
   })
 })

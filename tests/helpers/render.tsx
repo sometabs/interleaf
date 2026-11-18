@@ -64,6 +64,7 @@ export interface FakeBridge {
   emitHarvestProgress: (progress: HarvestProgress) => void
   emitMetadataRefreshProgress: (progress: MetadataRefreshProgress) => void
   emitSemanticProgress: (progress: SemanticProgress) => void
+  emitUpdateReady: (version: string) => void
 }
 
 export function installBridge(
@@ -73,6 +74,7 @@ export function installBridge(
   const listeners = new Set<(progress: HarvestProgress) => void>()
   const metadataListeners = new Set<(progress: MetadataRefreshProgress) => void>()
   const semanticListeners = new Set<(progress: SemanticProgress) => void>()
+  const updateListeners = new Set<(version: string) => void>()
 
   const state: FakeBridge = {
     books: initial.books ?? [],
@@ -88,6 +90,9 @@ export function installBridge(
     },
     emitSemanticProgress: (progress) => {
       for (const listener of semanticListeners) listener(progress)
+    },
+    emitUpdateReady: (version) => {
+      for (const listener of updateListeners) listener(version)
     }
   }
   let nextId = 90
@@ -105,6 +110,12 @@ export function installBridge(
       semanticListeners.add(listener)
       return () => semanticListeners.delete(listener)
     },
+    onUpdateReady: (listener) => {
+      updateListeners.add(listener)
+      return () => updateListeners.delete(listener)
+    },
+    getReadyUpdate: async () => null,
+    restartToUpdate: async () => {},
 
     listBooks: async () => state.books.map((book) => ({ ...book })),
     getBookshelfLayout: async () => state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT,

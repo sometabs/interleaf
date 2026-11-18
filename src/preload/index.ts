@@ -9,7 +9,8 @@ import {
   type MetadataRefreshProgress,
   SEMANTIC_PROGRESS_CHANNEL,
   type SemanticProgress,
-  IPC_CHANNELS
+  IPC_CHANNELS,
+  UPDATE_READY_CHANNEL
 } from '../shared/api'
 
 // The context bridge rejects a Proxy or class instance with "An object could
@@ -49,6 +50,13 @@ const bridge: InterleafBridge = {
     ipcRenderer.on(SEMANTIC_PROGRESS_CHANNEL, wrapped)
     return () => {
       ipcRenderer.off(SEMANTIC_PROGRESS_CHANNEL, wrapped)
+    }
+  },
+  onUpdateReady(listener: (version: string) => void) {
+    const wrapped = (_event: unknown, version: string): void => listener(version)
+    ipcRenderer.on(UPDATE_READY_CHANNEL, wrapped)
+    return () => {
+      ipcRenderer.off(UPDATE_READY_CHANNEL, wrapped)
     }
   }
 }

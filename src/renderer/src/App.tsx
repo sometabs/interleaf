@@ -21,6 +21,7 @@ import Reviews from './components/Reviews'
 import Sidebar from './components/Sidebar'
 import Stats from './components/Stats'
 import Toasts from './components/Toasts'
+import UpdateNotice from './components/UpdateNotice'
 import { usePendingConfirm } from './lib/confirm'
 import { usePersistentState } from './lib/persistent'
 import { useBook, useBookshelfLayout } from './lib/queries'
@@ -99,6 +100,7 @@ export default function App(): ReactNode {
       />
       <ConfirmDialog />
       <Toasts />
+      <UpdateNotice />
     </div>
   )
 }

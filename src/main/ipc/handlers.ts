@@ -41,6 +41,7 @@ import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
 import { suggestHybridRecommendations, suggestHybridRecommendationTree } from '../services/hybrid'
 import { getSpineColors } from '../services/spineColors'
+import { installReadyUpdate, readyUpdate } from '../services/updates'
 
 let metadataRefreshActive = false
 let metadataRefreshCancelled = false
@@ -350,6 +351,12 @@ const api: InterleafApi = {
   },
   async checkOpenLibrary() {
     return ol.checkAvailability()
+  },
+  async getReadyUpdate() {
+    return readyUpdate()
+  },
+  async restartToUpdate() {
+    installReadyUpdate()
   },
 
   async dataCounts() {
