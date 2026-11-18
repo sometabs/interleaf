@@ -55,3 +55,4 @@ scratch/
 # private notes, kept locally and not published
 ARCHITECTURE.md
 SECURITY.md
+docs/releasing.md

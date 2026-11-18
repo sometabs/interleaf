@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, net, protocol, session } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 
 import icon from '../../resources/icon.png?asset'
 import { getDb, closeDb } from './db/connection'
@@ -23,6 +24,7 @@ import {
   startAutomaticBackups,
   stopAutomaticBackups
 } from './services/libraryRecovery'
+import { askToRestart, watchForUpdates } from './services/updates'
 
 // Must run before anything touches disk.
 app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged))
@@ -129,6 +131,7 @@ app.whenReady().then(() => {
   registerIpcHandlers()
 
   createWindow()
+  if (app.isPackaged) watchForUpdates(autoUpdater, askToRestart)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

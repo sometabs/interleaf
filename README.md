@@ -30,6 +30,10 @@ title in your library.
 
 ## Install
 
+Download the Windows installer, AppImage or `.deb` from
+[Releases](https://github.com/sometabs/interleaf/releases). From 1.20.0 on, Interleaf checks for a
+new version when it starts and offers to restart into it.
+
 To build from source, install [Node.js 22.12 or newer](https://nodejs.org) and Git.
 
 ```bash
@@ -47,7 +51,8 @@ to try the app from source with a separate `Interleaf Dev` library.
 Your library, writing, search, and statistics work offline. Book lookup, metadata refresh, and
 fetching new Discover candidates use Open Library. Interleaf ranks cached candidates locally.
 Optional **Advanced recommendations** adds meaning-based matching and may download a model on
-first use.
+first use. At startup Interleaf asks GitHub whether a newer version exists; it sends nothing
+about your library.
 
 **Data → Export library** saves the database, including your shelf layout, along with book covers
 and a readable Markdown copy. **Import** restores the library from the exported database.

@@ -11,7 +11,7 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,README.md,ARCHITECTURE.md}'
   - '!{.env,.env.*}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  - '!{tests,vitest.config.ts,SECURITY.md}'
+  - '!{tests,docs,vitest.config.ts,SECURITY.md}'
   # Must stay top-level: a platform-specific `files` key replaces this list
   # rather than extending it, packaging every devDependency.
   - '!node_modules/better-sqlite3/{deps,src,build}/**'
@@ -56,6 +56,9 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-# `null` is load-bearing: omitting the key makes electron-builder infer the
-# GitHub provider from `repository` and try to upload a release.
-publish: null
+# Where installed copies look for updates. The build scripts pass
+# `--publish never`, so release files are only ever uploaded by hand.
+publish:
+  provider: github
+  owner: sometabs
+  repo: interleaf
