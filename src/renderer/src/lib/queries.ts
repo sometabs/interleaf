@@ -41,7 +41,6 @@ import type {
   SearchHit,
   SpineColors
 } from '@shared/api'
-import { clearLegacyBookshelf, readLegacyBookshelf } from './legacyBookshelf'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
 // rather than patching a local copy.
@@ -106,12 +105,7 @@ export function useBooks(): UseQueryResult<Book[]> {
 const bookshelfQuery = {
   queryKey: keys.bookshelf,
   staleTime: Infinity,
-  queryFn: async (): Promise<BookshelfLayout> => {
-    const legacy = readLegacyBookshelf()
-    const layout = await api().getBookshelfLayout(legacy)
-    if (legacy) clearLegacyBookshelf()
-    return layout
-  }
+  queryFn: (): Promise<BookshelfLayout> => api().getBookshelfLayout()
 }
 
 export function useBookshelfLayout(): UseQueryResult<BookshelfLayout> {

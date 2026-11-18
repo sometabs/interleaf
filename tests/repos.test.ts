@@ -82,6 +82,37 @@ describe('migrations', () => {
     ])
   })
 
+  it('drops unused genre and Calibre columns while keeping books, quotes and import matches', () => {
+    const old = createDatabase(':memory:', 21)
+    const bookId = Number(
+      old.prepare("INSERT INTO book (title, genres) VALUES ('Dune', '[\"Fantasy\"]')").run()
+        .lastInsertRowid
+    )
+    old
+      .prepare(
+        `INSERT INTO note (book_id, kind, title, body_md, import_source, import_key)
+         VALUES (?, 'highlight', '', 'A passage', 'calibre', 'uuid-1')`
+      )
+      .run(bookId)
+    old
+      .prepare("INSERT INTO imported_book (source, source_key, book_id) VALUES ('calibre', '7', ?)")
+      .run(bookId)
+
+    old.exec(MIGRATIONS[21])
+
+    const columns = (table: string): string[] =>
+      (old.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    expect(columns('book')).not.toContain('genres')
+    expect(columns('note')).not.toContain('calibre_uuid')
+    expect(tableExists(old, 'calibre_book')).toBe(false)
+    expect(old.prepare('SELECT title FROM book').get()).toEqual({ title: 'Dune' })
+    expect(old.prepare('SELECT import_key, body_md FROM note').get()).toEqual({
+      import_key: 'uuid-1',
+      body_md: 'A passage'
+    })
+    expect(old.prepare('SELECT source_key FROM imported_book').get()).toEqual({ source_key: '7' })
+  })
+
   it('is idempotent when re-applied to an already-migrated database', () => {
     const before = db.pragma('user_version', { simple: true })
     expect(() => createDatabase(':memory:')).not.toThrow()

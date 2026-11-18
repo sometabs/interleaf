@@ -109,7 +109,7 @@ describe('the year and the page count', () => {
 describe('Open Library subjects', () => {
   it('shows them unchanged without offering manual genre controls', async () => {
     installBridge(
-      { books: [makeBook({ id: 1, genres: ['Fantasy'] })], notes: [] },
+      { books: [makeBook({ id: 1 })], notes: [] },
       {
         getBookMetadata: async () => ({
           subjects: ['Fiction, psychological', 'Accessible book'],
@@ -124,6 +124,5 @@ describe('Open Library subjects', () => {
     expect(screen.getByText('Fiction, psychological')).toBeDefined()
     expect(screen.getByText('Accessible book')).toBeDefined()
     expect(screen.queryByRole('button', { name: /genres?/i })).toBeNull()
-    expect(screen.queryByText('Fantasy')).toBeNull()
   })
 })

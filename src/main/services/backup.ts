@@ -12,9 +12,7 @@ import {
 } from 'fs'
 import { basename, dirname, join, resolve } from 'path'
 
-import { EMPTY_BOOKSHELF_LAYOUT } from '../../shared/bookshelf'
 import { createDatabase, MIGRATIONS } from '../db/database'
-import { getBookshelfLayout } from '../repos/bookshelf'
 import { writeVault } from './vault'
 
 const BACKUP_DIR = 'interleaf-backup'
@@ -267,8 +265,6 @@ export function restoreBackup(
     const staged = createDatabase(target)
     try {
       checkDatabaseIntegrity(staged)
-      // Legacy state in this profile belongs to its old library.
-      getBookshelfLayout(staged, EMPTY_BOOKSHELF_LAYOUT)
     } finally {
       staged.close()
     }

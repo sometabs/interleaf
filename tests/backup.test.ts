@@ -227,7 +227,7 @@ describe('restoring a backup', () => {
     restoreBackup(dir, freshPath)
     const restored = createDatabase(freshPath)
     try {
-      expect(getBookshelfLayout(restored, { ...layout, shelves: [] })).toEqual(layout)
+      expect(getBookshelfLayout(restored)).toEqual(layout)
     } finally {
       restored.close()
     }
@@ -253,13 +253,11 @@ describe('restoring a backup', () => {
         title: 'From an older build',
         rating: 4
       })
-      expect(
-        getBookshelfLayout(restored, {
-          shelves: [{ id: 1, name: 'Old profile', bookIds: [1], positions: {} }],
-          faceOutBookIds: [1],
-          hiddenBookIds: []
-        })
-      ).toEqual({ shelves: [], faceOutBookIds: [], hiddenBookIds: [] })
+      expect(getBookshelfLayout(restored)).toEqual({
+        shelves: [],
+        faceOutBookIds: [],
+        hiddenBookIds: []
+      })
       expect(readFileSync(oldPath)).toEqual(original)
     } finally {
       restored.close()

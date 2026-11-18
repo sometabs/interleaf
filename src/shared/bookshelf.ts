@@ -22,15 +22,12 @@ function isId(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
-export function parseShelfBookIds(raw: unknown): number[] | null {
+function parseShelfBookIds(raw: unknown): number[] | null {
   return Array.isArray(raw) ? [...new Set(raw.filter(isId))] : null
 }
 
-export function parseShelves(raw: unknown): SavedShelf[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null
-
-  // The earlier shelf saved a single book order. Keep it when dividing into rows.
-  if (raw.every(isId)) return [{ id: 1, bookIds: [...new Set(raw)], positions: {} }]
+function parseShelves(raw: unknown): SavedShelf[] | null {
+  if (!Array.isArray(raw)) return null
 
   const shelves: SavedShelf[] = []
   const shelfIds = new Set<number>()
@@ -83,8 +80,7 @@ export function parseShelves(raw: unknown): SavedShelf[] | null {
 export function parseBookshelfLayout(raw: unknown): BookshelfLayout | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<BookshelfLayout>
-  const shelves =
-    Array.isArray(value.shelves) && value.shelves.length === 0 ? [] : parseShelves(value.shelves)
+  const shelves = parseShelves(value.shelves)
   const faceOutBookIds = parseShelfBookIds(value.faceOutBookIds)
   const hiddenBookIds = parseShelfBookIds(value.hiddenBookIds)
   return shelves && faceOutBookIds && hiddenBookIds

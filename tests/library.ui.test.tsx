@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Library from '../src/renderer/src/components/Library'
+import { parseBookshelfLayout, type BookshelfLayout } from '../src/shared/bookshelf'
 import { installBridge, makeBook, renderApp } from './helpers/render'
 
 // The grouping rules themselves are covered in `shelves.test.ts`.
@@ -11,23 +12,24 @@ const SOLARIS = makeBook({
   id: 1,
   title: 'Solaris',
   author: 'Stanisław Lem',
-  status: 'read',
-  genres: ['Science Fiction']
+  status: 'read'
 })
 const PICNIC = makeBook({
   id: 2,
   title: 'Roadside Picnic',
   author: 'Strugatsky',
-  status: 'reading',
-  genres: ['Science Fiction', 'Thriller & Suspense']
+  status: 'reading'
 })
 const HALL = makeBook({
   id: 3,
   title: 'Wolf Hall',
   author: 'Hilary Mantel',
-  status: 'want',
-  genres: ['Historical Fiction']
+  status: 'want'
 })
+
+function shelfLayout(shelves: unknown[], hiddenBookIds: number[] = []): BookshelfLayout {
+  return parseBookshelfLayout({ shelves, faceOutBookIds: [], hiddenBookIds })!
+}
 
 function show(): ReturnType<typeof userEvent.setup> {
   installBridge({ books: [SOLARIS, PICNIC, HALL] })
@@ -128,19 +130,20 @@ describe('arranging the bookshelf', () => {
 
   it('finds books in shelf order while keeping their neighbors and shelf navigation visible', async () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
-    const saved = JSON.stringify([
-      { id: 1, name: 'Favorites', bookIds: [2, 3], positions: {} },
-      { id: 2, name: 'Favorites from this year', bookIds: [1], positions: {} }
-    ])
-    window.localStorage.setItem('interleaf.bookshelves', saved)
-    window.localStorage.setItem('interleaf.bookshelfHidden', '[4]')
-    const bridge = installBridge({
+    installBridge({
       books: [
         SOLARIS,
         { ...PICNIC, author: 'Stanisław Strugatsky' },
         HALL,
         makeBook({ id: 4, title: 'Hidden book', author: 'Stanisław Lem' })
-      ]
+      ],
+      bookshelf: shelfLayout(
+        [
+          { id: 1, name: 'Favorites', bookIds: [2, 3], positions: {} },
+          { id: 2, name: 'Favorites from this year', bookIds: [1], positions: {} }
+        ],
+        [4]
+      )
     })
     renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
@@ -179,9 +182,6 @@ describe('arranging the bookshelf', () => {
       expect(solaris.hasAttribute('data-search-match')).toBe(false)
       await user.clear(search)
       expect(screen.getByRole('status').textContent).toBe('')
-      expect(window.localStorage.getItem('interleaf.bookshelves')).toBeNull()
-      expect(window.localStorage.getItem('interleaf.bookshelfHidden')).toBeNull()
-      expect(bridge.bookshelf).toMatchObject({ shelves: JSON.parse(saved), hiddenBookIds: [4] })
     } finally {
       scroll.mockRestore()
     }
@@ -274,8 +274,10 @@ describe('arranging the bookshelf', () => {
   })
 
   it('keeps the previous order and saves a book dropped into open shelf space', async () => {
-    window.localStorage.setItem('interleaf.bookshelfOrder', JSON.stringify([3, 2, 1]))
-    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    installBridge({
+      books: [SOLARIS, PICNIC, HALL],
+      bookshelf: shelfLayout([{ id: 1, bookIds: [3, 2, 1], positions: {} }])
+    })
     const first = renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
     await screen.findByRole('list', { name: 'Shelf 1' })
@@ -339,14 +341,13 @@ describe('arranging the bookshelf', () => {
   })
 
   it('remembers shelf names and row order without moving the books within each shelf', async () => {
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([
+    installBridge({
+      books: [SOLARIS, PICNIC],
+      bookshelf: shelfLayout([
         { id: 1, bookIds: [1], positions: { 1: 110 } },
         { id: 2, bookIds: [2], positions: { 2: 250 } }
       ])
-    )
-    installBridge({ books: [SOLARIS, PICNIC] })
+    })
     const first = renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Shelf 2' }))
@@ -436,14 +437,13 @@ describe('arranging the bookshelf', () => {
   })
 
   it('hides books only from the shelf, supports Undo, and appends books added back', async () => {
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([
+    const library = installBridge({
+      books: [SOLARIS, PICNIC, HALL],
+      bookshelf: shelfLayout([
         { id: 1, name: 'Favorites', bookIds: [1], positions: { 1: 110 } },
         { id: 2, bookIds: [2, 3], positions: { 2: 0, 3: 180 } }
       ])
-    )
-    const library = installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    })
     const user = userEvent.setup()
     const first = renderApp(<Library onAdd={() => {}} />)
     const label = 'Solaris by Stanisław Lem'
@@ -512,14 +512,13 @@ describe('arranging the bookshelf', () => {
   })
 
   it('saves horizontal stacks and keeps books flat when dragged out or slid along a shelf', async () => {
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([
+    installBridge({
+      books: [SOLARIS, PICNIC, HALL],
+      bookshelf: shelfLayout([
         { id: 1, name: 'Favorites', bookIds: [1, 2], positions: { 1: 70, 2: 320 } },
         { id: 2, bookIds: [3], positions: { 3: 30 } }
       ])
-    )
-    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    })
     const first = renderApp(<Library onAdd={() => {}} />)
     const solaris = await screen.findByRole('button', { name: 'Solaris by Stanisław Lem' })
     chooseBookAction(solaris, 'Start a stack')
@@ -628,13 +627,11 @@ describe('arranging the bookshelf', () => {
     const books = Array.from({ length: 8 }, (_, index) =>
       makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
     )
-    const storageKey = 'interleaf.bookshelves'
-    const saved = JSON.stringify([
+    const saved = [
       { id: 1, name: 'Favorites', bookIds: [1, 2, 3, 4, 5, 6, 7], positions: { 7: 360 } },
       { id: 2, name: 'Other books', bookIds: [8], positions: {} }
-    ])
-    window.localStorage.setItem(storageKey, saved)
-    const bridge = installBridge({ books })
+    ]
+    const bridge = installBridge({ books, bookshelf: shelfLayout(saved) })
 
     try {
       renderApp(<Library onAdd={() => {}} />)
@@ -652,7 +649,7 @@ describe('arranging the bookshelf', () => {
       expect(continuation.closest('.bookshelf-row')?.hasAttribute('data-continues')).toBe(false)
       expect(bookLabels(favorites)).toEqual(['Book 1', 'Book 2', 'Book 3', 'Book 4'])
       expect(bookLabels(continuation)).toEqual(['Book 5', 'Book 6', 'Book 7'])
-      expect(bridge.bookshelf?.shelves).toMatchObject(JSON.parse(saved))
+      expect(bridge.bookshelf?.shelves).toMatchObject(saved)
 
       const book = screen.getByRole('button', { name: 'Book 8' })
       const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
@@ -677,14 +674,13 @@ describe('arranging the bookshelf', () => {
   })
 
   it('moves a book to the end of a named shelf from its keyboard menu and remembers the move', async () => {
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([
+    installBridge({
+      books: [SOLARIS, PICNIC, HALL],
+      bookshelf: shelfLayout([
         { id: 1, name: 'To sort', bookIds: [1, 2], positions: { 2: 170 } },
         { id: 2, name: 'Favorites', bookIds: [3], positions: { 3: 90 } }
       ])
-    )
-    installBridge({ books: [SOLARIS, PICNIC, HALL] })
+    })
     const first = renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
     const label = 'Solaris by Stanisław Lem'
@@ -717,9 +713,9 @@ describe('arranging the bookshelf', () => {
     const books = Array.from({ length: 13 }, (_, index) =>
       makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
     )
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([
+    installBridge({
+      books,
+      bookshelf: shelfLayout([
         {
           id: 1,
           name: 'First shelf',
@@ -729,8 +725,7 @@ describe('arranging the bookshelf', () => {
         },
         { id: 2, name: 'Favorites', bookIds: [13], positions: {} }
       ])
-    )
-    installBridge({ books })
+    })
     const first = renderApp(<Library onAdd={() => {}} />)
     const user = userEvent.setup()
     const continuation = await screen.findByRole('list', { name: 'First shelf, row 2' })
@@ -758,11 +753,12 @@ describe('arranging the bookshelf', () => {
     const books = Array.from({ length: 12 }, (_, index) =>
       makeBook({ id: index + 1, title: `Book ${index + 1}`, author: null, pageCount: 900 })
     )
-    window.localStorage.setItem(
-      'interleaf.bookshelves',
-      JSON.stringify([{ id: 1, bookIds: books.map((book) => book.id), positions: { 12: 800 } }])
-    )
-    installBridge({ books })
+    installBridge({
+      books,
+      bookshelf: shelfLayout([
+        { id: 1, bookIds: books.map((book) => book.id), positions: { 12: 800 } }
+      ])
+    })
     renderApp(<Library onAdd={() => {}} />)
     const first = await screen.findByRole('list', { name: 'Shelf 1' })
     const second = screen.getByRole('list', { name: 'Shelf 1, row 2' })

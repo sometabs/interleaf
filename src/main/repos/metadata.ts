@@ -299,11 +299,6 @@ export function scorableCandidates(db: Database): CandidateRow[] {
   return distinct
 }
 
-export function getCandidate(db: Database, olid: string): CandidateRow | null {
-  const all = scorableCandidates(db)
-  return all.find((c) => c.olid === olid) ?? null
-}
-
 // The name is copied onto the row because a refusal has to outlive the
 // candidate pool, which any harvest can empty.
 export function recordFeedback(db: Database, olid: string, action: 'dismissed' | 'saved'): void {

@@ -32,8 +32,6 @@ export interface Book {
   finishedAt: number | null
   // Its place in the reading queue; null outside Want to read.
   priorityPosition: number | null
-  // Reader-chosen filing labels. Null means no choice has been made.
-  genres: string[] | null
   createdAt: number
   updatedAt: number
 }
@@ -293,7 +291,7 @@ export interface AppDiagnostics {
 // is synchronous.
 export interface InterleafApi {
   listBooks(): Promise<Book[]>
-  getBookshelfLayout(legacy?: BookshelfLayout): Promise<BookshelfLayout>
+  getBookshelfLayout(): Promise<BookshelfLayout>
   saveBookshelfLayout(layout: BookshelfLayout): Promise<BookshelfLayout>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>

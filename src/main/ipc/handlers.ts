@@ -143,8 +143,8 @@ const api: InterleafApi = {
   async listBooks() {
     return books.listBooks(getDb())
   },
-  async getBookshelfLayout(legacy) {
-    return bookshelf.getBookshelfLayout(getDb(), legacy)
+  async getBookshelfLayout() {
+    return bookshelf.getBookshelfLayout(getDb())
   },
   async saveBookshelfLayout(layout) {
     return bookshelf.saveBookshelfLayout(getDb(), layout)

@@ -8,13 +8,11 @@ import { BackupError, DB_NAME, verifySnapshot, writeRecoverySnapshot } from './b
 export const BACKUP_INTERVAL = 24 * 60 * 60 * 1000
 const RETRY_INTERVAL = 5 * 60 * 1000
 const READY_MARKER = '.verified'
-const SNAPSHOT_NAME =
-  /^snapshot-(\d{13})-[a-f0-9-]{36}(?:-(scheduled|before-delete|before-restore|restored))?$/
+const SNAPSHOT_NAME = /^snapshot-(\d{13})-[a-f0-9-]{36}-scheduled$/
 
 interface Snapshot {
   dir: string
   createdAt: number
-  requiresMarker: boolean
 }
 
 interface VerifiedSnapshot extends Snapshot {
@@ -27,13 +25,7 @@ function listSnapshots(root: string): Snapshot[] {
       .flatMap((entry) => {
         const match = SNAPSHOT_NAME.exec(entry.name)
         return entry.isDirectory() && match
-          ? [
-              {
-                dir: join(root, entry.name),
-                createdAt: Number(match[1]),
-                requiresMarker: match[2] !== undefined
-              }
-            ]
+          ? [{ dir: join(root, entry.name), createdAt: Number(match[1]) }]
           : []
       })
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -44,7 +36,7 @@ function listSnapshots(root: string): Snapshot[] {
 }
 
 function verified(snapshot: Snapshot): VerifiedSnapshot | null {
-  if (snapshot.requiresMarker && !existsSync(join(snapshot.dir, READY_MARKER))) return null
+  if (!existsSync(join(snapshot.dir, READY_MARKER))) return null
   try {
     return { ...snapshot, revision: verifySnapshot(join(snapshot.dir, DB_NAME)).revision }
   } catch (err) {
@@ -138,7 +130,7 @@ export class AutomaticBackups {
         rmSync(dir, { recursive: true, force: true })
         throw err
       }
-      this.latest = { dir, createdAt, revision, requiresMarker: true }
+      this.latest = { dir, createdAt, revision }
       this.refreshPending = false
       this.retryAfter = 0
       clearTimeout(this.timer)

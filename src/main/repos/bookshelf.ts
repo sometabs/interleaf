@@ -6,13 +6,12 @@ import {
   type BookshelfLayout
 } from '../../shared/bookshelf'
 
-export function getBookshelfLayout(db: Database, legacy?: unknown): BookshelfLayout {
+export function getBookshelfLayout(db: Database): BookshelfLayout {
   const saved = db
     .prepare<[], { layout: string }>('SELECT layout FROM bookshelf_layout WHERE id = 1')
     .get()
-  if (saved) return parseBookshelfLayout(JSON.parse(saved.layout)) ?? EMPTY_BOOKSHELF_LAYOUT
-  if (legacy === undefined) return EMPTY_BOOKSHELF_LAYOUT
-  return saveBookshelfLayout(db, legacy)
+  if (!saved) return EMPTY_BOOKSHELF_LAYOUT
+  return parseBookshelfLayout(JSON.parse(saved.layout)) ?? EMPTY_BOOKSHELF_LAYOUT
 }
 
 export function saveBookshelfLayout(db: Database, raw: unknown): BookshelfLayout {

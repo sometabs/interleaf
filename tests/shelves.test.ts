@@ -19,7 +19,6 @@ function book(title: string, status: BookStatus = 'want'): Book {
     status,
     rating: null,
     startedAt: null,
-    genres: null,
     finishedAt: null,
     priorityPosition: null,
     createdAt: 0,

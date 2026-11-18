@@ -340,34 +340,6 @@ export async function fetchWork(olid: string): Promise<OlWorkResult> {
   }
 }
 
-// Via search rather than /subjects/{slug}.json, which reports no language and
-// accepts no language filter. `sort=editions` replaces its curated ordering.
-export async function fetchSubject(subject: string, limit = 24): Promise<OlBook[]> {
-  const s = subject.trim()
-  if (!s) return []
-
-  const q = `subject:"${s.replace(/"/g, '')}"`
-  const url =
-    `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=${limit}` +
-    `&sort=editions&fields=${SEARCH_FIELDS}`
-
-  const data = await getJson<{ docs?: unknown }>(url)
-  const docs = data ? responseDocs(data) : null
-
-  return (docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
-}
-
-export async function fetchByAuthor(author: string, limit = 16): Promise<OlBook[]> {
-  const a = author.trim()
-  if (!a) return []
-
-  const url = `${BASE}/search.json?author=${encodeURIComponent(a)}&limit=${limit}&fields=${SEARCH_FIELDS}`
-  const data = await getJson<{ docs?: unknown }>(url)
-  const docs = data ? responseDocs(data) : null
-
-  return (docs ?? []).map(toOlBook).filter((b): b is OlBook => b !== null)
-}
-
 function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {
   return `${COVERS}/b/id/${coverId}-${size}.jpg`
 }

@@ -22,6 +22,7 @@ import completeReadingQueue018 from './migrations/018_complete_reading_queue.sql
 import highlightImportSources019 from './migrations/019_highlight_import_sources.sql?raw'
 import backupRevision020 from './migrations/020_backup_revision.sql?raw'
 import bookshelfLayout021 from './migrations/021_bookshelf_layout.sql?raw'
+import dropUnusedColumns022 from './migrations/022_drop_unused_columns.sql?raw'
 
 function revisionTriggers(tables: string[]): string {
   return tables
@@ -62,7 +63,8 @@ export const MIGRATIONS: string[] = [
   // Discover can regenerate its candidate pool, so it doesn't trigger backups.
   backupRevision020 +
     revisionTriggers(['book', 'note', 'book_metadata', 'rec_feedback', 'imported_book']),
-  bookshelfLayout021 + revisionTriggers(['bookshelf_layout'])
+  bookshelfLayout021 + revisionTriggers(['bookshelf_layout']),
+  dropUnusedColumns022
 ]
 
 /** SQLite has no regex, so migrations that clean up text need this. */

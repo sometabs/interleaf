@@ -12,10 +12,6 @@ export const FONT_SIZES = [
 export type FontSizeId = (typeof FONT_SIZES)[number]['id']
 
 const KEY = 'interleaf.noteFontSize'
-
-/** What the same preference was stored under before the app was renamed. */
-const LEGACY_KEY = 'bookhook.noteFontSize'
-
 const DEFAULT: FontSizeId = 'medium'
 
 function isFontSize(value: unknown): value is FontSizeId {
@@ -25,11 +21,7 @@ function isFontSize(value: unknown): value is FontSizeId {
 function load(): FontSizeId {
   try {
     const raw = window.localStorage.getItem(KEY)
-    if (isFontSize(raw)) return raw
-
-    // Only written by builds from before the rename; writes always use KEY.
-    const legacy = window.localStorage.getItem(LEGACY_KEY)
-    return isFontSize(legacy) ? legacy : DEFAULT
+    return isFontSize(raw) ? raw : DEFAULT
   } catch {
     return DEFAULT
   }

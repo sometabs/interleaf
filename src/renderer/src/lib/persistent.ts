@@ -1,18 +1,12 @@
 import { useCallback, useState } from 'react'
 
-// `localStorage`, not the database: these belong to this machine. Validated on
-// read, and `legacyKey` covers a key written before the app was renamed.
+// `localStorage`, not the database: these belong to this machine. Validated on read.
 export function usePersistentState<T>(
   key: string,
   fallback: T,
-  parse: (raw: unknown) => T | null,
-  legacyKey?: string
+  parse: (raw: unknown) => T | null
 ): [T, (next: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    const stored = readPersistentState(key, null, parse)
-    if (stored !== null) return stored
-    return legacyKey ? readPersistentState(legacyKey, fallback, parse) : fallback
-  })
+  const [value, setValue] = useState<T>(() => readPersistentState(key, fallback, parse))
 
   const store = useCallback(
     (next: T) => {
@@ -30,11 +24,7 @@ export function usePersistentState<T>(
   return [value, store]
 }
 
-export function readPersistentState<T>(
-  key: string,
-  fallback: T,
-  parse: (raw: unknown) => T | null
-): T {
+function readPersistentState<T>(key: string, fallback: T, parse: (raw: unknown) => T | null): T {
   try {
     const raw = window.localStorage.getItem(key)
     if (raw === null) return fallback

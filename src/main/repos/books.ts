@@ -18,22 +18,8 @@ interface BookRow {
   started_at: number | null
   finished_at: number | null
   priority_position: number | null
-  /** JSON array of genre names, or null when the reader has chosen none. */
-  genres: string | null
   created_at: number
   updated_at: number
-}
-
-// Anything unreadable counts as no choice: a corrupt cell should cost a book
-// its shelf label, not stop the library opening.
-function parseGenres(value: string | null): string[] | null {
-  if (value === null) return null
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((g): g is string => typeof g === 'string') : null
-  } catch {
-    return null
-  }
 }
 
 /** SQLite speaks snake_case; the API speaks camelCase. */
@@ -53,7 +39,6 @@ function toBook(row: BookRow): Book {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     priorityPosition: row.priority_position,
-    genres: parseGenres(row.genres),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -72,8 +57,7 @@ const BOOK_COLUMNS: Record<keyof BookPatch, string> = {
   status: 'status',
   rating: 'rating',
   startedAt: 'started_at',
-  finishedAt: 'finished_at',
-  genres: 'genres'
+  finishedAt: 'finished_at'
 }
 
 export function listBooks(db: Database): Book[] {
@@ -136,12 +120,7 @@ export function updateBook(db: Database, id: number, patch: BookPatch): Book | n
       assignments.push('priority_position = NULL')
     }
     const params: Record<string, unknown> = { id }
-    for (const k of keys) {
-      // The only column that is not a SQLite scalar. Null stays null, so
-      // "chose nothing" and "chose an empty list" remain distinct.
-      params[k] =
-        k === 'genres' ? (patch.genres === null ? null : JSON.stringify(patch.genres)) : patch[k]
-    }
+    for (const k of keys) params[k] = patch[k]
 
     db.prepare(
       `UPDATE book SET ${assignments.join(', ')}, updated_at = unixepoch() WHERE id = @id`

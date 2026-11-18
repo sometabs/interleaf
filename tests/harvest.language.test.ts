@@ -81,10 +81,10 @@ describe('asking Open Library for the language', () => {
     expect(urls[0]).toContain('language')
   })
 
-  it('names the field when fetching an author', async () => {
+  it('names the field when fetching Discover candidates', async () => {
     const { ol } = await load()
 
-    const done = ol.fetchByAuthor('Le Guin')
+    const done = ol.fetchCandidates('author:"Le Guin"')
     await vi.advanceTimersByTimeAsync(5000)
     await done
 
@@ -185,14 +185,14 @@ describe('accepting Open Library editions', () => {
 })
 
 describe('using Open Library work results with attached edition data', () => {
-  it('does not constrain direct author or subject searches by language', async () => {
+  it('does not constrain Discover candidate searches by language', async () => {
     const { ol } = await load()
 
-    const author = ol.fetchByAuthor('Le Guin')
+    const author = ol.fetchCandidates('author:"Le Guin"')
     await vi.advanceTimersByTimeAsync(5000)
     await author
 
-    const subject = ol.fetchSubject('science fiction')
+    const subject = ol.fetchCandidates('subject:"science fiction"')
     await vi.advanceTimersByTimeAsync(5000)
     await subject
 
@@ -210,16 +210,14 @@ describe('using Open Library work results with attached edition data', () => {
     await vi.advanceTimersByTimeAsync(5000)
     await search
 
-    const author = ol.fetchByAuthor('Le Guin')
+    const author = ol.fetchCandidates('author:"Le Guin"')
     await vi.advanceTimersByTimeAsync(5000)
     await author
 
-    const subject = ol.fetchSubject('science fiction')
+    const subject = ol.fetchCandidates('subject:"science fiction"')
     await vi.advanceTimersByTimeAsync(5000)
     await subject
 
-    // Parsed rather than substring-matched: the subject query also carries
-    // `sort=editions`, which would satisfy a substring check on its own.
     expect(urls).toHaveLength(3)
     for (const url of urls) {
       const fields = new URL(url).searchParams.get('fields') ?? ''
@@ -242,16 +240,16 @@ describe('using Open Library work results with attached edition data', () => {
     await vi.advanceTimersByTimeAsync(5000)
     await search
 
-    const subject = ol.fetchSubject('science fiction')
+    const subject = ol.fetchCandidates('subject:"science fiction"')
     await vi.advanceTimersByTimeAsync(5000)
     await subject
 
-    const [searchFields, subjectFields] = urls.map((url) =>
+    const [searchFields, candidateFields] = urls.map((url) =>
       (new URL(url).searchParams.get('fields') ?? '').split(',')
     )
 
     expect(searchFields).toContain('editions.isbn')
-    expect(subjectFields).toContain('editions.isbn')
+    expect(candidateFields).toContain('editions.isbn')
   })
 
   it('asks for alternate author names so a Latin-script one can be selected', async () => {
@@ -261,11 +259,11 @@ describe('using Open Library work results with attached edition data', () => {
     await vi.advanceTimersByTimeAsync(5000)
     await search
 
-    const author = ol.fetchByAuthor('Le Guin')
+    const author = ol.fetchCandidates('author:"Le Guin"')
     await vi.advanceTimersByTimeAsync(5000)
     await author
 
-    const subject = ol.fetchSubject('science fiction')
+    const subject = ol.fetchCandidates('subject:"science fiction"')
     await vi.advanceTimersByTimeAsync(5000)
     await subject
 

@@ -170,9 +170,10 @@ describe('automatic backups', () => {
 
   it('skips a damaged snapshot and preserves the damaged live database and sidecars during recovery', () => {
     save('First')
-    const bad = join(root, 'snapshot-1794571200001-00000000-0000-0000-0000-000000000000')
+    const bad = join(root, 'snapshot-1794571200001-00000000-0000-0000-0000-000000000000-scheduled')
     mkdirSync(bad)
     writeFileSync(join(bad, DB_NAME), 'damaged snapshot')
+    writeFileSync(join(bad, '.verified'), '')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const verified = latestRecoverySnapshot(root)!.dir
     expect(verified).not.toBe(bad)
@@ -196,18 +197,5 @@ describe('automatic backups', () => {
     )
     mkdirSync(unpublished)
     expect(bookCount()).toBe(1)
-  })
-
-  it('keeps only the newest verified copy from an older two-backup library', () => {
-    save('First')
-    const older = join(root, 'snapshot-1794571199999-00000000-0000-0000-0000-000000000000')
-    mkdirSync(older)
-    writeFileSync(
-      join(older, DB_NAME),
-      readFileSync(join(latestRecoverySnapshot(root)!.dir, DB_NAME))
-    )
-    backups.start(db)
-    expect(bookCount()).toBe(1)
-    expect(snapshotDirectories()).toHaveLength(1)
   })
 })

@@ -31,7 +31,6 @@ export function makeBook(overrides: Partial<Book> = {}): Book {
     status: 'want',
     rating: null,
     startedAt: null,
-    genres: null,
     finishedAt: null,
     priorityPosition: null,
     createdAt: 0,
@@ -108,10 +107,7 @@ export function installBridge(
     },
 
     listBooks: async () => state.books.map((book) => ({ ...book })),
-    getBookshelfLayout: async (legacy) => {
-      if (legacy) state.bookshelf ??= legacy
-      return state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT
-    },
+    getBookshelfLayout: async () => state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT,
     saveBookshelfLayout: async (layout) => {
       state.bookshelf = layout
       return layout

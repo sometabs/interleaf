@@ -102,10 +102,10 @@ describe('outbound request spacing', () => {
 
     const done = (async () => {
       for (const subject of ['utopias', 'anarchism', 'sf', 'politics', 'ethics', 'gender']) {
-        await ol.fetchSubject(subject, 24)
+        await ol.fetchCandidates(`subject:"${subject}"`)
       }
       for (const author of ['Le Guin', 'Butler', 'Delany', 'Russ']) {
-        await ol.fetchByAuthor(author, 16)
+        await ol.fetchCandidates(`author:"${author}"`)
       }
     })()
     await vi.advanceTimersByTimeAsync(120_000)

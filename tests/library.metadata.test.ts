@@ -431,7 +431,6 @@ describe('refreshing the whole library', () => {
       rating: 5
     })
     books.updateBook(db, original.id, {
-      genres: ['Philosophy'],
       startedAt: 100,
       finishedAt: 200,
       coverPath: `book-${original.id}-123.jpg`
@@ -453,7 +452,6 @@ describe('refreshing the whole library', () => {
       coverPath: `book-${original.id}-123.jpg`,
       status: 'read',
       rating: 5,
-      genres: ['Philosophy'],
       startedAt: 100,
       finishedAt: 200
     })
