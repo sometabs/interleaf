@@ -86,6 +86,29 @@ describe('Editor lifecycle', () => {
     }
   })
 
+  // Closing the window runs no React cleanup, so the unmount flush never happens.
+  it('saves text still inside the debounce when the window closes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    installBridge()
+    const onSave = vi.fn()
+    renderApp(<Editor value="Original" onSave={onSave} />)
+    try {
+      const dom = domAt(0)
+      await act(async () => {
+        dom.focus()
+        dom.innerHTML = '<p>Typed just before closing</p>'
+        dom.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      expect(onSave).not.toHaveBeenCalled()
+
+      window.dispatchEvent(new Event('beforeunload'))
+
+      expect(onSave).toHaveBeenCalledWith('Typed just before closing')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('mounts exactly one editor under StrictMode', async () => {
     installBridge()
     renderApp(

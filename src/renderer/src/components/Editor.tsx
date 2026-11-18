@@ -96,8 +96,11 @@ export default function Editor({
     }
   })
 
+  // Closing the window skips React cleanup, so text still inside the debounce is saved here.
   useEffect(() => {
+    window.addEventListener('beforeunload', flush)
     return () => {
+      window.removeEventListener('beforeunload', flush)
       flush()
     }
   }, [flush])
