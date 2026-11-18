@@ -10,7 +10,14 @@ import { resolveUserDataDir } from './db/userdata'
 import { registerIpcHandlers } from './ipc/handlers'
 import { isAppUrl, isExternalLink } from './navigation'
 import { restrictPermissions, trustRenderer } from './security'
-import { coverForId, coversDir, pruneOrphanCovers, resolveCoverPath } from './services/covers'
+import { candidateCoverIds } from './repos/metadata'
+import {
+  coverForId,
+  coversDir,
+  pruneDiscoverCovers,
+  pruneOrphanCovers,
+  resolveCoverPath
+} from './services/covers'
 import {
   openLibraryWithRecovery,
   startAutomaticBackups,
@@ -116,6 +123,7 @@ app.whenReady().then(() => {
     return
   }
   pruneOrphanCovers(coversDir(), referencedCovers(getDb()))
+  pruneDiscoverCovers(coversDir(), candidateCoverIds(getDb()))
   startAutomaticBackups()
   registerCoverProtocol()
   registerIpcHandlers()

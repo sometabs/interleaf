@@ -229,6 +229,16 @@ function dropOlderCopies(dbPath: string, keep: string): void {
   }
 }
 
+/** Moves a damaged database and its sidecars into a `damaged-library-*` folder beside it. */
+export function setAsideDatabase(dbPath: string): string {
+  const damagedDir = mkdtempSync(join(dirname(dbPath), 'damaged-library-'))
+  const moved = join(damagedDir, basename(dbPath))
+  for (const suffix of ['', ...SIDECARS]) {
+    if (existsSync(dbPath + suffix)) renameSync(dbPath + suffix, moved + suffix)
+  }
+  return moved
+}
+
 interface RestoreOptions {
   /** Runs after validation, immediately before touching live files. Close the live connection here. */
   beforeReplace?: () => void

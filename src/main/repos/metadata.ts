@@ -299,6 +299,15 @@ export function scorableCandidates(db: Database): CandidateRow[] {
   return distinct
 }
 
+export function candidateCoverIds(db: Database): Set<number> {
+  const rows = db
+    .prepare<[], { cover_id: number }>(
+      'SELECT cover_id FROM book_candidate WHERE cover_id IS NOT NULL'
+    )
+    .all()
+  return new Set(rows.map((row) => row.cover_id))
+}
+
 // The name is copied onto the row because a refusal has to outlive the
 // candidate pool, which any harvest can empty.
 export function recordFeedback(db: Database, olid: string, action: 'dismissed' | 'saved'): void {

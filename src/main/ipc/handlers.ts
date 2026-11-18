@@ -23,6 +23,7 @@ import * as notes from '../repos/notes'
 import * as searchRepo from '../repos/search'
 import * as backup from '../services/backup'
 import {
+  backupBeforeBulkDelete,
   restoreLibrary,
   scheduleAutomaticBackup,
   stopAutomaticBackups
@@ -35,7 +36,7 @@ import {
   refreshOneBookMetadata,
   retryBookMetadata
 } from '../services/library'
-import { coversDir, importCoverFile } from '../services/covers'
+import { coversDir, importCoverFile, pruneDiscoverCovers } from '../services/covers'
 import * as ol from '../services/openlibrary'
 import { suggest, suggestTree } from '../services/suggestions'
 import { suggestHybridRecommendations, suggestHybridRecommendationTree } from '../services/hybrid'
@@ -252,17 +253,21 @@ const api: InterleafApi = {
   },
 
   async refreshRecommendations(query) {
-    return harvestCandidates(
-      getDb(),
-      (progress) => {
-        // Every window, not the caller's: the generic handler loop below does not
-        // thread the event through, and the app opens exactly one window.
-        for (const window of BrowserWindow.getAllWindows()) {
-          if (!window.isDestroyed()) window.webContents.send(HARVEST_PROGRESS_CHANNEL, progress)
-        }
-      },
-      query?.likeBookId
-    )
+    try {
+      return await harvestCandidates(
+        getDb(),
+        (progress) => {
+          // Every window, not the caller's: the generic handler loop below does not
+          // thread the event through, and the app opens exactly one window.
+          for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed()) window.webContents.send(HARVEST_PROGRESS_CHANNEL, progress)
+          }
+        },
+        query?.likeBookId
+      )
+    } finally {
+      pruneDiscoverThumbnails()
+    }
   },
   async getRecommendations(query) {
     return suggest(getDb(), query)
@@ -351,22 +356,39 @@ const api: InterleafApi = {
     return data.dataCounts(getDb())
   },
   async deleteAllBooks() {
+    backupBeforeBulkDelete()
     return data.deleteAllBooks(getDb())
   },
   async deleteAllThoughts() {
+    backupBeforeBulkDelete()
     return data.deleteAllThoughts(getDb())
   },
   async deleteAllQuotes() {
+    backupBeforeBulkDelete()
     return data.deleteAllQuotes(getDb())
   },
   async deleteAllReviews() {
+    backupBeforeBulkDelete()
     return data.deleteAllReviews(getDb())
   },
   async clearRecommendationCache() {
-    return data.clearRecommendationCache(getDb())
+    const cleared = data.clearRecommendationCache(getDb())
+    pruneDiscoverThumbnails()
+    return cleared
   },
   async deleteEverything() {
+    backupBeforeBulkDelete()
     data.deleteEverything(getDb())
+    pruneDiscoverThumbnails()
+  }
+}
+
+// Never fails the operation it follows: a leftover thumbnail only costs disk space.
+function pruneDiscoverThumbnails(): void {
+  try {
+    pruneDiscoverCovers(coversDir(), meta.candidateCoverIds(getDb()))
+  } catch (err) {
+    console.warn('Could not remove unused Discover thumbnails.', err)
   }
 }
 

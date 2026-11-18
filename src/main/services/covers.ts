@@ -12,12 +12,22 @@ export function coversDir(): string {
   return dir
 }
 
-// `cover-*` files are Open Library thumbnails for books nobody owns, which
-// Discover refetches on demand. Only a shelf jacket can be orphaned.
 export function pruneOrphanCovers(dir: string, keep: ReadonlySet<string>): number {
+  return removeCovers(dir, (name) => name.startsWith('book-') && !keep.has(name))
+}
+
+// `cover-<id>.jpg` is a Discover thumbnail. One no cached candidate uses is refetched if needed.
+export function pruneDiscoverCovers(dir: string, keep: ReadonlySet<number>): number {
+  return removeCovers(dir, (name) => {
+    const id = /^cover-(\d+)\.jpg$/.exec(name)?.[1]
+    return id !== undefined && !keep.has(Number(id))
+  })
+}
+
+function removeCovers(dir: string, unused: (name: string) => boolean): number {
   let removed = 0
   for (const name of readdirSync(dir)) {
-    if (!name.startsWith('book-') || keep.has(name)) continue
+    if (!unused(name)) continue
     try {
       rmSync(join(dir, name), { force: true })
       removed++

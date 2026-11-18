@@ -119,24 +119,50 @@ async function saveCurrent(): Promise<void> {
 }
 
 describe('library backup integration', () => {
-  it('leaves bulk deletes on the normal backup schedule', async () => {
+  it('backs up the library right before a bulk delete and keeps that copy', async () => {
     await saveCurrent()
     await invoke('createBook', { title: 'Added after the last backup' })
     await expect(invoke('deleteEverything')).resolves.toBeUndefined()
     expect(listBooks(getDb())).toEqual([])
-    expect(snapshotTitles()).toEqual(['Current library'])
+    expect(snapshotTitles()).toEqual(['Added after the last backup', 'Current library'])
     vi.advanceTimersByTime(BACKUP_INTERVAL)
     expect(snapshotTitles()).toEqual([])
-    expect(readdirSync(root)).toHaveLength(1)
+    expect(readdirSync(root)).toHaveLength(3)
   })
 
-  it('replaces the automatic backup with the restored library and its covers', async () => {
+  it('deletes nothing when the backup before a bulk delete fails', async () => {
+    await saveCurrent()
+    await invoke('createBook', { title: 'Added after the last backup' })
+    const rename = vi.mocked(renameSync).getMockImplementation()!
+    vi.mocked(renameSync).mockImplementation((from, to) => {
+      if (String(to).endsWith('.verified')) throw new Error('Disk full')
+      rename(from, to)
+    })
+    try {
+      await expect(invoke('deleteAllBooks')).rejects.toThrow('Nothing was deleted.')
+      expect(listBooks(getDb())).toHaveLength(2)
+    } finally {
+      vi.mocked(renameSync).mockImplementation(rename)
+    }
+  })
+
+  it('clears Discover thumbnails along with the recommendation cache', async () => {
+    getDb()
+      .prepare("INSERT INTO book_candidate (olid, title, cover_id) VALUES ('OL1W', 'Cached', 11)")
+      .run()
+    writeFileSync(join(coversDir(), 'cover-11.jpg'), 'shown in Discover')
+    writeFileSync(join(coversDir(), 'cover-22.jpg'), 'left over from an older search')
+    await expect(invoke('clearRecommendationCache')).resolves.toBe(1)
+    expect(readdirSync(coversDir())).toEqual([])
+  })
+
+  it('backs up the restored library and its covers, keeping the previous copy', async () => {
     await saveCurrent()
     const source = makeExport()
     const result = restoreLibrary(source)
     expect(listBooks(getDb())[0].title).toBe('From export')
     expect(snapshotTitles()).toEqual(['From export'])
-    expect(readdirSync(root)).toHaveLength(1)
+    expect(readdirSync(root)).toHaveLength(2)
     const latest = latestRecoverySnapshot(root)!
     expect(result.replaced).toBeNull()
     expect(readFileSync(join(latest.dir, 'covers', 'book-1.jpg'), 'utf8')).toBe('export jacket')
@@ -184,7 +210,7 @@ describe('library backup integration', () => {
     vi.mocked(renameSync).mockImplementation(rename)
     vi.advanceTimersByTime(5 * 60 * 1000)
     expect(snapshotTitles()).toEqual(['From export'])
-    expect(readdirSync(root)).toHaveLength(1)
+    expect(readdirSync(root)).toHaveLength(2)
   })
 
   it('offers startup recovery for corruption and keeps the damaged bytes', async () => {
@@ -197,8 +223,9 @@ describe('library backup integration', () => {
     expect(prompt).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Interleaf found a damaged database.',
-        buttons: ['Restore backup', 'Cancel'],
-        defaultId: 1
+        buttons: ['Restore backup', 'Start an empty library', 'Quit'],
+        defaultId: 0,
+        cancelId: 2
       })
     )
     expect(listBooks(getDb())[0].title).toBe('Current library')
@@ -206,15 +233,41 @@ describe('library backup integration', () => {
     expect(readFileSync(join(dir, damaged!, DB_NAME), 'utf8')).toBe('corrupt SQLite file')
   })
 
-  it('leaves the library and snapshots alone when startup recovery is cancelled', async () => {
+  it('leaves the library and snapshots alone when the user quits startup recovery', async () => {
+    await saveCurrent()
+    const live = getDbPath()
+    stopAutomaticBackups()
+    closeDb()
+    writeFileSync(live, 'corrupt SQLite file')
+    prompt.mockReturnValue(2)
+    expect(openLibraryWithRecovery()).toBe(false)
+    expect(readFileSync(live, 'utf8')).toBe('corrupt SQLite file')
+    expect(snapshotTitles()).toEqual(['Current library'])
+  })
+
+  it('can start an empty library instead, setting the damaged database aside', async () => {
     await saveCurrent()
     const live = getDbPath()
     stopAutomaticBackups()
     closeDb()
     writeFileSync(live, 'corrupt SQLite file')
     prompt.mockReturnValue(1)
-    expect(openLibraryWithRecovery()).toBe(false)
-    expect(readFileSync(live, 'utf8')).toBe('corrupt SQLite file')
+    expect(openLibraryWithRecovery()).toBe(true)
+    expect(listBooks(getDb())).toEqual([])
+    const damaged = readdirSync(dir).find((name) => name.startsWith('damaged-library-'))
+    expect(readFileSync(join(dir, damaged!, DB_NAME), 'utf8')).toBe('corrupt SQLite file')
+    expect(snapshotTitles()).toEqual(['Current library'])
+  })
+
+  it('can start an empty library when the database is missing', async () => {
+    await saveCurrent()
+    const live = getDbPath()
+    stopAutomaticBackups()
+    closeDb()
+    rmSync(live)
+    prompt.mockReturnValue(1)
+    expect(openLibraryWithRecovery()).toBe(true)
+    expect(listBooks(getDb())).toEqual([])
     expect(snapshotTitles()).toEqual(['Current library'])
   })
 

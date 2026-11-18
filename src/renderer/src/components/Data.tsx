@@ -102,7 +102,7 @@ export default function Data(): ReactNode {
     const n = counts?.books ?? 0
     const ok = await confirm({
       title: `Delete all ${n} books?`,
-      body: 'Books and their attached notes, quotes, reviews, ratings and reading data will be deleted. Standalone notes stay.',
+      body: 'Books and their attached notes, quotes, reviews, ratings and reading data will be deleted. Standalone notes stay. This can’t be undone. Export your library first if you want to keep a copy.',
       confirmLabel: 'Delete books',
       destructive: true
     })
@@ -115,7 +115,7 @@ export default function Data(): ReactNode {
     const n = counts?.notes ?? 0
     const ok = await confirm({
       title: `Delete all ${n} notes?`,
-      body: 'All ordinary notes, including standalone notes, will be deleted.',
+      body: 'All ordinary notes, including standalone notes, will be deleted. This can’t be undone. Export your library first if you want to keep a copy.',
       confirmLabel: 'Delete notes',
       destructive: true
     })
@@ -128,7 +128,7 @@ export default function Data(): ReactNode {
     const n = counts?.quotes ?? 0
     const ok = await confirm({
       title: `Delete all ${n} quotes?`,
-      body: 'All saved and imported quotes will be deleted.',
+      body: 'All saved and imported quotes will be deleted. This can’t be undone. Export your library first if you want to keep a copy.',
       confirmLabel: 'Delete quotes',
       destructive: true
     })
@@ -141,7 +141,7 @@ export default function Data(): ReactNode {
     const n = counts?.reviews ?? 0
     const ok = await confirm({
       title: `Delete all ${n} reviews?`,
-      body: 'All written reviews will be deleted.',
+      body: 'All written reviews will be deleted. This can’t be undone. Export your library first if you want to keep a copy.',
       confirmLabel: 'Delete reviews',
       destructive: true
     })
@@ -166,7 +166,7 @@ export default function Data(): ReactNode {
   async function onDeleteEverything(): Promise<void> {
     const ok = await confirm({
       title: 'Delete all library data?',
-      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted.',
+      body: 'Books, notes, quotes, reviews, recommendations and every "Not for me" choice will be deleted. This can’t be undone. Export your library first if you want to keep a copy.',
       confirmLabel: 'Delete everything',
       destructive: true
     })

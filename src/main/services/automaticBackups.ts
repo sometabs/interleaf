@@ -8,6 +8,8 @@ import { BackupError, DB_NAME, verifySnapshot, writeRecoverySnapshot } from './b
 export const BACKUP_INTERVAL = 24 * 60 * 60 * 1000
 const RETRY_INTERVAL = 5 * 60 * 1000
 const READY_MARKER = '.verified'
+// More than one, so a mistake saved by the next backup still leaves an older good copy.
+const KEEP_SNAPSHOTS = 3
 const SNAPSHOT_NAME = /^snapshot-(\d{13})-[a-f0-9-]{36}-scheduled$/
 
 interface Snapshot {
@@ -108,6 +110,13 @@ export class AutomaticBackups {
     }
   }
 
+  /** Saves a copy now unless the newest one already matches the library. Throws on failure. */
+  backupNow(): void {
+    if (!this.db) throw new BackupError('The library is not open.')
+    if (!this.refreshPending && this.revision(this.db) === (this.latest?.revision ?? '')) return
+    this.checkpoint()
+  }
+
   private checkpoint(): void {
     if (!this.db) throw new BackupError('The library is not open.')
     try {
@@ -146,10 +155,14 @@ export class AutomaticBackups {
   private prune(): void {
     if (!this.latest) return
     try {
+      let kept = 1
       for (const snapshot of listSnapshots(this.root)) {
-        if (snapshot.dir !== this.latest.dir) {
-          rmSync(snapshot.dir, { recursive: true, force: true })
+        if (snapshot.dir === this.latest.dir) continue
+        if (kept < KEEP_SNAPSHOTS && existsSync(join(snapshot.dir, READY_MARKER))) {
+          kept++
+          continue
         }
+        rmSync(snapshot.dir, { recursive: true, force: true })
       }
     } catch (err) {
       console.warn('Could not remove old automatic backups.', err)

@@ -230,4 +230,19 @@ describe('sweeping the cover cache', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('removes Discover thumbnails no cached candidate uses and leaves book jackets alone', async () => {
+    const { pruneDiscoverCovers } = await load()
+    const dir = seedCache()
+    writeFileSync(join(dir, 'cover-777.jpg'), 'A CANDIDATE STILL IN DISCOVER')
+    try {
+      expect(pruneDiscoverCovers(dir, new Set([777]))).toBe(1)
+      expect(existsSync(join(dir, 'cover-12345.jpg'))).toBe(false)
+      expect(existsSync(join(dir, 'cover-777.jpg'))).toBe(true)
+      expect(existsSync(join(dir, 'book-1-99.jpg'))).toBe(true)
+      expect(existsSync(join(dir, 'book-404-7.jpg'))).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

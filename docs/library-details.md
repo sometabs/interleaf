@@ -43,10 +43,14 @@ database, upgrades a staged copy if needed, and restarts with the restored libra
 positions, stacks, face-out covers, and hidden books are part of the database. UI preferences,
 the embedding model, and the embedding cache are stored separately.
 
-Interleaf takes the first automatic backup after a saved change. Further changes refresh it once
-the 24-hour window ends, or at the next launch if the app was closed at that point. Interleaf
-keeps one verified snapshot in the profile's `backups/` folder and refreshes it after a manual
-import. If the database is missing or damaged at startup, it offers to restore that snapshot.
+Interleaf takes the first automatic backup after a saved change. Further changes are backed up
+once the 24-hour window ends, or at the next launch if the app was closed at that point. It also
+backs up right before any bulk delete in **Data** and after a manual import. The three newest
+verified snapshots stay in the profile's `backups/` folder. If the database is missing or damaged
+at startup, Interleaf offers to restore the newest one or start an empty library, and keeps a copy
+of a damaged database either way.
+
+Discover thumbnails are removed once no cached recommendation uses them.
 
 ## Reading and writing
 

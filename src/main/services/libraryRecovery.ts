@@ -5,9 +5,11 @@ import { join } from 'path'
 import { closeDb, getDb, getDbPath, initDb } from '../db/connection'
 import { AutomaticBackups, latestRecoverySnapshot } from './automaticBackups'
 import {
+  BackupError,
   checkDatabaseIntegrity,
   isDatabaseCorruption,
   restoreBackup,
+  setAsideDatabase,
   type RestoreResult
 } from './backup'
 import { coversDir } from './covers'
@@ -33,6 +35,19 @@ export function scheduleAutomaticBackup(): void {
   automatic?.schedule()
 }
 
+export function backupBeforeBulkDelete(): void {
+  try {
+    if (!automatic) throw new BackupError('Automatic backups are not running.')
+    automatic.backupNow()
+  } catch (err) {
+    throw new BackupError(`Nothing was deleted. ${(err as Error).message}`, { cause: err })
+  }
+}
+
+const RESTORE = 0
+const START_EMPTY = 1
+const QUIT = 2
+
 function recoverAtStartup(dbPath: string, damaged: boolean): boolean | null {
   const snapshot = latestRecoverySnapshot(backupDirectory())
   if (!snapshot) return null
@@ -43,15 +58,20 @@ function recoverAtStartup(dbPath: string, damaged: boolean): boolean | null {
       ? 'Interleaf found a damaged database.'
       : 'Interleaf could not find your database.',
     detail:
-      `Restore the automatic backup from ${new Date(snapshot.createdAt).toLocaleString()}?` +
-      (damaged ? ' Interleaf will keep a copy of the damaged database.' : ''),
-    buttons: ['Restore backup', 'Cancel'],
-    defaultId: 1,
-    cancelId: 1,
+      `Restore the automatic backup from ${new Date(snapshot.createdAt).toLocaleString()}, ` +
+      'or start an empty library.' +
+      (damaged ? ' Either way, Interleaf keeps a copy of the damaged database.' : ''),
+    buttons: ['Restore backup', 'Start an empty library', 'Quit'],
+    defaultId: RESTORE,
+    cancelId: QUIT,
     noLink: true
   })
-  if (selected !== 0) return false
-  restoreBackup(snapshot.dir, dbPath, coversDir(), { preserveDamaged: damaged })
+  if (selected === QUIT) return false
+  if (selected === START_EMPTY) {
+    if (damaged) setAsideDatabase(dbPath)
+  } else {
+    restoreBackup(snapshot.dir, dbPath, coversDir(), { preserveDamaged: damaged })
+  }
   checkDatabaseIntegrity(initDb())
   return true
 }

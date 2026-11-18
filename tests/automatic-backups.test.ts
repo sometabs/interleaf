@@ -99,7 +99,7 @@ describe('automatic backups', () => {
     expect(bookCount()).toBe(1)
     vi.advanceTimersByTime(BACKUP_INTERVAL - 3)
     expect(bookCount()).toBe(3)
-    expect(snapshotDirectories()).toHaveLength(1)
+    expect(snapshotDirectories()).toHaveLength(2)
     vi.advanceTimersByTime(2 * BACKUP_INTERVAL)
     expect(bookCount()).toBe(3)
   })
@@ -116,7 +116,7 @@ describe('automatic backups', () => {
     backups.start(db)
     vi.advanceTimersByTime(1)
     expect(bookCount()).toBe(2)
-    expect(snapshotDirectories()).toHaveLength(1)
+    expect(snapshotDirectories()).toHaveLength(2)
   })
 
   it('ignores rolled-back writes and recommendation cache changes', () => {
@@ -165,7 +165,7 @@ describe('automatic backups', () => {
     expect(warning).toHaveBeenCalled()
     vi.advanceTimersByTime(5 * 60 * 1000)
     expect(bookCount()).toBe(3)
-    expect(snapshotDirectories()).toHaveLength(1)
+    expect(snapshotDirectories()).toHaveLength(2)
   })
 
   it('skips a damaged snapshot and preserves the damaged live database and sidecars during recovery', () => {
@@ -187,6 +187,18 @@ describe('automatic backups', () => {
     expect(readFileSync(result.replaced! + '-wal', 'utf8')).toBe('uncheckpointed bytes')
     db = createDatabase(live)
     expect(listBooks(db).map(({ title }) => title)).toEqual(['First'])
+  })
+
+  it('keeps the three newest copies', () => {
+    save('First')
+    for (const title of ['Second', 'Third', 'Fourth']) {
+      vi.advanceTimersByTime(BACKUP_INTERVAL)
+      save(title)
+    }
+    const counts = snapshotDirectories()
+      .sort()
+      .map((name) => verifySnapshot(join(root, name, DB_NAME)).books)
+    expect(counts).toEqual([2, 3, 4])
   })
 
   it('ignores a snapshot left on disk before publication', () => {
