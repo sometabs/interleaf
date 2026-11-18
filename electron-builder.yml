@@ -26,6 +26,8 @@ files:
   # The builder's win macro matches ONNX's win32 folder. Linux uses linux in both.
   - '!node_modules/onnxruntime-node/bin/napi-v6/!(${os}*)/**'
   - '!node_modules/onnxruntime-node/bin/napi-v6/*/!(${arch})/**'
+  # GPU (DirectML) support, about 38 MB. The model runs on the CPU.
+  - '!node_modules/onnxruntime-node/bin/napi-v6/win32/*/{DirectML.dll,dxcompiler.dll,dxil.dll}'
   # Transformers runs in the Node worker with the native ONNX backend.
   - '!node_modules/onnxruntime-web/**'
 asarUnpack:
