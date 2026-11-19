@@ -149,43 +149,45 @@ export default function Notes(): ReactNode {
             {query ? `Nothing matches “${filter.trim()}”.` : 'No notes match these filters.'}
           </p>
         ) : (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col divide-y divide-hairline">
             {matching.map((note) => (
-              <button
-                key={note.id}
-                type="button"
-                data-testid="note-row"
-                onClick={() => navigate({ kind: 'note', id: note.id })}
-                className="flex flex-col gap-1 rounded-card px-3 py-2.5 text-left hover:bg-hover"
-              >
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className={`truncate font-medium ${note.title ? '' : 'text-ink-faint'}`}>
-                    {toPlainText(note.title) || 'Untitled'}
-                  </span>
-                  <span className="shrink-0 text-[11px] text-ink-faint">
-                    {relativeDate(note.updatedAt)}
-                  </span>
-                </span>
-
-                <span
-                  className={`line-clamp-2 min-w-0 wrap-anywhere text-[13px] leading-snug ${
-                    note.bodyMd.trim() ? 'text-ink-muted' : 'italic text-ink-faint'
-                  }`}
+              // The divider sits on this wrapper: on the rounded row it would curve at the ends.
+              <div key={note.id} className="py-1">
+                <button
+                  type="button"
+                  data-testid="note-row"
+                  onClick={() => navigate({ kind: 'note', id: note.id })}
+                  className="flex w-full flex-col gap-1 rounded-card px-3 py-2.5 text-left hover:bg-hover"
                 >
-                  {note.bodyMd.trim() ? toPlainText(note.bodyMd).slice(0, 200) : 'Empty note'}
-                </span>
-
-                <span className="flex items-center gap-2 text-[11px] text-ink-faint">
-                  {bookTitle(note) && <span className="truncate">{bookTitle(note)}</span>}
-                  {/* `ml-auto` rather than `justify-between`: the row is empty for an
-                      untagged note with no book. */}
-                  {note.tag && (
-                    <span className="chip ml-auto shrink-0 text-[10px] tracking-wide">
-                      {note.tag}
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className={`truncate font-medium ${note.title ? '' : 'text-ink-faint'}`}>
+                      {toPlainText(note.title) || 'Untitled'}
                     </span>
-                  )}
-                </span>
-              </button>
+                    <span className="shrink-0 text-[11px] text-ink-faint">
+                      {relativeDate(note.updatedAt)}
+                    </span>
+                  </span>
+
+                  <span
+                    className={`line-clamp-2 min-w-0 wrap-anywhere text-[13px] leading-snug ${
+                      note.bodyMd.trim() ? 'text-ink-muted' : 'italic text-ink-faint'
+                    }`}
+                  >
+                    {note.bodyMd.trim() ? toPlainText(note.bodyMd).slice(0, 200) : 'Empty note'}
+                  </span>
+
+                  <span className="flex items-center gap-2 text-[11px] text-ink-faint">
+                    {bookTitle(note) && <span className="truncate">{bookTitle(note)}</span>}
+                    {/* `ml-auto` rather than `justify-between`: the row is empty for an
+                      untagged note with no book. */}
+                    {note.tag && (
+                      <span className="chip ml-auto shrink-0 text-[10px] tracking-wide">
+                        {note.tag}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </div>
             ))}
           </div>
         )}

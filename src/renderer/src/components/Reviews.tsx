@@ -105,50 +105,51 @@ export default function Reviews(): ReactNode {
             {query ? `Nothing matches “${filter.trim()}”.` : 'No reviews at that rating.'}
           </p>
         ) : (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col divide-y divide-hairline">
             {matching.map(({ book, review }) => {
               const excerpt = review ? toPlainText(review.bodyMd).slice(0, 300) : ''
               return (
-                <button
-                  key={book.id}
-                  type="button"
-                  data-testid="review-row"
-                  onClick={() => navigate({ kind: 'review', bookId: book.id })}
-                  className="flex gap-3.5 rounded-card px-3 py-3 text-left hover:bg-hover"
-                >
-                  <span className="w-11 shrink-0">
-                    <Cover
-                      title={book.title}
-                      author={book.author}
-                      path={book.coverPath}
-                      size="sm"
-                    />
-                  </span>
-
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="flex items-baseline justify-between gap-3">
-                      <span className="truncate font-medium">{book.title}</span>
-                      {book.finishedAt !== null && (
-                        <span className="shrink-0 text-[11px] text-ink-faint">
-                          {formatDate(book.finishedAt)}
-                        </span>
-                      )}
+                <div key={book.id} className="py-1">
+                  <button
+                    type="button"
+                    data-testid="review-row"
+                    onClick={() => navigate({ kind: 'review', bookId: book.id })}
+                    className="flex w-full gap-3.5 rounded-card px-3 py-3 text-left hover:bg-hover"
+                  >
+                    <span className="w-11 shrink-0">
+                      <Cover
+                        title={book.title}
+                        author={book.author}
+                        path={book.coverPath}
+                        size="sm"
+                      />
                     </span>
 
-                    <span className="flex items-center gap-2 text-[12px] text-ink-muted">
-                      {book.rating !== null && <Rating value={book.rating} readOnly />}
-                      {book.author && <span className="truncate">{book.author}</span>}
-                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="truncate font-medium">{book.title}</span>
+                        {book.finishedAt !== null && (
+                          <span className="shrink-0 text-[11px] text-ink-faint">
+                            {formatDate(book.finishedAt)}
+                          </span>
+                        )}
+                      </span>
 
-                    <span
-                      className={`line-clamp-3 min-w-0 wrap-anywhere text-[13px] leading-snug ${
-                        excerpt ? 'text-ink-muted' : 'italic text-ink-faint'
-                      }`}
-                    >
-                      {excerpt || 'No review'}
+                      <span className="flex items-center gap-2 text-[12px] text-ink-muted">
+                        {book.rating !== null && <Rating value={book.rating} readOnly />}
+                        {book.author && <span className="truncate">{book.author}</span>}
+                      </span>
+
+                      <span
+                        className={`line-clamp-3 min-w-0 wrap-anywhere text-[13px] leading-snug ${
+                          excerpt ? 'text-ink-muted' : 'italic text-ink-faint'
+                        }`}
+                      >
+                        {excerpt || 'No review'}
+                      </span>
                     </span>
-                  </span>
-                </button>
+                  </button>
+                </div>
               )
             })}
           </div>
