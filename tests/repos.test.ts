@@ -146,6 +146,21 @@ describe('books', () => {
     expect(() => books.updateBook(db, book.id, { rating: 9 })).toThrow()
   })
 
+  it('stores half stars and refuses anything finer', () => {
+    const book = books.createBook(db, { title: 'Dune', rating: 3.5 })
+    expect(books.getBook(db, book.id)?.rating).toBe(3.5)
+    expect(books.updateBook(db, book.id, { rating: 4 })?.rating).toBe(4)
+    expect(books.updateBook(db, book.id, { rating: 4.5 })?.rating).toBe(4.5)
+
+    expect(() => books.updateBook(db, book.id, { rating: 3.7 })).toThrow(/whole or half star/)
+    expect(() => books.createBook(db, { title: 'Emma', rating: 2.25 })).toThrow(
+      /whole or half star/
+    )
+    expect(() => books.updateBook(db, book.id, { rating: 0.5 })).toThrow()
+    expect(() => books.updateBook(db, book.id, { rating: 5.5 })).toThrow()
+    expect(books.updateBook(db, book.id, { rating: null })?.rating).toBeNull()
+  })
+
   it('appends every want-to-read book and lets the reader rearrange them', () => {
     const first = books.createBook(db, { title: 'Dune' })
     const second = books.createBook(db, { title: 'Solaris' })

@@ -278,4 +278,20 @@ describe('the review screen', () => {
 
     expect(await screen.findByText('The book this review belongs to is gone.')).toBeTruthy()
   })
+
+  it('filters by a half star once a review has one', async () => {
+    const half = makeBook({ id: 8, title: 'Emma', rating: 3.5 })
+    installBridge({
+      books: [BOOK, half],
+      notes: [REVIEW, makeNote({ id: 4, kind: 'review', bookId: 8, bodyMd: 'Sharp and funny.' })]
+    })
+    renderApp(<Reviews />, { kind: 'reviews' })
+    const user = userEvent.setup()
+
+    await pickOption(user, 'Filter by rating', '3.5 stars')
+
+    expect(await screen.findByText(/Sharp and funny/)).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Rated 3.5 of 5' })).toBeTruthy()
+    expect(screen.queryByText(/An ambiguous utopia/)).toBeNull()
+  })
 })

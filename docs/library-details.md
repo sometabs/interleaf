@@ -14,13 +14,14 @@ metadata** for the library.
 
 ## Discover
 
-An online Discover search uses subjects and author names from finished books rated four or five
-stars. **Find books like this** uses the selected book alone. A search plans up to eight catalogue
+An online Discover search uses subjects and author names from finished books rated four stars or
+more. **Find books like this** uses the selected book alone. A search plans up to eight catalogue
 queries. Interleaf runs catalogue requests one at a time with at least 1.1 seconds between starts
 and can retry once on `429` or `503`.
 
-Ranking uses subjects and descriptions from the local candidate cache. Finished three-star books
-give a weaker positive signal, and one- or two-star ratings can push down similar results. Keyword
+Ranking uses subjects and descriptions from the local candidate cache. Ratings go in half stars,
+and each half star weighs between its neighbours. Finished three-star books give a weaker positive
+signal, and ratings below three stars can push down similar results. Keyword
 ranking uses TF-IDF and cosine similarity. **Advanced recommendations** combines that ranking with
 local embeddings using reciprocal rank fusion. Discover falls back to keyword ranking if the
 model fails.

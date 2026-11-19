@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   recommend,
   recommendTree,
+  tasteWeight,
   type CandidateInput,
   type ProfileBook
 } from '../src/main/services/recommender'
@@ -498,5 +499,23 @@ describe('recommending like one book', () => {
   it('applies to the tree as well as the list', () => {
     const roots = recommendTree(shelf, pool, { likeBookId: 2 })
     expect(roots.map((node) => node.olid)).toEqual(['FOOD'])
+  })
+})
+
+describe('taste weight of half stars', () => {
+  const weight = (rating: number | null): number =>
+    tasteWeight(lib({ bookId: 1, title: 'Dune', rating }), 0)
+
+  it('places each half star between its neighbours', () => {
+    expect(weight(4.5)).toBe(1.5)
+    expect(weight(3.5)).toBe(0.625)
+    expect(weight(2.5)).toBe(-0.25)
+
+    const ladder = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(weight)
+    for (let i = 1; i < ladder.length; i++) expect(ladder[i]).toBeGreaterThanOrEqual(ladder[i - 1])
+  })
+
+  it('keeps whole stars where they were', () => {
+    expect([1, 2, 3, 4, 5].map(weight)).toEqual([-0.75, -0.75, 0.25, 1, 2])
   })
 })

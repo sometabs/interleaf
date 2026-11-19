@@ -223,10 +223,12 @@ export function tasteWeight(book: ProfileBook, now: number): number {
     book.rating === null
       ? 0.5
       : book.rating >= 4
-        ? book.rating - 3 // 4 -> 1, 5 -> 2
-        : book.rating <= 2
-          ? -0.75 // actively disliked
-          : 0.25
+        ? book.rating - 3 // 4 -> 1, 4.5 -> 1.5, 5 -> 2
+        : book.rating >= 3
+          ? 0.25 + (book.rating - 3) * 0.75 // 3 -> 0.25, 3.5 -> 0.625
+          : book.rating > 2
+            ? -0.25 // 2.5: mildly disliked
+            : -0.75 // actively disliked
 
   if (base <= 0 || !book.finishedAt) return base
 
@@ -271,7 +273,7 @@ function profileFor(library: ProfileBook[], options: RecommendOptions): ProfileB
       if (book.rating === null) return false
       // A low rating is explicit negative evidence even when the book was set
       // aside. Positive and neutral evidence must come from a finished book.
-      return book.rating <= 2 || book.status === undefined || book.status === 'read'
+      return book.rating < 3 || book.status === undefined || book.status === 'read'
     })
   }
 

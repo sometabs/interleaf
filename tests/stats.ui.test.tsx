@@ -184,4 +184,31 @@ describe('Stats', () => {
     expect(screen.getByText('Reviews')).toBeDefined()
     expect(screen.getByText('Quotes')).toBeDefined()
   })
+
+  it('draws a column for every half step, counting each rating given', async () => {
+    installBridge({
+      books: [
+        makeBook({ id: 1, rating: 5 }),
+        makeBook({ id: 2, rating: 4.5 }),
+        makeBook({ id: 3, rating: 4.5 })
+      ]
+    })
+    renderApp(<Stats />)
+
+    const section = (await screen.findByRole('heading', { name: 'Ratings' })).closest('section')!
+    const columns = [...section.querySelectorAll('[aria-label$=book], [aria-label$=books]')].map(
+      (column) => column.getAttribute('aria-label')
+    )
+    expect(columns).toEqual([
+      '1 star: 0 books',
+      '1.5 stars: 0 books',
+      '2 stars: 0 books',
+      '2.5 stars: 0 books',
+      '3 stars: 0 books',
+      '3.5 stars: 0 books',
+      '4 stars: 0 books',
+      '4.5 stars: 2 books',
+      '5 stars: 1 book'
+    ])
+  })
 })

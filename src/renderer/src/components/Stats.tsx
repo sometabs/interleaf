@@ -106,7 +106,7 @@ export default function Stats(): ReactNode {
               Library status
             </h2>
             <div className="card p-4">
-              <BarList rows={stats.statuses} total={stats.totalBooks} tone="accent" />
+              <BarList rows={stats.statuses} total={stats.totalBooks} />
             </div>
           </section>
 
@@ -115,7 +115,7 @@ export default function Stats(): ReactNode {
               Ratings
             </h2>
             <div className="card p-4">
-              <BarList rows={stats.ratings} total={stats.ratedBooks} tone="star" />
+              <RatingHistogram rows={stats.ratings} />
             </div>
           </section>
         </div>
@@ -267,15 +267,7 @@ function CompletionChart({
   )
 }
 
-function BarList({
-  rows,
-  total,
-  tone
-}: {
-  rows: CountedLabel[]
-  total: number
-  tone: 'accent' | 'star'
-}): ReactNode {
+function BarList({ rows, total }: { rows: CountedLabel[]; total: number }): ReactNode {
   const maximum = Math.max(0, ...rows.map((row) => row.count))
 
   return (
@@ -283,20 +275,65 @@ function BarList({
       {rows.map((row) => (
         <div key={row.label}>
           <div className="mb-1 flex items-center justify-between text-[12px]">
-            <span className={tone === 'star' ? 'text-star' : 'text-ink-muted'}>
-              {tone === 'star' ? '★'.repeat(Number(row.label.split(' ')[0])) : row.label}
-            </span>
+            <span className="text-ink-muted">{row.label}</span>
             <span className="tabular-nums text-ink-muted">{row.count}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-sunken">
             <div
-              className={`h-full rounded-full ${tone === 'star' ? 'bg-star' : 'bg-accent'}`}
+              className="h-full rounded-full bg-accent"
               style={{ width: maximum === 0 ? 0 : `${(row.count / maximum) * 100}%` }}
             />
           </div>
         </div>
       ))}
       {total === 0 && <p className="pt-1 text-center text-[11px] text-ink-faint">No data yet.</p>}
+    </div>
+  )
+}
+
+function RatingHistogram({ rows }: { rows: (CountedLabel & { rating: number })[] }): ReactNode {
+  const maximum = Math.max(0, ...rows.map((row) => row.count))
+
+  return (
+    <div>
+      <div className="flex h-36 items-end gap-1.5 border-b border-hairline-strong px-1">
+        {rows.map((row) => {
+          const height = row.count === 0 ? 0 : Math.max(7, (row.count / maximum) * 112)
+          return (
+            <div
+              key={row.rating}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+              aria-label={`${row.label}: ${row.count} ${row.count === 1 ? 'book' : 'books'}`}
+            >
+              {row.count > 0 && (
+                <span className="mb-1 text-[10px] tabular-nums text-ink-muted">{row.count}</span>
+              )}
+              <span
+                className="w-full max-w-8 rounded-t-[2px] bg-star"
+                style={{ height }}
+                aria-hidden="true"
+              />
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-1 flex gap-1.5 px-1" aria-hidden="true">
+        {rows.map((row) => (
+          <span key={row.rating} className="min-w-0 flex-1 text-center text-[10px] text-ink-faint">
+            {Number.isInteger(row.rating) ? (
+              <>
+                {row.rating}
+                <span className="text-star">★</span>
+              </>
+            ) : (
+              row.rating
+            )}
+          </span>
+        ))}
+      </div>
+      {maximum === 0 && (
+        <p className="mt-3 text-center text-[11px] text-ink-faint">No rated books yet.</p>
+      )}
     </div>
   )
 }

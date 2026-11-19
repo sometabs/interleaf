@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 
 import { formatDate } from '../lib/dates'
 import { useBooks, useNotes } from '../lib/queries'
+import { ratingLabel, ratingSteps } from '../lib/stats'
 import { reviewEntries } from '../lib/reviews'
 import { useView } from '../lib/view'
 import Cover from './Cover'
@@ -76,10 +77,9 @@ export default function Reviews(): ReactNode {
               active={ratingFilter !== ANY}
               options={[
                 { value: ANY, label: 'All ratings' },
-                ...[5, 4, 3, 2, 1].map((stars) => ({
-                  value: String(stars),
-                  label: `${stars} ${stars === 1 ? 'star' : 'stars'}`
-                }))
+                ...ratingSteps(
+                  reviews.flatMap(({ book }) => (book.rating === null ? [] : [book.rating]))
+                ).map((stars) => ({ value: String(stars), label: ratingLabel(stars) }))
               ]}
             />
 

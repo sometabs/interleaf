@@ -106,12 +106,31 @@ describe('library statistics', () => {
       ['abandoned', 0]
     ])
     expect(stats.ratings.map(({ rating, count }) => [rating, count])).toEqual([
-      [5, 1],
-      [4, 1],
-      [3, 1],
+      [1, 0],
+      [1.5, 0],
       [2, 0],
-      [1, 0]
+      [2.5, 0],
+      [3, 1],
+      [3.5, 0],
+      [4, 1],
+      [4.5, 0],
+      [5, 1]
     ])
     expect(stats.topAuthors).toEqual([{ label: 'Ursula K. Le Guin', count: 2 }])
+  })
+
+  it('counts every half step on a fixed axis and keeps half stars in the average', () => {
+    const stats = calculateStats(
+      [makeBook({ rating: 3.5 }), makeBook({ rating: 4.5 }), makeBook({ rating: 5 })],
+      [],
+      2026
+    )
+
+    expect(stats.ratings.filter(({ count }) => count > 0).map(({ rating }) => rating)).toEqual([
+      3.5, 4.5, 5
+    ])
+    expect(stats.ratings).toHaveLength(9)
+    expect(stats.ratings[7].label).toBe('4.5 stars')
+    expect(stats.averageRating).toBeCloseTo(13 / 3)
   })
 })

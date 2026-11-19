@@ -41,6 +41,17 @@ export function readingYears(books: readonly Book[], currentYear: number): numbe
   return [...years].sort((left, right) => right - left)
 }
 
+const HALF_STEPS = [5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1]
+
+/** Only the ratings actually given, highest first. */
+export function ratingSteps(given: readonly number[]): number[] {
+  return HALF_STEPS.filter((step) => given.includes(step))
+}
+
+export function ratingLabel(rating: number): string {
+  return `${rating} ${rating === 1 ? 'star' : 'stars'}`
+}
+
 export function calculateStats(
   books: readonly Book[],
   notes: readonly Note[],
@@ -77,9 +88,10 @@ export function calculateStats(
     count: books.filter((book) => book.status === status).length
   }))
 
-  const ratings = [5, 4, 3, 2, 1].map((rating) => ({
+  // Every step, lowest first: a fixed axis keeps the histogram's shape comparable.
+  const ratings = [...HALF_STEPS].reverse().map((rating) => ({
     rating,
-    label: `${rating} ${rating === 1 ? 'star' : 'stars'}`,
+    label: ratingLabel(rating),
     count: rated.filter((book) => book.rating === rating).length
   }))
 
