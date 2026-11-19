@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 
-import { useBooks, useNotes } from '../lib/queries'
-import { calculateStats, readingYears, type CountedLabel } from '../lib/stats'
+import { useBooks, useNotes, useReadingGoals, useSetReadingGoal } from '../lib/queries'
+import { calculateStats, goalStatus, readingYears, type CountedLabel } from '../lib/stats'
 import FilterPicker from './FilterPicker'
 
 const number = new Intl.NumberFormat()
@@ -83,6 +83,15 @@ export default function Stats(): ReactNode {
                 value={number.format(periodPages)}
                 detail={pageCoverage(periodPageCountsKnown, periodBooks)}
               />
+              {!allTime && (
+                <div className="col-span-2 md:col-span-1">
+                  <ReadingGoal
+                    year={year}
+                    finished={stats.yearBooks}
+                    current={year === currentYear}
+                  />
+                </div>
+              )}
             </div>
             <div className="min-w-0">
               <CompletionChart
@@ -203,6 +212,104 @@ function SmallMetric({
       <p className="text-[11px] text-ink-muted">{label}</p>
       <p className="mt-0.5 text-[22px] font-semibold leading-tight tabular-nums">{value}</p>
       {detail && <p className="mt-1 text-[10px] leading-snug text-ink-faint">{detail}</p>}
+    </div>
+  )
+}
+
+function ReadingGoal({
+  year,
+  finished,
+  current
+}: {
+  year: number
+  finished: number
+  current: boolean
+}): ReactNode {
+  const { data: goals = [] } = useReadingGoals()
+  const setGoal = useSetReadingGoal()
+  const goal = goals.find((saved) => saved.year === year)?.books ?? null
+  const [draft, setDraft] = useState<string | null>(null)
+  // Enter or Escape unmounts the field, which may also fire blur: settle only once.
+  const settled = useRef(false)
+
+  const edit = (): void => {
+    settled.current = false
+    setDraft(goal === null ? '' : String(goal))
+  }
+  const finish = (save: boolean): void => {
+    if (settled.current || draft === null) return
+    settled.current = true
+    setDraft(null)
+    if (!save) return
+    const next = draft.trim() === '' ? null : Number(draft)
+    if (next !== null && (!Number.isInteger(next) || next < 1)) return
+    if (next !== goal) setGoal.mutate({ year, books: next })
+  }
+
+  if (draft !== null) {
+    return (
+      <label className="block">
+        <span className="text-[11px] text-ink-muted">Books to finish in {year}</span>
+        <input
+          inputMode="numeric"
+          autoFocus
+          aria-label={`Books to finish in ${year}`}
+          className="field mt-1 w-full text-[13px]"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => finish(true)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') finish(true)
+            if (event.key === 'Escape') finish(false)
+            // Otherwise Escape would also reach the app's global "back" shortcut.
+            event.stopPropagation()
+          }}
+        />
+        <span className="mt-1 block text-[10px] text-ink-faint">Empty removes the goal.</span>
+      </label>
+    )
+  }
+
+  if (goal === null) {
+    if (!current) return null
+    return (
+      <button type="button" className="btn btn-ghost -ml-2 text-[12px]" onClick={edit}>
+        Set a reading goal
+      </button>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[11px] text-ink-muted">Goal</p>
+        <button
+          type="button"
+          aria-label="Change goal"
+          className="text-[11px] text-ink-faint hover:text-ink"
+          onClick={edit}
+        >
+          Change
+        </button>
+      </div>
+      <p className="mt-0.5 text-[13px] tabular-nums">
+        <span className="font-semibold">{number.format(finished)}</span> of {number.format(goal)}{' '}
+        {goal === 1 ? 'book' : 'books'}
+      </p>
+      <div
+        role="progressbar"
+        aria-label={`Reading goal for ${year}`}
+        aria-valuemin={0}
+        aria-valuemax={goal}
+        aria-valuenow={Math.min(finished, goal)}
+        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-hairline"
+      >
+        <div
+          className="h-full rounded-full bg-accent"
+          style={{ width: `${Math.min(100, (finished / goal) * 100)}%` }}
+        />
+      </div>
+      <p className="mt-1 text-[10px] text-ink-faint">{goalStatus(finished, goal, current)}</p>
     </div>
   )
 }

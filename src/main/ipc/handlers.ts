@@ -17,6 +17,7 @@ import { closeDb, getDb } from '../db/connection'
 import { assertTrustedIpcSender } from '../security'
 import * as books from '../repos/books'
 import * as bookshelf from '../repos/bookshelf'
+import * as goals from '../repos/goals'
 import * as data from '../repos/data'
 import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
@@ -52,6 +53,7 @@ let restarting = false
 const libraryWrites = new Set<keyof InterleafApi>([
   'getBookshelfLayout',
   'saveBookshelfLayout',
+  'setReadingGoal',
   'createBook',
   'updateBook',
   'reorderPriority',
@@ -150,6 +152,12 @@ const api: InterleafApi = {
   },
   async saveBookshelfLayout(layout) {
     return bookshelf.saveBookshelfLayout(getDb(), layout)
+  },
+  async listReadingGoals() {
+    return goals.listReadingGoals(getDb())
+  },
+  async setReadingGoal(year, count) {
+    goals.setReadingGoal(getDb(), year, count)
   },
   getSpineColors,
   async createBook(input) {

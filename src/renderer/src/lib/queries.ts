@@ -39,7 +39,8 @@ import type {
   RecommendationRefreshQuery,
   SemanticProgress,
   SearchHit,
-  SpineColors
+  SpineColors,
+  ReadingGoal
 } from '@shared/api'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
@@ -49,6 +50,7 @@ const api = (): InterleafBridge => window.interleaf
 const keys = {
   books: ['books'] as const,
   bookshelf: ['bookshelf'] as const,
+  goals: ['reading-goals'] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
@@ -130,6 +132,22 @@ export function useSaveBookshelfLayout(): UseMutationResult<
         void client.invalidateQueries({ queryKey: keys.bookshelf })
       }
     }
+  })
+}
+
+export function useReadingGoals(): UseQueryResult<ReadingGoal[]> {
+  return useQuery({ queryKey: keys.goals, queryFn: () => api().listReadingGoals() })
+}
+
+export function useSetReadingGoal(): UseMutationResult<
+  void,
+  Error,
+  { year: number; books: number | null }
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ year, books }) => api().setReadingGoal(year, books),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.goals })
   })
 }
 

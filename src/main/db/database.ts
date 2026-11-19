@@ -24,6 +24,7 @@ import backupRevision020 from './migrations/020_backup_revision.sql?raw'
 import bookshelfLayout021 from './migrations/021_bookshelf_layout.sql?raw'
 import dropUnusedColumns022 from './migrations/022_drop_unused_columns.sql?raw'
 import halfStarRatings023 from './migrations/023_half_star_ratings.sql?raw'
+import readingGoals024 from './migrations/024_reading_goals.sql?raw'
 
 function revisionTriggers(tables: string[]): string {
   return tables
@@ -66,7 +67,8 @@ export const MIGRATIONS: string[] = [
     revisionTriggers(['book', 'note', 'book_metadata', 'rec_feedback', 'imported_book']),
   bookshelfLayout021 + revisionTriggers(['bookshelf_layout']),
   dropUnusedColumns022,
-  halfStarRatings023
+  halfStarRatings023,
+  readingGoals024 + revisionTriggers(['reading_goal'])
 ]
 
 /** SQLite has no regex, so migrations that clean up text need this. */

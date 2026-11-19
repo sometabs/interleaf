@@ -9,6 +9,7 @@ import type {
   InterleafBridge,
   HarvestProgress,
   MetadataRefreshProgress,
+  ReadingGoal,
   ReadyUpdate,
   SemanticProgress,
   Note
@@ -60,6 +61,7 @@ export interface FakeBridge {
   books: Book[]
   notes: Note[]
   bookshelf: BookshelfLayout | null
+  goals: ReadingGoal[]
   created: unknown[]
   deleted: number[]
   emitHarvestProgress: (progress: HarvestProgress) => void
@@ -69,7 +71,12 @@ export interface FakeBridge {
 }
 
 export function installBridge(
-  initial: { books?: Book[]; notes?: Note[]; bookshelf?: BookshelfLayout } = {},
+  initial: {
+    books?: Book[]
+    notes?: Note[]
+    bookshelf?: BookshelfLayout
+    goals?: ReadingGoal[]
+  } = {},
   overrides: Partial<InterleafApi> = {}
 ): FakeBridge {
   const listeners = new Set<(progress: HarvestProgress) => void>()
@@ -81,6 +88,7 @@ export function installBridge(
     books: initial.books ?? [],
     notes: initial.notes ?? [],
     bookshelf: initial.bookshelf ?? null,
+    goals: initial.goals ?? [],
     created: [],
     deleted: [],
     emitHarvestProgress: (progress) => {
@@ -120,6 +128,11 @@ export function installBridge(
 
     listBooks: async () => state.books.map((book) => ({ ...book })),
     getBookshelfLayout: async () => state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT,
+    listReadingGoals: async () => state.goals.map((goal) => ({ ...goal })),
+    setReadingGoal: async (year, books) => {
+      state.goals = state.goals.filter((goal) => goal.year !== year)
+      if (books !== null) state.goals.push({ year, books })
+    },
     saveBookshelfLayout: async (layout) => {
       state.bookshelf = layout
       return layout

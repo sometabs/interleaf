@@ -139,3 +139,10 @@ export function calculateStats(
 function hasPages(book: Book): boolean {
   return book.pageCount !== null && book.pageCount > 0
 }
+
+export function goalStatus(finished: number, goal: number, current: boolean): string {
+  if (finished >= goal) return 'Goal reached'
+  if (!current) return 'Goal not reached'
+  const left = goal - finished
+  return `${left} ${left === 1 ? 'book' : 'books'} to go`
+}

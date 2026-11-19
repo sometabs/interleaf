@@ -211,4 +211,66 @@ describe('Stats', () => {
       '5 stars: 1 book'
     ])
   })
+
+  describe('reading goal', () => {
+    const year = new Date().getFullYear()
+    const finished = (month: number): number => new Date(year, month, 1, 12).getTime() / 1000
+
+    it('sets a goal for this year and shows progress toward it', async () => {
+      const bridge = installBridge({
+        books: [
+          makeBook({ id: 1, status: 'read', finishedAt: finished(0) }),
+          makeBook({ id: 2, status: 'read', finishedAt: finished(0) })
+        ]
+      })
+      renderApp(<Stats />)
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Set a reading goal' }))
+      await user.type(screen.getByLabelText(`Books to finish in ${year}`), '24{Enter}')
+
+      expect(await screen.findByText(/of 24 books/)).toBeTruthy()
+      expect(bridge.goals).toEqual([{ year, books: 24 }])
+      expect(screen.getByText('22 books to go')).toBeTruthy()
+      const bar = screen.getByRole('progressbar', { name: `Reading goal for ${year}` })
+      expect(bar.getAttribute('aria-valuenow')).toBe('2')
+    })
+
+    it('keeps the goal when editing is cancelled, and removes it when emptied', async () => {
+      const bridge = installBridge({ goals: [{ year, books: 12 }] })
+      renderApp(<Stats />)
+      const user = userEvent.setup()
+
+      await user.click(await screen.findByRole('button', { name: 'Change goal' }))
+      await user.clear(screen.getByLabelText(`Books to finish in ${year}`))
+      await user.keyboard('{Escape}')
+      expect(await screen.findByText(/of 12 books/)).toBeTruthy()
+      expect(bridge.goals).toEqual([{ year, books: 12 }])
+
+      await user.click(screen.getByRole('button', { name: 'Change goal' }))
+      await user.clear(screen.getByLabelText(`Books to finish in ${year}`))
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByRole('button', { name: 'Set a reading goal' })).toBeTruthy()
+      expect(bridge.goals).toEqual([])
+    })
+
+    it('offers no new goal for a past year', async () => {
+      installBridge({
+        books: [
+          makeBook({
+            id: 1,
+            status: 'read',
+            finishedAt: new Date(year - 1, 5, 1, 12).getTime() / 1000
+          })
+        ]
+      })
+      renderApp(<Stats />)
+      const user = userEvent.setup()
+
+      await pickOption(user, 'Statistics year', String(year - 1))
+
+      expect(screen.queryByRole('button', { name: 'Set a reading goal' })).toBeNull()
+    })
+  })
 })

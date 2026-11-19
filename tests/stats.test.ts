@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { calculateStats, readingYears } from '../src/renderer/src/lib/stats'
+import { calculateStats, goalStatus, readingYears } from '../src/renderer/src/lib/stats'
 import { makeBook, makeNote } from './helpers/render'
 
 function date(year: number, month: number, day: number): number {
@@ -132,5 +132,18 @@ describe('library statistics', () => {
     expect(stats.ratings).toHaveLength(9)
     expect(stats.ratings[7].label).toBe('4.5 stars')
     expect(stats.averageRating).toBeCloseTo(13 / 3)
+  })
+})
+
+describe('reading goal status', () => {
+  it('counts the books left this year', () => {
+    expect(goalStatus(15, 24, true)).toBe('9 books to go')
+    expect(goalStatus(23, 24, true)).toBe('1 book to go')
+  })
+
+  it('says when a goal is reached or a past year fell short', () => {
+    expect(goalStatus(24, 24, true)).toBe('Goal reached')
+    expect(goalStatus(30, 24, false)).toBe('Goal reached')
+    expect(goalStatus(8, 10, false)).toBe('Goal not reached')
   })
 })

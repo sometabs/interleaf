@@ -223,6 +223,11 @@ export interface ReadyUpdate {
   notes: ReleaseNoteLine[]
 }
 
+export interface ReadingGoal {
+  year: number
+  books: number
+}
+
 export interface BackupResult {
   dir: string
   books: number
@@ -304,6 +309,9 @@ export interface InterleafApi {
   listBooks(): Promise<Book[]>
   getBookshelfLayout(): Promise<BookshelfLayout>
   saveBookshelfLayout(layout: BookshelfLayout): Promise<BookshelfLayout>
+  listReadingGoals(): Promise<ReadingGoal[]>
+  // Null removes the goal for that year.
+  setReadingGoal(year: number, books: number | null): Promise<void>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
@@ -383,6 +391,8 @@ export const IPC_CHANNELS = [
   'listBooks',
   'getBookshelfLayout',
   'saveBookshelfLayout',
+  'listReadingGoals',
+  'setReadingGoal',
   'getSpineColors',
   'createBook',
   'updateBook',
