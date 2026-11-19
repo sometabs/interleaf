@@ -25,7 +25,7 @@ import {
   stopAutomaticBackups
 } from './services/libraryRecovery'
 import { watchForUpdates } from './services/updates'
-import { UPDATE_READY_CHANNEL } from '../shared/api'
+import { UPDATE_READY_CHANNEL, type ReadyUpdate } from '../shared/api'
 
 // Must run before anything touches disk.
 app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged))
@@ -139,9 +139,9 @@ app.whenReady().then(() => {
   })
 })
 
-function announceUpdate(version: string): void {
+function announceUpdate(update: ReadyUpdate): void {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send(UPDATE_READY_CHANNEL, version)
+    if (!window.isDestroyed()) window.webContents.send(UPDATE_READY_CHANNEL, update)
   }
 }
 

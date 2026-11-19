@@ -213,6 +213,16 @@ export const METADATA_REFRESH_PROGRESS_CHANNEL = 'metadata-refresh:progress'
 export const SEMANTIC_PROGRESS_CHANNEL = 'semantic:progress'
 export const UPDATE_READY_CHANNEL = 'update:ready'
 
+export interface ReleaseNoteLine {
+  heading: boolean
+  text: string
+}
+
+export interface ReadyUpdate {
+  version: string
+  notes: ReleaseNoteLine[]
+}
+
 export interface BackupResult {
   dir: string
   books: number
@@ -344,8 +354,8 @@ export interface InterleafApi {
 
   getAppDiagnostics(): Promise<AppDiagnostics>
   checkOpenLibrary(): Promise<boolean>
-  // The version of a downloaded update waiting to install, or null.
-  getReadyUpdate(): Promise<string | null>
+  // A downloaded update waiting to install, or null.
+  getReadyUpdate(): Promise<ReadyUpdate | null>
   restartToUpdate(): Promise<void>
 
   dataCounts(): Promise<DataCounts>
@@ -365,7 +375,7 @@ export interface InterleafBridge extends InterleafApi {
   onHarvestProgress(listener: (progress: HarvestProgress) => void): () => void
   onMetadataRefreshProgress(listener: (progress: MetadataRefreshProgress) => void): () => void
   onSemanticProgress(listener: (progress: SemanticProgress) => void): () => void
-  onUpdateReady(listener: (version: string) => void): () => void
+  onUpdateReady(listener: (update: ReadyUpdate) => void): () => void
 }
 
 // Derived from the interface so the two cannot drift.

@@ -9,6 +9,7 @@ import type {
   InterleafBridge,
   HarvestProgress,
   MetadataRefreshProgress,
+  ReadyUpdate,
   SemanticProgress,
   Note
 } from '../../src/shared/api'
@@ -64,7 +65,7 @@ export interface FakeBridge {
   emitHarvestProgress: (progress: HarvestProgress) => void
   emitMetadataRefreshProgress: (progress: MetadataRefreshProgress) => void
   emitSemanticProgress: (progress: SemanticProgress) => void
-  emitUpdateReady: (version: string) => void
+  emitUpdateReady: (update: ReadyUpdate) => void
 }
 
 export function installBridge(
@@ -74,7 +75,7 @@ export function installBridge(
   const listeners = new Set<(progress: HarvestProgress) => void>()
   const metadataListeners = new Set<(progress: MetadataRefreshProgress) => void>()
   const semanticListeners = new Set<(progress: SemanticProgress) => void>()
-  const updateListeners = new Set<(version: string) => void>()
+  const updateListeners = new Set<(update: ReadyUpdate) => void>()
 
   const state: FakeBridge = {
     books: initial.books ?? [],
@@ -91,8 +92,8 @@ export function installBridge(
     emitSemanticProgress: (progress) => {
       for (const listener of semanticListeners) listener(progress)
     },
-    emitUpdateReady: (version) => {
-      for (const listener of updateListeners) listener(version)
+    emitUpdateReady: (update) => {
+      for (const listener of updateListeners) listener(update)
     }
   }
   let nextId = 90

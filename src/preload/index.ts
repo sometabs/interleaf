@@ -10,7 +10,8 @@ import {
   SEMANTIC_PROGRESS_CHANNEL,
   type SemanticProgress,
   IPC_CHANNELS,
-  UPDATE_READY_CHANNEL
+  UPDATE_READY_CHANNEL,
+  type ReadyUpdate
 } from '../shared/api'
 
 // The context bridge rejects a Proxy or class instance with "An object could
@@ -52,8 +53,8 @@ const bridge: InterleafBridge = {
       ipcRenderer.off(SEMANTIC_PROGRESS_CHANNEL, wrapped)
     }
   },
-  onUpdateReady(listener: (version: string) => void) {
-    const wrapped = (_event: unknown, version: string): void => listener(version)
+  onUpdateReady(listener: (update: ReadyUpdate) => void) {
+    const wrapped = (_event: unknown, update: ReadyUpdate): void => listener(update)
     ipcRenderer.on(UPDATE_READY_CHANNEL, wrapped)
     return () => {
       ipcRenderer.off(UPDATE_READY_CHANNEL, wrapped)
