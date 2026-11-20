@@ -24,6 +24,14 @@ function statusButton(label: string): HTMLElement {
   return screen.getByRole('button', { name: label, pressed: undefined }) as HTMLElement
 }
 
+// A book without a review shows one line until it is clicked.
+async function openReview(): Promise<void> {
+  const fold = await screen.findByRole('button', { name: /^What did you make of/ })
+  await act(async () => {
+    fold.click()
+  })
+}
+
 function activeStatus(): string | null {
   const pressed = screen
     .getAllByRole('button')
@@ -114,6 +122,7 @@ describe('editor stability', () => {
     const bridge = installBridge({ books: [makeBook()] }, { createNote })
     const view = renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
     try {
+      await openReview()
       await screen.findByTestId('editor')
       const dom = document.querySelector<HTMLElement>('.note-prose')!
       for (const text of ['First draft', 'Newest draft']) {
@@ -141,7 +150,11 @@ describe('editor stability', () => {
 
   it('survives a refetch triggered by a status change', async () => {
     const user = userEvent.setup()
-    installBridge({ books: [makeBook()] })
+    // A review with text stays open; an empty one would fold away on the click.
+    installBridge({
+      books: [makeBook()],
+      notes: [makeNote({ id: 9, bookId: 1, kind: 'review', bodyMd: 'Kept open' })]
+    })
     renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
 
     const before = await screen.findByTestId('editor')
@@ -154,7 +167,11 @@ describe('editor stability', () => {
 
   it('survives a rating change', async () => {
     const user = userEvent.setup()
-    installBridge({ books: [makeBook()] })
+    // A review with text stays open; an empty one would fold away on the click.
+    installBridge({
+      books: [makeBook()],
+      notes: [makeNote({ id: 9, bookId: 1, kind: 'review', bodyMd: 'Kept open' })]
+    })
     renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
 
     const before = await screen.findByTestId('editor')

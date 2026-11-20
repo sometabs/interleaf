@@ -18,6 +18,8 @@ interface Props {
   // Omitted where a note-level label makes no sense.
   tag?: string | null
   onTagChange?: (tag: string | null) => void
+  // For an editor opened by a click, so typing can start at once.
+  autoFocus?: boolean
 }
 
 const SAVE_DEBOUNCE_MS = 700
@@ -31,7 +33,8 @@ export default function Editor({
   onChange,
   className = '',
   tag,
-  onTagChange
+  onTagChange,
+  autoFocus = false
 }: Props): ReactNode {
   const fontSize = useNoteFontSize()
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -83,6 +86,7 @@ export default function Editor({
   const editor = useEditor({
     immediatelyRender: true,
     content: initialHtml,
+    autofocus: autoFocus ? 'end' : false,
     ...NOTE_TYPING,
     extensions: noteExtensions(placeholder),
     editorProps: { attributes: { class: 'note-prose' } },

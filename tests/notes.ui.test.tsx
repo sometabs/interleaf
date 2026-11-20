@@ -88,10 +88,10 @@ describe('writing a note on a book', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Add note' }))
 
-    // Two editors now: the review and the note.
+    // Only the note's editor: an unwritten review stays folded to one line.
     await waitFor(() => expect(openCards()).toHaveLength(1))
     expect(screen.getByRole('heading', { name: 'The Dispossessed' })).toBeDefined()
-    expect(screen.getAllByTestId('editor')).toHaveLength(2)
+    expect(screen.getAllByTestId('editor')).toHaveLength(1)
   })
 
   it('does not stack up blank notes when Add note is clicked twice', async () => {
@@ -160,7 +160,7 @@ describe('writing a note on a book', () => {
     setup([makeNote({ id: 7, bookId: 1, title: 'On walls', bodyMd: 'The wall was there.' })])
 
     await user.click(await screen.findByText('On walls'))
-    await waitFor(() => expect(screen.getAllByTestId('editor')).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByTestId('editor')).toHaveLength(1))
 
     const editors = screen.getAllByTestId('editor')
     await user.click(screen.getByRole('button', { name: 'Reading' }))

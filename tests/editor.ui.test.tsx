@@ -42,6 +42,14 @@ async function type(dom: HTMLElement, text: string): Promise<void> {
   })
 }
 
+// A book without a review shows one line until it is clicked.
+async function openReview(): Promise<void> {
+  const fold = await screen.findByRole('button', { name: /^What did you make of/ })
+  await act(async () => {
+    fold.click()
+  })
+}
+
 describe('Editor lifecycle', () => {
   it('does not replace newer text with an older save result while writes are pending', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -140,6 +148,7 @@ describe('Editor lifecycle', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const bridge: FakeBridge = installBridge({ books: [makeBook()] })
     renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
+    await openReview()
 
     await waitFor(() => expect(screen.getAllByTestId('editor')).toHaveLength(1))
     const host = screen.getByTestId('editor')
@@ -161,6 +170,7 @@ describe('Editor lifecycle', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const bridge = installBridge({ books: [makeBook()] })
     renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
+    await openReview()
 
     await waitFor(() => expect(screen.getAllByTestId('editor')).toHaveLength(1))
     const dom = domAt(0)
@@ -180,6 +190,7 @@ describe('Editor lifecycle', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const bridge = installBridge({ books: [makeBook()] })
     renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
+    await openReview()
 
     await waitFor(() => expect(screen.getAllByTestId('editor')).toHaveLength(1))
     const dom = domAt(0)

@@ -1,5 +1,5 @@
 import { STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/api'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import {
@@ -406,16 +406,14 @@ export default function BookDetail({ book }: Props): ReactNode {
               <span className="eyebrow">Your review</span>
 
               {!isPending && (
-                <div className="card mt-2.5 min-h-44 px-5 py-4">
-                  <Editor
-                    key={`review-${book.id}`}
-                    value={review?.bodyMd ?? ''}
-                    placeholder={`What did you make of ${book.title}?`}
-                    onSave={(bodyMd) =>
-                      saveReview.mutateAsync({ noteId: review?.id, bookTitle: book.title, bodyMd })
-                    }
-                  />
-                </div>
+                <ReviewBox
+                  key={`review-${book.id}`}
+                  bookTitle={book.title}
+                  value={review?.bodyMd ?? ''}
+                  onSave={(bodyMd) =>
+                    saveReview.mutateAsync({ noteId: review?.id, bookTitle: book.title, bodyMd })
+                  }
+                />
               )}
             </section>
 
@@ -754,5 +752,57 @@ function DateField({
         className="field absolute top-1/2 left-0 h-6 w-full -translate-y-1/2 cursor-pointer px-1 py-0 text-[12px] opacity-0 focus:w-[8.5rem] focus:opacity-100"
       />
     </span>
+  )
+}
+
+// An unwritten review is one line rather than an empty editor, so quotes and notes stay
+// near the top. It only folds back when left empty, never while it holds text.
+function ReviewBox({
+  bookTitle,
+  value,
+  onSave
+}: {
+  bookTitle: string
+  value: string
+  onSave: (bodyMd: string) => Promise<unknown>
+}): ReactNode {
+  const [open, setOpen] = useState(() => value.trim() !== '')
+  const [opened, setOpened] = useState(false)
+  const text = useRef(value)
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="card mt-2.5 w-full px-5 py-3.5 text-left text-[14px] text-ink-faint hover:bg-hover"
+        onClick={() => {
+          setOpened(true)
+          setOpen(true)
+        }}
+      >
+        What did you make of {bookTitle}?
+      </button>
+    )
+  }
+
+  return (
+    <div
+      className="card mt-2.5 min-h-44 px-5 py-4"
+      // Left empty, it folds back to one line once focus leaves the box.
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        if (!text.current.trim()) setOpen(false)
+      }}
+    >
+      <Editor
+        value={value}
+        autoFocus={opened}
+        placeholder={`What did you make of ${bookTitle}?`}
+        onChange={(next) => {
+          text.current = next
+        }}
+        onSave={onSave}
+      />
+    </div>
   )
 }
