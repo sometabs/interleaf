@@ -1,6 +1,6 @@
 {
   "name": "interleaf",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "description": "Offline book journal with tagged notes, reviews, and recommendations",
   "main": "./out/main/index.js",
   "author": "sometabs",
