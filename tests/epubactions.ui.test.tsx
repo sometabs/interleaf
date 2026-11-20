@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import BookDetail from '../src/renderer/src/components/BookDetail'
 import ConfirmDialog from '../src/renderer/src/components/ConfirmDialog'
 import EpubActions from '../src/renderer/src/components/EpubActions'
 import EpubDrop from '../src/renderer/src/components/EpubDrop'
@@ -58,7 +59,7 @@ describe('the EPUB buttons on a book page', () => {
     expect(await screen.findByText('EPUB attached to “The Glass Orchard”.')).toBeTruthy()
   })
 
-  it('asks before replacing a different file', async () => {
+  it('asks before replacing a different file, from the book menu', async () => {
     const attachEpub = vi.fn(
       async (_bookId: number, _path: string, replace: boolean): Promise<AttachEpubResult> =>
         replace ? { kind: 'attached' } : { kind: 'replace-needed' }
@@ -74,13 +75,15 @@ describe('the EPUB buttons on a book page', () => {
     )
     renderApp(
       <>
-        <EpubActions book={orchard} />
+        <BookDetail book={orchard} />
         <ConfirmDialog />
-      </>
+      </>,
+      { kind: 'book', id: 1 }
     )
 
     expect(await screen.findByRole('button', { name: 'Continue reading · 34%' })).toBeTruthy()
-    await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More book actions' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Replace EPUB' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Replace' }))
 
     await waitFor(() =>

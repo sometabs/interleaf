@@ -1,8 +1,14 @@
-import { BOOK_STATUSES, STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/api'
+import { STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
-import { fromDateInput, readingDurationDays, relativeDate, toDateInput } from '../lib/dates'
+import {
+  formatDate,
+  fromDateInput,
+  readingDurationDays,
+  relativeDate,
+  toDateInput
+} from '../lib/dates'
 import { notify } from '../lib/feedback'
 import {
   useBookMetadata,
@@ -21,17 +27,29 @@ import { toPlainText } from '@shared/plaintext'
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
 import { statusPatch } from '../lib/status'
 import { SCREEN_NAMES, useView } from '../lib/view'
+import ActionsMenu, { type MenuAction } from './ActionsMenu'
 import CoverPicker from './CoverPicker'
 import QuoteCard from './QuoteCard'
 import EditableNumber from './EditableNumber'
 import EditableTitle from './EditableTitle'
-import EpubActions from './EpubActions'
+import EpubActions, { useEpubFileActions } from './EpubActions'
 import OpenInBook from './OpenInBook'
 import Editor from './Editor'
 import Rating from './Rating'
 
 interface Props {
   book: Book
+}
+
+// The order a book moves through, which the switch reads left to right.
+const STATUS_ORDER: readonly BookStatus[] = ['want', 'reading', 'read', 'abandoned']
+
+// Short enough for four to share one line; the full label stays as the button's name.
+const SHORT_STATUS: Record<BookStatus, string> = {
+  want: 'Want',
+  reading: 'Reading',
+  read: 'Read',
+  abandoned: 'Set aside'
 }
 
 export default function BookDetail({ book }: Props): ReactNode {
@@ -47,6 +65,7 @@ export default function BookDetail({ book }: Props): ReactNode {
   const updateNote = useUpdateNote()
   const deleteNote = useDeleteNote()
   const saveReview = useSaveReview(book.id)
+  const epub = useEpubFileActions(book)
 
   const [openId, setOpenId] = useState<number | null>(null)
   const [openQuoteId, setOpenQuoteId] = useState<number | null>(null)
@@ -176,16 +195,55 @@ export default function BookDetail({ book }: Props): ReactNode {
     book.startedAt !== null && book.finishedAt !== null && book.finishedAt < book.startedAt
   const duration = readingDurationDays(book.startedAt, book.finishedAt)
 
+  const menuActions: MenuAction[] = [
+    {
+      label: enrichBook.isPending ? 'Refreshing metadata…' : 'Refresh metadata',
+      onSelect: refetchMetadata,
+      disabled: enrichBook.isPending
+    },
+    ...(epub.file
+      ? [
+          { label: 'Replace EPUB', onSelect: () => void epub.choose(), disabled: epub.choosing },
+          { label: 'Remove EPUB', onSelect: () => void epub.detach() }
+        ]
+      : []),
+    ...(quotes.length > 0
+      ? [
+          {
+            label: `Delete all quotes (${quotes.length})`,
+            onSelect: () => void removeBookEntries('highlight'),
+            danger: true,
+            disabled: deleteBookNotes.isPending
+          }
+        ]
+      : []),
+    ...(thoughts.length > 0
+      ? [
+          {
+            label: `Delete all notes (${thoughts.length})`,
+            onSelect: () => void removeBookEntries('thought'),
+            danger: true,
+            disabled: deleteBookNotes.isPending
+          }
+        ]
+      : []),
+    { label: 'Delete book', onSelect: () => void removeBook(), danger: true }
+  ]
+
   return (
     <div className="h-full overflow-y-auto px-8 pt-6 pb-16">
       <div className="mx-auto max-w-5xl">
-        <button
-          type="button"
-          className="btn btn-ghost -ml-2 mb-4"
-          onClick={() => (cameFrom ? back() : navigate({ kind: 'library' }))}
-        >
-          ← {cameFrom ? SCREEN_NAMES[cameFrom.kind] : 'Library'}
-        </button>
+        {/* Book-wide actions sit with the page, not with any one control. */}
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            type="button"
+            className="btn btn-ghost -ml-2"
+            onClick={() => (cameFrom ? back() : navigate({ kind: 'library' }))}
+          >
+            ← {cameFrom ? SCREEN_NAMES[cameFrom.kind] : 'Library'}
+          </button>
+          <ActionsMenu label="More book actions" actions={menuActions} />
+        </div>
 
         {/* The left column is sticky, so the book stays in view while writing about it. */}
         <div className="grid items-start gap-x-10 gap-y-8 lg:grid-cols-[248px_1fr]">
@@ -241,66 +299,30 @@ export default function BookDetail({ book }: Props): ReactNode {
               />
             </div>
 
-            {/* Never taken from the clock: most books added to a journal were read some
-                time ago. */}
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-              {(
-                [
-                  ['Started', 'startedAt', book.startedAt],
-                  ['Finished', 'finishedAt', book.finishedAt]
-                ] as const
-              ).map(([label, field, value]) => (
-                <label key={field} className="flex flex-col gap-1">
-                  <span className="text-[11px] text-ink-faint">{label}</span>
-                  <input
-                    type="date"
-                    aria-label={`${label} reading`}
-                    value={toDateInput(value)}
-                    onChange={(event) => setDate(field, event.target.value)}
-                    className="field w-auto px-2 py-1 text-[13px]"
-                  />
-                </label>
-              ))}
+            <div className="mt-4">
+              <EpubActions book={book} />
             </div>
-
-            {duration !== null && (
-              <p
-                data-testid="reading-duration"
-                aria-live="polite"
-                className="mt-1.5 text-[12px] text-ink-muted"
-                title="Calendar time between the start and finish dates, including breaks. Not active reading time."
-              >
-                {duration === 0
-                  ? 'Finished the same day'
-                  : `Reading duration: ${duration} ${duration === 1 ? 'day' : 'days'}`}
-              </p>
-            )}
-
-            {backwards && (
-              <p role="status" className="mt-1.5 text-[12px] text-danger">
-                Finished before started.
-              </p>
-            )}
 
             <div
               role="group"
               aria-label="Reading status"
               data-testid="statuses"
-              className="mt-4 flex flex-wrap gap-1"
+              className="mt-4 flex rounded-control border border-hairline-strong p-0.5"
             >
-              {BOOK_STATUSES.map((status) => (
+              {STATUS_ORDER.map((status) => (
                 <button
                   key={status}
                   type="button"
+                  aria-label={STATUS_LABELS[status]}
                   aria-pressed={book.status === status}
                   onClick={() => setStatus(status)}
-                  className={`rounded-control border px-2.5 py-1 text-[12px] transition-colors ${
+                  className={`flex-1 whitespace-nowrap rounded-[2px] px-1 py-1 text-[12px] transition-colors ${
                     book.status === status
-                      ? 'border-transparent bg-action font-medium text-white'
-                      : 'border-hairline-strong bg-surface text-ink-muted hover:text-ink'
+                      ? 'bg-action font-medium text-white'
+                      : 'text-ink-muted hover:bg-hover hover:text-ink'
                   }`}
                 >
-                  {STATUS_LABELS[status]}
+                  {SHORT_STATUS[status]}
                 </button>
               ))}
             </div>
@@ -312,9 +334,44 @@ export default function BookDetail({ book }: Props): ReactNode {
               />
             </div>
 
-            <div className="mt-4">
-              <EpubActions book={book} />
-            </div>
+            {/* Never taken from the clock: most books added to a journal were read some
+                time ago. */}
+            <dl className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 text-[12px]">
+              <dt className="text-ink-faint">Started</dt>
+              <dd>
+                <DateField
+                  label="Started reading"
+                  value={book.startedAt}
+                  onChange={(value) => setDate('startedAt', value)}
+                />
+              </dd>
+              <dt className="text-ink-faint">Finished</dt>
+              {/* The duration steps aside while the finish date is being edited. */}
+              <dd className="group/finish flex items-center gap-1">
+                <DateField
+                  label="Finished reading"
+                  value={book.finishedAt}
+                  onChange={(value) => setDate('finishedAt', value)}
+                />
+                {duration !== null && (
+                  <span
+                    data-testid="reading-duration"
+                    aria-live="polite"
+                    title="Calendar time between the start and finish dates, including breaks. Not active reading time."
+                    className="text-ink-muted group-focus-within/finish:invisible"
+                  >
+                    ·{' '}
+                    {duration === 0 ? 'same day' : `${duration} ${duration === 1 ? 'day' : 'days'}`}
+                  </span>
+                )}
+              </dd>
+            </dl>
+
+            {backwards && (
+              <p role="status" className="mt-1.5 text-[12px] text-danger">
+                Finished before started.
+              </p>
+            )}
 
             {metadata && metadata.subjects.length > 0 && (
               <details className="mt-3 text-[11px] text-ink-faint">
@@ -331,61 +388,16 @@ export default function BookDetail({ book }: Props): ReactNode {
               </details>
             )}
 
-            {/* The pull-left sits inside the rule, not on it: the row wraps, so
-                every line must start at the same edge as the one above. */}
+            {/* The pull-left sits inside the rule, not on it, so the row lines up with
+                the column's other edges. */}
             <div className="mt-4 border-t border-hairline pt-3">
-              <div className="-ml-2 flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => navigate({ kind: 'discover', likeBookId: book.id })}
-                >
-                  Find books like this
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={refetchMetadata}
-                  disabled={enrichBook.isPending}
-                >
-                  {enrichBook.isPending ? 'Refreshing…' : 'Refresh metadata'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-danger"
-                  onClick={() => void removeBook()}
-                >
-                  Delete
-                </button>
-              </div>
-
-              {(quotes.length > 0 || thoughts.length > 0) && (
-                <details className="mt-2 text-[12px] text-ink-muted">
-                  <summary className="cursor-pointer select-none">Manage book data</summary>
-                  <div className="mt-1 -ml-2 flex flex-col items-start gap-0.5">
-                    {quotes.length > 0 && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-danger"
-                        onClick={() => void removeBookEntries('highlight')}
-                        disabled={deleteBookNotes.isPending}
-                      >
-                        Delete all quotes ({quotes.length})
-                      </button>
-                    )}
-                    {thoughts.length > 0 && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-danger"
-                        onClick={() => void removeBookEntries('thought')}
-                        disabled={deleteBookNotes.isPending}
-                      >
-                        Delete all notes ({thoughts.length})
-                      </button>
-                    )}
-                  </div>
-                </details>
-              )}
+              <button
+                type="button"
+                className="btn btn-ghost -ml-2"
+                onClick={() => navigate({ kind: 'discover', likeBookId: book.id })}
+              >
+                Find books like this
+              </button>
             </div>
           </aside>
 
@@ -703,5 +715,44 @@ function NoteCard({
         </button>
       </div>
     </div>
+  )
+}
+
+// Reads as plain text; the date input sits over it, and shows itself
+// while focused so the keyboard can type a date.
+function DateField({
+  label,
+  value,
+  onChange
+}: {
+  label: string
+  value: number | null
+  onChange: (value: string) => void
+}): ReactNode {
+  return (
+    <span className="group relative -ml-1 inline-flex">
+      <span
+        aria-hidden
+        className={`rounded px-1 group-focus-within:invisible group-hover:bg-hover ${
+          value === null ? 'text-ink-faint' : 'text-ink'
+        }`}
+      >
+        {value === null ? 'Add date' : formatDate(value)}
+      </span>
+      <input
+        type="date"
+        aria-label={label}
+        value={toDateInput(value)}
+        onChange={(event) => onChange(event.target.value)}
+        onClick={(event) => {
+          try {
+            event.currentTarget.showPicker()
+          } catch {
+            // Some engines refuse outside a direct click; the field still takes typing.
+          }
+        }}
+        className="field absolute top-1/2 left-0 h-6 w-full -translate-y-1/2 cursor-pointer px-1 py-0 text-[12px] opacity-0 focus:w-[8.5rem] focus:opacity-100"
+      />
+    </span>
   )
 }

@@ -28,7 +28,8 @@ function activeStatus(): string | null {
   const pressed = screen
     .getAllByRole('button')
     .find((button) => button.getAttribute('aria-pressed') === 'true')
-  return pressed?.textContent?.trim() ?? null
+  // The switch shows short labels; the full one is the button's name.
+  return pressed?.getAttribute('aria-label') ?? pressed?.textContent?.trim() ?? null
 }
 
 describe('book status control', () => {
@@ -210,8 +211,8 @@ describe('managing one book’s data', () => {
       { kind: 'book', id: 1 }
     )
 
-    await user.click(await screen.findByText('Manage book data'))
-    await user.click(screen.getByRole('button', { name: 'Delete all quotes (2)' }))
+    await user.click(await screen.findByRole('button', { name: 'More book actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete all quotes (2)' }))
 
     expect(await screen.findByText('Delete all 2 quotes from “Dune”?')).toBeDefined()
     await user.click(screen.getByRole('button', { name: 'Delete quotes' }))

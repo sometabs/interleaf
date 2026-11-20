@@ -150,12 +150,12 @@ describe('reading duration on the book page', () => {
       ]
     })
     await open(bridge)
-    expect(screen.getByTestId('reading-duration').textContent).toBe('Reading duration: 12 days')
+    expect(screen.getByTestId('reading-duration').textContent).toBe('· 12 days')
   })
 
   it.each([
-    ['2026-11-01', 'Finished the same day'],
-    ['2026-11-02', 'Reading duration: 1 day']
+    ['2026-11-01', '· same day'],
+    ['2026-11-02', '· 1 day']
   ])('handles finishing on %s', async (finish, label) => {
     const bridge = installBridge({
       books: [
@@ -183,11 +183,11 @@ describe('reading duration on the book page', () => {
     await open(bridge)
     await type('Finished reading', '2026-11-15')
     await waitFor(() =>
-      expect(screen.getByTestId('reading-duration').textContent).toBe('Reading duration: 14 days')
+      expect(screen.getByTestId('reading-duration').textContent).toBe('· 14 days')
     )
     await type('Started reading', '2026-11-05')
     await waitFor(() =>
-      expect(screen.getByTestId('reading-duration').textContent).toBe('Reading duration: 10 days')
+      expect(screen.getByTestId('reading-duration').textContent).toBe('· 10 days')
     )
     await type('Finished reading', '')
     await waitFor(() => expect(screen.queryByTestId('reading-duration')).toBeNull())
