@@ -38,7 +38,7 @@ interface Theme {
 }
 
 export const THEMES: Record<ReaderTheme, Theme> = {
-  light: { label: 'Light', background: '#ffffff', text: '#1d1d1f' },
+  light: { label: 'Light', background: '#fbfaf7', text: '#2d2926' },
   sepia: {
     label: 'Sepia',
     background: '#f4ecd8',
@@ -110,7 +110,7 @@ export function bookCss(look: ReaderLook): string {
       ? ''
       : `
     html, body, body * { color: ${theme.text} !important; background-color: transparent !important; }
-    a, a * { color: ${look.theme === 'dark' ? '#9bb8ec' : '#8a5a2b'} !important; }`
+    a, a * { color: ${look.theme === 'dark' ? '#9fb6da' : '#8a5a2b'} !important; }`
   const font =
     look.font === 'book'
       ? ''

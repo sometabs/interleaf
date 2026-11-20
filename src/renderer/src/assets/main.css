@@ -3,44 +3,44 @@
 /* No webfonts: the CSP allows nothing off-disk, and this has to work with the
    network unplugged. */
 @theme {
-  --color-canvas: light-dark(#f7f7f8, #1c1b1a);
-  --color-surface: light-dark(#ffffff, #252321);
-  --color-sunken: light-dark(#f1f1f4, #302d2a);
-  --color-hover: light-dark(#ececef, #383430);
+  --color-canvas: light-dark(#f6f3ee, #1c1b1a);
+  --color-surface: light-dark(#fbfaf7, #252321);
+  --color-sunken: light-dark(#ece7df, #302d2a);
+  --color-hover: light-dark(#e8e2d8, #383430);
 
-  --color-hairline: light-dark(#e7e7ea, #3b3733);
-  --color-hairline-strong: light-dark(#d7d8dd, #57514b);
+  --color-hairline: light-dark(#e5dfd5, #3b3733);
+  --color-hairline-strong: light-dark(#d4ccbf, #57514b);
 
-  --color-ink: light-dark(#18181b, #eee9e1);
-  --color-ink-muted: light-dark(#61626b, #c1b8ae);
-  --color-ink-faint: light-dark(#9496a0, #a29689);
+  --color-ink: light-dark(#2d2926, #eee9e1);
+  --color-ink-muted: light-dark(#6c645c, #c1b8ae);
+  --color-ink-faint: light-dark(#968d83, #a29689);
 
-  --color-action-light: #3f6dbd;
-  --color-accent: light-dark(var(--color-action-light), #9bb8ec);
+  --color-action-light: #46658f;
+  --color-accent: light-dark(var(--color-action-light), #9fb6da);
   --color-accent-soft: light-dark(
-    color-mix(in srgb, var(--color-action-light) 10%, white),
-    #283647
+    color-mix(in srgb, var(--color-action-light) 12%, #fbfaf7),
+    #2c3340
   );
-  --color-action: light-dark(var(--color-action-light), #3d619d);
-  --color-action-hover: light-dark(#355c9f, #4b74b5);
+  --color-action: light-dark(var(--color-action-light), #4a6a98);
+  --color-action-hover: light-dark(#3b5679, #5677a6);
 
-  --color-danger: light-dark(#d7332d, #f09a90);
-  --color-danger-soft: light-dark(#fdeeed, #422b28);
+  --color-danger: light-dark(#bf3a30, #f09a90);
+  --color-danger-soft: light-dark(#f7e6e1, #422b28);
   --color-danger-action: light-dark(#b64f59, #b64239);
   --color-danger-action-hover: light-dark(#9b414b, #c4483f);
-  --color-star: light-dark(#f59e0b, #dfb66d);
-  --color-overlay: light-dark(rgb(24 24 27 / 0.25), rgb(0 0 0 / 0.65));
+  --color-star: light-dark(#d49a3a, #dfb66d);
+  --color-overlay: light-dark(rgb(45 41 38 / 0.25), rgb(0 0 0 / 0.65));
 
   --radius-card: 3px;
   --radius-control: 3px;
 
   --shadow-card:
-    0 1px 2px light-dark(rgb(16 24 40 / 0.04), rgb(0 0 0 / 0.18)),
-    0 1px 3px light-dark(rgb(16 24 40 / 0.06), rgb(0 0 0 / 0.25));
+    0 1px 2px light-dark(rgb(48 36 24 / 0.04), rgb(0 0 0 / 0.18)),
+    0 1px 3px light-dark(rgb(48 36 24 / 0.06), rgb(0 0 0 / 0.25));
   --shadow-raised:
-    0 2px 4px light-dark(rgb(16 24 40 / 0.04), rgb(0 0 0 / 0.2)),
-    0 4px 12px light-dark(rgb(16 24 40 / 0.08), rgb(0 0 0 / 0.3));
-  --shadow-pop: 0 12px 32px light-dark(rgb(16 24 40 / 0.14), rgb(0 0 0 / 0.45));
+    0 2px 4px light-dark(rgb(48 36 24 / 0.04), rgb(0 0 0 / 0.2)),
+    0 4px 12px light-dark(rgb(48 36 24 / 0.08), rgb(0 0 0 / 0.3));
+  --shadow-pop: 0 12px 32px light-dark(rgb(48 36 24 / 0.14), rgb(0 0 0 / 0.45));
 
   --font-sans:
     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto,
@@ -619,8 +619,8 @@
   }
 
   .sidebar-nav-active {
-    color: light-dark(#2f65da, var(--color-accent));
-    background-color: light-dark(#eaf1fd, var(--color-accent-soft));
+    color: var(--color-accent);
+    background-color: var(--color-accent-soft);
   }
 
   .sidebar-icon-button {
