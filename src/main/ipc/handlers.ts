@@ -19,6 +19,7 @@ import * as books from '../repos/books'
 import * as bookshelf from '../repos/bookshelf'
 import * as goals from '../repos/goals'
 import * as bookFiles from '../repos/bookFiles'
+import * as bookmarks from '../repos/bookmarks'
 import {
   attachEpub,
   describeEpub,
@@ -207,6 +208,15 @@ const api: InterleafApi = {
   },
   async recentReading() {
     return bookFiles.recentReading(getDb())
+  },
+  async listBookmarks(bookId) {
+    return bookmarks.listBookmarks(getDb(), bookId)
+  },
+  async addBookmark(bookId, bookmark) {
+    return bookmarks.addBookmark(getDb(), bookId, bookmark)
+  },
+  async removeBookmark(id) {
+    bookmarks.removeBookmark(getDb(), id)
   },
   getSpineColors,
   async createBook(input) {

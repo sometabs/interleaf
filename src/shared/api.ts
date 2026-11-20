@@ -254,6 +254,18 @@ export interface ReadingPosition {
   fraction: number
 }
 
+export interface Bookmark {
+  id: number
+  bookId: number
+  cfi: string
+  // The first words of the marked page, so the list reads without opening the book.
+  excerpt: string
+  chapter: string | null
+  createdAt: number
+}
+
+export type NewBookmark = Pick<Bookmark, 'cfi' | 'excerpt' | 'chapter'>
+
 export interface RecentReading {
   bookId: number
   fraction: number
@@ -372,6 +384,9 @@ export interface InterleafApi {
   getReadingPosition(bookId: number): Promise<ReadingPosition | null>
   saveReadingPosition(bookId: number, position: ReadingPosition): Promise<void>
   recentReading(): Promise<RecentReading[]>
+  listBookmarks(bookId: number): Promise<Bookmark[]>
+  addBookmark(bookId: number, bookmark: NewBookmark): Promise<Bookmark>
+  removeBookmark(id: number): Promise<void>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
@@ -471,6 +486,9 @@ export const IPC_CHANNELS = [
   'getReadingPosition',
   'saveReadingPosition',
   'recentReading',
+  'listBookmarks',
+  'addBookmark',
+  'removeBookmark',
   'getSpineColors',
   'createBook',
   'updateBook',

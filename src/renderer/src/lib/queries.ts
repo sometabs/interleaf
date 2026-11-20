@@ -44,6 +44,8 @@ import type {
   ReadingGoal,
   AttachEpubResult,
   BookFile,
+  Bookmark,
+  NewBookmark,
   ReadingPosition,
   BackupStatus,
   MarkdownExportResult,
@@ -62,6 +64,7 @@ const keys = {
   backupStatus: ['backup-status'] as const,
   position: (bookId: number) => ['reading-position', bookId] as const,
   recentReading: ['recent-reading'] as const,
+  bookmarks: (bookId: number) => ['bookmarks', bookId] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
@@ -203,6 +206,33 @@ export function useSaveReadingPosition(
   })
 }
 
+export function useBookmarks(bookId: number): UseQueryResult<Bookmark[]> {
+  return useQuery({
+    queryKey: keys.bookmarks(bookId),
+    queryFn: () => api().listBookmarks(bookId)
+  })
+}
+
+export function useAddBookmark(bookId: number): UseMutationResult<Bookmark, Error, NewBookmark> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (bookmark) => api().addBookmark(bookId, bookmark),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.bookmarks(bookId) })
+  })
+}
+
+export function useRemoveBookmark(bookId: number): UseMutationResult<void, Error, number> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api().removeBookmark(id),
+    onMutate: (id) =>
+      client.setQueryData<Bookmark[]>(keys.bookmarks(bookId), (list) =>
+        list?.filter((bookmark) => bookmark.id !== id)
+      ),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.bookmarks(bookId) })
+  })
+}
+
 export function useAttachEpub(): UseMutationResult<
   AttachEpubResult,
   Error,
@@ -215,6 +245,7 @@ export function useAttachEpub(): UseMutationResult<
       void client.invalidateQueries({ queryKey: keys.bookFiles })
       void client.invalidateQueries({ queryKey: keys.position(bookId) })
       void client.invalidateQueries({ queryKey: keys.recentReading })
+      void client.invalidateQueries({ queryKey: keys.bookmarks(bookId) })
     }
   })
 }
@@ -227,6 +258,7 @@ export function useRemoveEpub(): UseMutationResult<void, Error, number> {
       void client.invalidateQueries({ queryKey: keys.bookFiles })
       void client.invalidateQueries({ queryKey: keys.position(bookId) })
       void client.invalidateQueries({ queryKey: keys.recentReading })
+      void client.invalidateQueries({ queryKey: keys.bookmarks(bookId) })
     }
   })
 }

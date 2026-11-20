@@ -1,7 +1,7 @@
 import 'foliate-js/view.js'
 import { compare as compareCfi } from 'foliate-js/epubcfi.js'
 import { Overlayer } from 'foliate-js/overlayer.js'
-import type { Note } from '@shared/api'
+import type { Bookmark, Note } from '@shared/api'
 import { toPlainText } from '@shared/plaintext'
 import {
   useCallback,
@@ -15,16 +15,19 @@ import {
 } from 'react'
 
 import { confirm } from '../lib/confirm'
-import { fromDateInput, toDateInput } from '../lib/dates'
+import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
 import { fail, notify } from '../lib/feedback'
 import { inertPage, isPage } from '../lib/epubContent'
 import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
 import { usePersistentState } from '../lib/persistent'
 import {
+  useAddBookmark,
   useBook,
+  useBookmarks,
   useCreateNote,
   useDeleteNote,
   useNotes,
+  useRemoveBookmark,
   useSaveReadingPosition,
   useUpdateBook
 } from '../lib/queries'
@@ -62,8 +65,16 @@ interface FoliateBook {
 interface Relocation {
   fraction: number
   cfi: string
+  range?: Range
+  section?: { current: number }
   tocItem?: { label?: string } | null
   pageItem?: { label?: string } | null
+}
+
+interface Page {
+  start: string
+  end: string
+  excerpt: string
 }
 
 interface SearchGroup {
@@ -142,15 +153,46 @@ function pointOf(range: Range, host: HTMLElement): Point {
   }
 }
 
-function sortByPlace(notes: Note[]): Note[] {
-  return [...notes].sort((a, b) => {
-    try {
-      return compareCfi(a.location!, b.location!)
-    } catch {
-      return 0
-    }
-  })
+function byPlace(a: string, b: string): number {
+  try {
+    return compareCfi(a, b)
+  } catch {
+    return 0
+  }
 }
+
+function sortByPlace(notes: Note[]): Note[] {
+  return [...notes].sort((a, b) => byPlace(a.location!, b.location!))
+}
+
+function onPage(cfi: string, page: Page | null): boolean {
+  if (!page) return false
+  try {
+    return compareCfi(page.start, cfi) <= 0 && compareCfi(cfi, page.end) <= 0
+  } catch {
+    return cfi === page.start
+  }
+}
+
+// The end of what is on screen, so a bookmark anywhere on the page still counts as this page.
+function pageOf(view: FoliateView, detail: Relocation): Page {
+  let end = detail.cfi
+  const range = detail.range
+  if (range && detail.section) {
+    try {
+      const last = range.cloneRange()
+      last.collapse(false)
+      end = view.getCFI(detail.section.current, last)
+    } catch {
+      end = detail.cfi
+    }
+  }
+  const excerpt = range?.toString().replace(/\s+/g, ' ').trim().slice(0, 160) ?? ''
+  return { start: detail.cfi, end, excerpt }
+}
+
+const isBookmarkKey = (event: KeyboardEvent): boolean =>
+  (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'd'
 
 export default function Reader({ bookId, at }: { bookId: number; at?: string }): ReactNode {
   const book = useBook(bookId)
@@ -160,6 +202,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const deleteNote = useDeleteNote()
   const updateBook = useUpdateBook()
   const savePosition = useSaveReadingPosition(bookId)
+  const { data: bookmarks = [] } = useBookmarks(bookId)
+  const addBookmark = useAddBookmark(bookId)
+  const removeBookmark = useRemoveBookmark(bookId)
   const [look, setLook] = usePersistentState<ReaderLook>('reader.look', DEFAULT_LOOK, parseLook)
 
   const shellRef = useRef<HTMLDivElement>(null)
@@ -169,6 +214,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const [problem, setProblem] = useState('')
   const [toc, setToc] = useState<TocItem[]>([])
   const [place, setPlace] = useState({ fraction: 0, chapter: '', page: '' })
+  const [shown, setShown] = useState<Page | null>(null)
   const [panel, setPanel] = useState<Panel | null>(null)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [noteDraft, setNoteDraft] = useState<string | null>(null)
@@ -239,6 +285,17 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     return true
   }, [])
 
+  const marked = bookmarks.find((bookmark) => onPage(bookmark.cfi, shown)) ?? null
+  const toggleBookmark = useCallback((): void => {
+    if (status !== 'ready' || !shown) return
+    if (marked) removeBookmark.mutate(marked.id, { onError: fail })
+    else
+      addBookmark.mutate(
+        { cfi: shown.start, excerpt: shown.excerpt, chapter: place.chapter || null },
+        { onError: fail }
+      )
+  }, [status, shown, marked, place.chapter, addBookmark, removeBookmark])
+
   // The chrome fades while reading and comes back only near the top or bottom edge, so moving
   // over the text to select it leaves the page clean.
   const idleTimer = useRef<number | undefined>(undefined)
@@ -254,9 +311,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   }, [])
 
   // The book loads once per open; handlers are read through a ref so a re-render never reloads it.
-  const handlers = useRef({ back, dismissOverlay, flushPosition, turn, wake })
+  const handlers = useRef({ back, dismissOverlay, flushPosition, toggleBookmark, turn, wake })
   useLayoutEffect(() => {
-    handlers.current = { back, dismissOverlay, flushPosition, turn, wake }
+    handlers.current = { back, dismissOverlay, flushPosition, toggleBookmark, turn, wake }
   })
 
   useEffect(() => {
@@ -274,6 +331,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     const onRelocate = (event: Event): void => {
       const detail = (event as CustomEvent<Relocation>).detail
       const { renderer } = view
+      setShown(pageOf(view, detail))
       setPlace({
         fraction: detail.fraction ?? 0,
         chapter: detail.tocItem?.label?.trim() ?? '',
@@ -302,7 +360,10 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         doc.addEventListener(type, follow, true)
       doc.addEventListener('keydown', (keyEvent) => {
         const current = handlers.current
-        if (current.turn(keyEvent.key, keyEvent.target)) keyEvent.preventDefault()
+        if (isBookmarkKey(keyEvent)) {
+          keyEvent.preventDefault()
+          current.toggleBookmark()
+        } else if (current.turn(keyEvent.key, keyEvent.target)) keyEvent.preventDefault()
         else if (keyEvent.key === 'Escape' && !current.dismissOverlay()) current.back()
       })
       // A link has already claimed its click.
@@ -492,6 +553,11 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         if (dismissOverlay()) event.stopPropagation()
         return
       }
+      if (isBookmarkKey(event)) {
+        event.preventDefault()
+        handlers.current.toggleBookmark()
+        return
+      }
       if (turn(event.key, event.target)) event.preventDefault()
     }
     const onFullScreen = (): void => setFullScreen(document.fullscreenElement !== null)
@@ -606,26 +672,70 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
           {book.title}
           {book.author ? ` · ${book.author}` : ''}
         </p>
-        <div className="flex justify-end gap-2">
-          {(['contents', 'search', 'highlights', 'look'] as const).map((name) => (
+        <div className="flex justify-end gap-1">
+          {(['contents', 'search', 'highlights'] as const).map((name) => (
             <button
               key={name}
               type="button"
               aria-pressed={panel === name}
-              className="reader-btn"
+              aria-label={PANEL_LABELS[name]}
+              title={PANEL_LABELS[name]}
+              className="reader-btn reader-icon-btn"
               onClick={() => setPanel(panel === name ? null : name)}
             >
-              {PANEL_LABELS[name]}
+              {PANEL_ICONS[name]}
             </button>
           ))}
-          <button type="button" className="reader-btn" onClick={toggleFullScreen}>
-            {fullScreen ? 'Exit full screen' : 'Full screen'}
+          <button
+            type="button"
+            aria-pressed={marked !== null}
+            aria-label="Bookmark this page"
+            title={marked ? 'Remove bookmark (Ctrl+D)' : 'Bookmark this page (Ctrl+D)'}
+            className="reader-btn reader-icon-btn"
+            disabled={status !== 'ready'}
+            onClick={toggleBookmark}
+          >
+            <Icon filled={marked !== null}>
+              <path d="M18 7v14l-6-4-6 4V7a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4z" />
+            </Icon>
+          </button>
+          <button
+            type="button"
+            aria-pressed={panel === 'look'}
+            aria-label="Text and layout"
+            title="Text and layout"
+            className="reader-btn reader-icon-btn"
+            onClick={() => setPanel(panel === 'look' ? null : 'look')}
+          >
+            <span aria-hidden className="w-[18px] text-center text-[13px]">
+              Aa
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
+            title={fullScreen ? 'Exit full screen' : 'Full screen'}
+            className="reader-btn reader-icon-btn"
+            onClick={toggleFullScreen}
+          >
+            {fullScreen ? (
+              <Icon>
+                <path d="M15 19v-2a2 2 0 0 1 2-2h2M15 5v2a2 2 0 0 0 2 2h2M5 15h2a2 2 0 0 1 2 2v2M5 9h2a2 2 0 0 0 2-2V5" />
+              </Icon>
+            ) : (
+              <Icon>
+                <path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v2M16 20h2a2 2 0 0 0 2-2v-2" />
+              </Icon>
+            )}
           </button>
         </div>
       </header>
 
       <div className="relative min-h-0 flex-1">
         <div ref={hostRef} className="absolute inset-0" />
+        {marked && status === 'ready' && (
+          <span aria-hidden data-testid="bookmark-ribbon" className="reader-ribbon" />
+        )}
 
         {status === 'loading' && (
           <p className="absolute inset-0 grid place-items-center text-[13px] opacity-60">
@@ -763,7 +873,13 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
               <Search view={readyView} onPick={(cfi) => void readyView.goTo(cfi)} />
             )}
             {panel === 'highlights' && (
-              <Highlights notes={sortByPlace(located)} onPick={(cfi) => go(cfi)} />
+              <Marks
+                notes={sortByPlace(located)}
+                bookmarks={[...bookmarks].sort((a, b) => byPlace(a.cfi, b.cfi))}
+                current={marked}
+                onPick={(cfi) => go(cfi)}
+                onRemove={(bookmark) => removeBookmark.mutate(bookmark.id, { onError: fail })}
+              />
             )}
             {panel === 'look' && <LookPanel look={look} onChange={setLook} />}
           </aside>
@@ -842,8 +958,46 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 const PANEL_LABELS: Record<Panel, string> = {
   contents: 'Contents',
   search: 'Search',
-  highlights: 'Highlights',
-  look: 'Aa'
+  highlights: 'Highlights and bookmarks',
+  look: 'Text and layout'
+}
+
+function Icon({ children, filled = false }: { children: ReactNode; filled?: boolean }): ReactNode {
+  return (
+    <svg
+      aria-hidden
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </svg>
+  )
+}
+
+const PANEL_ICONS: Record<'contents' | 'search' | 'highlights', ReactNode> = {
+  contents: (
+    <Icon>
+      <path d="M9 6h11M9 12h11M9 18h11M5 6v.01M5 12v.01M5 18v.01" />
+    </Icon>
+  ),
+  search: (
+    <Icon>
+      <circle cx="10" cy="10" r="7" />
+      <path d="m21 21-6-6" />
+    </Icon>
+  ),
+  highlights: (
+    <Icon>
+      <path d="M3 19h4L17.5 8.5a2.83 2.83 0 0 0-4-4L3 15v4" />
+      <path d="m12.5 5.5 4 4M4.5 13.5l4 4M21 15v4h-8l4-4z" />
+    </Icon>
+  )
 }
 
 function applyLook(view: FoliateView, look: ReaderLook): void {
@@ -996,6 +1150,112 @@ function Search({ view, onPick }: { view: FoliateView; onPick: (cfi: string) => 
   )
 }
 
+function Marks({
+  notes,
+  bookmarks,
+  current,
+  onPick,
+  onRemove
+}: {
+  notes: Note[]
+  bookmarks: Bookmark[]
+  current: Bookmark | null
+  onPick: (cfi: string) => void
+  onRemove: (bookmark: Bookmark) => void
+}): ReactNode {
+  const [tab, setTab] = useState<'highlights' | 'bookmarks'>(
+    notes.length === 0 && bookmarks.length > 0 ? 'bookmarks' : 'highlights'
+  )
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex gap-1 border-b border-hairline p-2" role="group" aria-label="Show">
+        {(
+          [
+            ['highlights', 'Highlights'],
+            ['bookmarks', 'Bookmarks']
+          ] as const
+        ).map(([name, label]) => (
+          <button
+            key={name}
+            type="button"
+            aria-pressed={tab === name}
+            className={`rounded-control px-2.5 py-1 text-[12px] ${
+              tab === name
+                ? 'bg-accent-soft font-medium text-accent'
+                : 'text-ink-muted hover:bg-hover'
+            }`}
+            onClick={() => setTab(name)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'highlights' ? (
+        <Highlights notes={notes} onPick={onPick} />
+      ) : (
+        <Bookmarks bookmarks={bookmarks} current={current} onPick={onPick} onRemove={onRemove} />
+      )}
+    </div>
+  )
+}
+
+function Bookmarks({
+  bookmarks,
+  current,
+  onPick,
+  onRemove
+}: {
+  bookmarks: Bookmark[]
+  current: Bookmark | null
+  onPick: (cfi: string) => void
+  onRemove: (bookmark: Bookmark) => void
+}): ReactNode {
+  if (bookmarks.length === 0) {
+    return (
+      <p className="p-5 text-[13px] text-ink-muted">
+        Use the bookmark button or Ctrl+D to mark a page and find it here.
+      </p>
+    )
+  }
+  return (
+    <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+      {bookmarks.map((bookmark) => {
+        const when = relativeDate(bookmark.createdAt)
+        return (
+          <li
+            key={bookmark.id}
+            className={`group relative rounded-control ${bookmark.id === current?.id ? 'bg-sunken' : ''}`}
+          >
+            <button
+              type="button"
+              aria-current={bookmark.id === current?.id ? 'location' : undefined}
+              className="w-full rounded-control px-3 py-2 pr-9 text-left hover:bg-hover"
+              onClick={() => onPick(bookmark.cfi)}
+            >
+              <span className="flex justify-between gap-2 text-[11px] text-ink-faint">
+                <span className="truncate">{bookmark.chapter ?? 'Bookmark'}</span>
+                <span className="shrink-0">{when.charAt(0).toUpperCase() + when.slice(1)}</span>
+              </span>
+              <span className="mt-0.5 line-clamp-2 text-[13px]">
+                {bookmark.excerpt || 'Marked page'}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label="Remove bookmark"
+              title="Remove bookmark"
+              className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-control text-ink-faint opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-ink focus-visible:opacity-100"
+              onClick={() => onRemove(bookmark)}
+            >
+              ×
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 function Highlights({
   notes,
   onPick
@@ -1022,9 +1282,7 @@ function Highlights({
             <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
               {isQuote(note) ? 'Quote' : 'Note'}
             </span>
-            <span className="mt-0.5 line-clamp-3 block text-[13px]">
-              {toPlainText(note.bodyMd)}
-            </span>
+            <span className="mt-0.5 line-clamp-3 text-[13px]">{toPlainText(note.bodyMd)}</span>
           </button>
         </li>
       ))}
@@ -1143,7 +1401,7 @@ function Segmented<T extends string>({
             key={option}
             type="button"
             aria-pressed={value === option}
-            className={`flex-1 rounded-[5px] px-2 py-1 text-[12px] ${
+            className={`flex-1 rounded-[3px] px-2 py-1 text-[12px] ${
               value === option ? 'bg-accent-soft font-medium text-accent' : 'text-ink-muted'
             }`}
             onClick={() => onChange(option)}

@@ -231,6 +231,22 @@
     background: color-mix(in srgb, currentColor 9%, transparent);
   }
 
+  .reader-icon-btn {
+    padding: 6px;
+  }
+
+  .reader-ribbon {
+    position: absolute;
+    top: 0;
+    right: 28px;
+    z-index: 5;
+    width: 14px;
+    height: 30px;
+    background: var(--color-accent);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+    pointer-events: none;
+  }
+
   .reader-progress {
     accent-color: currentColor;
     opacity: 0.6;
