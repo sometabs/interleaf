@@ -146,7 +146,7 @@ function sortByPlace(notes: Note[]): Note[] {
   })
 }
 
-export default function Reader({ bookId }: { bookId: number }): ReactNode {
+export default function Reader({ bookId, at }: { bookId: number; at?: string }): ReactNode {
   const book = useBook(bookId)
   const { back, navigate } = useView()
   const { data: notes = [] } = useNotes(bookId)
@@ -179,6 +179,8 @@ export default function Reader({ bookId }: { bookId: number }): ReactNode {
   const lookRef = useRef(look)
   const overlayRef = useRef({ panel, picked, opened })
   const pendingPosition = useRef<Relocation | null>(null)
+  // Opened at a quote, the saved place stays put until the reader moves on from there.
+  const following = useRef(at === undefined)
   const saveTimer = useRef<number | undefined>(undefined)
   const savePositionRef = useRef(savePosition.mutate)
   useLayoutEffect(() => {
@@ -271,13 +273,21 @@ export default function Reader({ bookId }: { bookId: number }): ReactNode {
           lookRef.current.flow === 'scrolled'
         )
       })
+      if (!following.current) return
       pendingPosition.current = detail
       window.clearTimeout(saveTimer.current)
       saveTimer.current = window.setTimeout(() => handlers.current.flushPosition(), 800)
     }
+    const follow = (): void => {
+      following.current = true
+    }
+    for (const type of ['pointerdown', 'keydown', 'wheel'])
+      window.addEventListener(type, follow, true)
 
     const onLoad = (event: Event): void => {
       const { doc, index } = (event as CustomEvent<{ doc: Document; index: number }>).detail
+      for (const type of ['pointerdown', 'keydown', 'wheel'])
+        doc.addEventListener(type, follow, true)
       doc.addEventListener('keydown', (keyEvent) => {
         const current = handlers.current
         if (current.turn(keyEvent.key, keyEvent.target)) keyEvent.preventDefault()
@@ -377,7 +387,17 @@ export default function Reader({ bookId }: { bookId: number }): ReactNode {
         view.addEventListener('draw-annotation', onDraw)
         view.addEventListener('show-annotation', onShowAnnotation)
         applyLook(view, lookRef.current)
-        await view.init({ lastLocation: position?.cfi, showTextStart: !position })
+        // A quote from a replaced file may point nowhere; then open where reading stopped.
+        let placed = false
+        if (at) {
+          try {
+            await view.init({ lastLocation: at })
+            placed = Boolean((view as FoliateView & { lastLocation?: unknown }).lastLocation)
+          } catch {
+            placed = false
+          }
+        }
+        if (!placed) await view.init({ lastLocation: position?.cfi, showTextStart: !position })
         if (cancelled) return
         setStatus('ready')
         setReadyView(view)
@@ -389,13 +409,15 @@ export default function Reader({ bookId }: { bookId: number }): ReactNode {
     })()
 
     return () => {
+      for (const type of ['pointerdown', 'keydown', 'wheel'])
+        window.removeEventListener(type, follow, true)
       cancelled = true
       flush()
       view.close?.()
       view.remove()
       viewRef.current = null
     }
-  }, [bookId])
+  }, [bookId, at])
 
   useEffect(() => {
     if (viewRef.current && status === 'ready') applyLook(viewRef.current, look)

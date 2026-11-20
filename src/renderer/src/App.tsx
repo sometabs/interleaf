@@ -85,7 +85,7 @@ export default function App(): ReactNode {
         {view.kind === 'book' && <BookRoute id={view.id} />}
         {view.kind === 'reader' && (
           <Suspense fallback={null}>
-            <Reader key={view.bookId} bookId={view.bookId} />
+            <Reader key={`${view.bookId}:${view.at ?? ''}`} bookId={view.bookId} at={view.at} />
           </Suspense>
         )}
         {view.kind === 'reviews' && <Reviews />}

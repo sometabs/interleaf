@@ -6,6 +6,7 @@ import { useView } from '../lib/view'
 import EditableTitle from './EditableTitle'
 import Editor from './Editor'
 import Empty from './Empty'
+import OpenInBook from './OpenInBook'
 
 interface Props {
   noteId: number
@@ -78,6 +79,7 @@ export default function NoteView({ noteId }: Props): ReactNode {
         )}
 
         <span className="flex-1" />
+        <OpenInBook note={note} />
         <button type="button" className="btn btn-ghost btn-danger" onClick={() => void remove()}>
           Delete
         </button>

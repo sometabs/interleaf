@@ -10,6 +10,7 @@ import {
 
 import { useEffect, useState } from 'react'
 import type { BookshelfLayout } from '@shared/bookshelf'
+import { useView } from './view'
 
 import type {
   Book,
@@ -158,6 +159,16 @@ export function useSetReadingGoal(): UseMutationResult<
 
 export function useBookFiles(): UseQueryResult<BookFile[]> {
   return useQuery({ queryKey: keys.bookFiles, queryFn: () => api().listBookFiles() })
+}
+
+// Only notes taken in the reader know their place, and only an attached EPUB can show it.
+export function useOpenInBook(note: Note): (() => void) | undefined {
+  const { data: files = [] } = useBookFiles()
+  const { navigate } = useView()
+  const { location, bookId } = note
+  if (!location || bookId === null || !files.some((file) => file.bookId === bookId))
+    return undefined
+  return () => navigate({ kind: 'reader', bookId, at: location })
 }
 
 export function useBookFile(bookId: number): BookFile | null {

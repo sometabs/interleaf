@@ -26,6 +26,7 @@ import QuoteCard from './QuoteCard'
 import EditableNumber from './EditableNumber'
 import EditableTitle from './EditableTitle'
 import EpubActions from './EpubActions'
+import OpenInBook from './OpenInBook'
 import Editor from './Editor'
 import Rating from './Rating'
 
@@ -693,6 +694,7 @@ function NoteCard({
       </div>
 
       <div className="flex justify-end gap-1 px-2 pb-2">
+        <OpenInBook note={note} />
         <button type="button" className="btn btn-ghost" onClick={onOpenPage}>
           Open as page
         </button>

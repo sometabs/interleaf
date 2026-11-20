@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { relativeDate } from '../lib/dates'
 import Editor from './Editor'
+import OpenInBook from './OpenInBook'
 
 interface Props {
   quote: Note
@@ -70,6 +71,7 @@ export default function QuoteCard({
 
       <div className="flex items-center gap-2 border-t border-hairline px-3 py-2">
         <span className="min-w-0 flex-1 text-[12px] text-ink-muted">{source}</span>
+        <OpenInBook note={quote} />
         <button
           type="button"
           data-testid="quote-done"

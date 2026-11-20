@@ -6,7 +6,8 @@ export type View =
   | { kind: 'queue' }
   | { kind: 'history' }
   | { kind: 'book'; id: number }
-  | { kind: 'reader'; bookId: number }
+  // `at` opens the book at a quote or note instead of where reading stopped.
+  | { kind: 'reader'; bookId: number; at?: string }
   | { kind: 'note'; id: number }
   | { kind: 'new-note' }
   | { kind: 'notes' }
