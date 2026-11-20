@@ -145,3 +145,24 @@ describe('what a vault holds', () => {
     ])
   })
 })
+
+describe('what a book file says', () => {
+  it('carries the reading dates, pages and year, and calls quotes quotes', () => {
+    const book = books.createBook(db, { title: 'Dune', pageCount: 412, publishedYear: 1965 })
+    books.updateBook(db, book.id, {
+      startedAt: Math.floor(new Date(2026, 0, 2).getTime() / 1000),
+      finishedAt: Math.floor(new Date(2026, 2, 4).getTime() / 1000)
+    })
+    notes.createNote(db, { bookId: book.id, kind: 'highlight', bodyMd: 'Fear is the mind-killer.' })
+
+    writeVault(db, dir)
+    const text = readFileSync(join(dir, 'books', 'dune.md'), 'utf8')
+
+    expect(text).toContain('started: 2026-01-02')
+    expect(text).toContain('finished: 2026-03-04')
+    expect(text).toContain('pages: 412')
+    expect(text).toContain('published: 1965')
+    expect(text).toContain('## Quote:')
+    expect(text).not.toContain('Highlight')
+  })
+})

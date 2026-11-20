@@ -22,9 +22,12 @@ export function slugify(text: string, fallback = 'untitled'): string {
   return slug || fallback
 }
 
+// Local calendar date: reading dates are stored as local midnight, which UTC can move a day.
 function toIsoDate(unix: number | null): string | null {
   if (!unix) return null
-  return new Date(unix * 1000).toISOString().slice(0, 10)
+  const date = new Date(unix * 1000)
+  const two = (n: number): string => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`
 }
 
 function yamlValue(value: string): string {
@@ -58,7 +61,11 @@ function bookMarkdown(book: Book, bookNotes: ReturnType<typeof notes.listNotes>)
       title: book.title,
       author: book.author,
       status: book.status,
-      rating: book.rating
+      rating: book.rating,
+      started: toIsoDate(book.startedAt),
+      finished: toIsoDate(book.finishedAt),
+      pages: book.pageCount,
+      published: book.publishedYear
     }),
     '',
     `# ${book.title}`,
@@ -74,7 +81,7 @@ function bookMarkdown(book: Book, bookNotes: ReturnType<typeof notes.listNotes>)
   }
 
   for (const note of others) {
-    const heading = note.kind === 'highlight' ? 'Highlight' : 'Note'
+    const heading = note.kind === 'highlight' ? 'Quote' : 'Note'
     parts.push(
       `## ${heading}: ${note.title || 'untitled'}`,
       '',
