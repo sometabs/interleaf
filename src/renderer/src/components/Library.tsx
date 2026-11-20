@@ -9,8 +9,8 @@ import { useView } from '../lib/view'
 import Bookshelf from './Bookshelf'
 import ContinueReading from './ContinueReading'
 import Cover from './Cover'
-import Empty from './Empty'
 import Rating from './Rating'
+import Welcome from './Welcome'
 
 interface Props {
   onAdd: () => void
@@ -41,18 +41,7 @@ export default function Library({ onAdd }: Props): ReactNode {
 
   if (isPending) return <div className="h-full" />
 
-  if (books.length === 0) {
-    return (
-      <Empty
-        title="Your library is empty"
-        action={
-          <button type="button" className="btn btn-primary" onClick={onAdd}>
-            Add a book
-          </button>
-        }
-      />
-    )
-  }
+  if (books.length === 0) return <Welcome onAdd={onAdd} />
 
   return (
     <div

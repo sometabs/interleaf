@@ -99,11 +99,26 @@ describe('Sidebar', () => {
 })
 
 describe('Library', () => {
-  it('invites the first book when empty', async () => {
+  it('welcomes a new library with a way to add a book', async () => {
     installBridge()
+    const onAdd = vi.fn()
+    renderApp(<Library onAdd={onAdd} />)
+
+    expect(await screen.findByRole('heading', { name: 'Welcome to Interleaf' })).toBeDefined()
+    await userEvent.setup().click(screen.getByRole('button', { name: /Add a book/ }))
+    expect(onAdd).toHaveBeenCalled()
+  })
+
+  // Nothing to replace yet, so the backup picker opens without a warning first.
+  it('restores a backup straight from the welcome screen', async () => {
+    const restoreBackup = vi.fn().mockResolvedValue(null)
+    installBridge({}, { restoreBackup })
     renderApp(<Library onAdd={() => {}} />)
 
-    expect(await screen.findByText('Your library is empty')).toBeDefined()
+    await userEvent.setup().click(await screen.findByRole('button', { name: /Restore a backup/ }))
+
+    expect(restoreBackup).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   it('groups books under their shelf', async () => {
