@@ -257,7 +257,8 @@ export interface ReadingPosition {
 export interface RecentReading {
   bookId: number
   fraction: number
-  updatedAt: number
+  // Null for a book not opened in the reader yet.
+  updatedAt: number | null
 }
 
 export interface ReadingGoal {

@@ -86,14 +86,17 @@ export function saveReadingPosition(db: Database, bookId: number, position: Read
   ).run(bookId, position.cfi, fraction)
 }
 
-// Books still attached to an EPUB, most recently read first.
-export function recentReading(db: Database, limit = 3): RecentReading[] {
+// Every book marked Reading that has an EPUB, most recently read first; one not opened in
+// the reader yet comes last, at the start.
+export function recentReading(db: Database): RecentReading[] {
   return db
-    .prepare<[number], RecentReading>(
-      `SELECT p.book_id AS bookId, p.fraction, p.updated_at AS updatedAt
-         FROM reading_position p JOIN book_file f ON f.book_id = p.book_id
-        ORDER BY p.updated_at DESC, p.book_id DESC
-        LIMIT ?`
+    .prepare<[], RecentReading>(
+      `SELECT b.id AS bookId, coalesce(p.fraction, 0) AS fraction, p.updated_at AS updatedAt
+         FROM book b
+         JOIN book_file f ON f.book_id = b.id
+         LEFT JOIN reading_position p ON p.book_id = b.id
+        WHERE b.status = 'reading'
+        ORDER BY p.updated_at IS NULL, p.updated_at DESC, b.id DESC`
     )
-    .all(limit)
+    .all()
 }

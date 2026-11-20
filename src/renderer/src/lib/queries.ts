@@ -386,6 +386,7 @@ export function useUpdateBook(): UseMutationResult<
     onSuccess: () => {
       invalidateBooks(client)
       invalidateRecommendations(client)
+      void client.invalidateQueries({ queryKey: keys.recentReading })
     }
   })
 }

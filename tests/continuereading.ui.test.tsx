@@ -67,4 +67,15 @@ describe('continue reading', () => {
     await screen.findByText((_, element) => element === document.body)
     expect(screen.queryByRole('heading', { name: 'Continue reading' })).toBeNull()
   })
+
+  it('offers to open a book marked Reading that has not been opened yet', async () => {
+    installBridge(
+      { books },
+      { recentReading: async () => [{ bookId: 1, fraction: 0, updatedAt: null }] }
+    )
+    renderApp(<ContinueReading />)
+
+    expect(await screen.findByText('Not opened yet')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Open book' })).toBeDefined()
+  })
 })

@@ -12,7 +12,15 @@ export default function ContinueReading(): ReactNode {
 
   const rows = recent.flatMap((position) => {
     const book = books.find((candidate) => candidate.id === position.bookId)
-    return book ? [{ book, percent: Math.round(position.fraction * 100) }] : []
+    return book
+      ? [
+          {
+            book,
+            percent: Math.round(position.fraction * 100),
+            opened: position.updatedAt !== null
+          }
+        ]
+      : []
   })
   if (rows.length === 0) return null
 
@@ -22,7 +30,7 @@ export default function ContinueReading(): ReactNode {
         Continue reading
       </h2>
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
-        {rows.map(({ book, percent }) => (
+        {rows.map(({ book, percent, opened }) => (
           <div
             key={book.id}
             className="relative flex items-center gap-3 rounded-card border border-hairline bg-surface px-3 py-2.5 hover:bg-hover"
@@ -52,14 +60,16 @@ export default function ContinueReading(): ReactNode {
               >
                 <span className="block h-full bg-accent" style={{ width: `${percent}%` }} />
               </span>
-              <span className="mt-1 block text-[11px] tabular-nums text-ink-faint">{percent}%</span>
+              <span className="mt-1 block text-[11px] tabular-nums text-ink-faint">
+                {opened ? `${percent}%` : 'Not opened yet'}
+              </span>
             </span>
             <button
               type="button"
               className="btn btn-outline relative shrink-0"
               onClick={() => navigate({ kind: 'reader', bookId: book.id })}
             >
-              Continue
+              {opened ? 'Continue' : 'Open book'}
             </button>
           </div>
         ))}
