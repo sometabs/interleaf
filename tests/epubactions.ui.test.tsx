@@ -214,4 +214,85 @@ describe('dropping an EPUB on the window', () => {
     })
     expect(screen.queryByText('Drop to add this EPUB')).toBeNull()
   })
+
+  // Adding a new book used to close this dialog and open another, which could leave the
+  // window locked. It is now a step inside the one dialog.
+  describe('adding a new book for the file', () => {
+    const result = {
+      olid: 'OL9W',
+      title: 'Untitled Draft',
+      author: 'Someone',
+      publishedYear: 1999,
+      coverId: null,
+      isbn: null,
+      pageCount: null
+    }
+
+    it('searches Open Library inside the same dialog and attaches to the book picked', async () => {
+      const attachEpub = vi.fn(async (): Promise<AttachEpubResult> => ({ kind: 'attached' }))
+      const searchOpenLibrary = vi.fn(async () => [result])
+      const added = makeBook({ id: 7, title: 'Untitled Draft', olid: 'OL9W' })
+      installBridge({ books: [orchard] }, {
+        inspectEpub: async () => candidate({ title: 'Untitled Draft: A Novel', author: 'Someone' }),
+        attachEpub,
+        searchOpenLibrary,
+        addBookFromOpenLibrary: async () => added,
+        pathForFile: () => 'C:/books/draft.epub'
+      } as never)
+      renderApp(<EpubDrop />)
+
+      drop('draft.epub')
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a new book' }))
+
+      expect(await screen.findByText('Find this book on Open Library')).toBeDefined()
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+      expect(searchOpenLibrary).toHaveBeenCalledWith('Untitled Draft Someone')
+      await userEvent.click(await screen.findByRole('button', { name: /Untitled DraftSomeone/ }))
+
+      await waitFor(() =>
+        expect(attachEpub).toHaveBeenCalledWith(7, 'C:/books/orchard.epub', false)
+      )
+    })
+
+    it('still offers adding by hand when Open Library cannot be reached', async () => {
+      const attachEpub = vi.fn(async (): Promise<AttachEpubResult> => ({ kind: 'attached' }))
+      installBridge({ books: [orchard] }, {
+        inspectEpub: async () => candidate({ title: 'Untitled Draft', author: 'Someone' }),
+        attachEpub,
+        searchOpenLibrary: async () => {
+          throw new Error('Open Library did not answer. Check your connection and try again.')
+        },
+        pathForFile: () => 'C:/books/draft.epub'
+      } as never)
+      renderApp(<EpubDrop />)
+
+      drop('draft.epub')
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a new book' }))
+
+      expect(await screen.findByText(/Open Library is unreachable/)).toBeDefined()
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Add “Untitled Draft Someone” manually' })
+      )
+
+      await waitFor(() => expect(attachEpub).toHaveBeenCalled())
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    it('goes back to the library list', async () => {
+      installBridge({ books: [orchard, other] }, {
+        inspectEpub: async () => candidate({ title: 'Untitled Draft', author: null }),
+        searchOpenLibrary: async () => [],
+        pathForFile: () => 'C:/books/draft.epub'
+      } as never)
+      renderApp(<EpubDrop />)
+
+      drop('draft.epub')
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a new book' }))
+      await userEvent.click(await screen.findByRole('button', { name: '← Back to your library' }))
+
+      expect(await screen.findByText('Which book is this EPUB?')).toBeDefined()
+      expect(screen.getByRole('button', { name: /Salt and Cinder/ })).toBeDefined()
+    })
+  })
 })

@@ -7,7 +7,7 @@ import { matchLibrary } from '../lib/epubMatch'
 import { fail, notify } from '../lib/feedback'
 import { useAttachEpub, useBooks } from '../lib/queries'
 import { useView } from '../lib/view'
-import AddBookDialog from './AddBookDialog'
+import BookSearch from './BookSearch'
 import Cover from './Cover'
 
 const isEpub = (file: File): boolean => file.name.toLowerCase().endsWith('.epub')
@@ -22,7 +22,6 @@ export default function EpubDrop(): ReactNode {
   const attach = useAttachEpub()
   const { navigate } = useView()
   const [candidate, setCandidate] = useState<EpubCandidate | null>(null)
-  const [adding, setAdding] = useState(false)
   const [dropId, setDropId] = useState(0)
   const [dragging, setDragging] = useState(false)
 
@@ -75,7 +74,6 @@ export default function EpubDrop(): ReactNode {
             return
           }
           setDropId((id) => id + 1)
-          setAdding(false)
           setCandidate(found)
         })
         .catch(fail)
@@ -97,7 +95,6 @@ export default function EpubDrop(): ReactNode {
     if (!candidate) return
     const found = candidate
     setCandidate(null)
-    setAdding(false)
     try {
       if (await attachCandidate(book, found, books, attach.mutateAsync)) {
         navigate({ kind: 'book', id: book.id })
@@ -126,49 +123,31 @@ export default function EpubDrop(): ReactNode {
       )}
       <BookPicker
         key={dropId}
-        candidate={adding ? null : candidate}
+        candidate={candidate}
         described={described}
         books={books}
         onPick={(book) => void attachTo(book)}
-        onAddNew={() => setAdding(true)}
         onClose={() => setCandidate(null)}
       />
-      {candidate && adding && (
-        <AddBookDialog
-          key={dropId}
-          open
-          onOpenChange={(open) => {
-            if (!open) {
-              setAdding(false)
-              setCandidate(null)
-            }
-          }}
-          initialQuery={[candidate.title?.replace(/\s*[:([].*$/, ''), candidate.author]
-            .filter(Boolean)
-            .join(' ')}
-          purpose={`Find “${described}” on Open Library. The EPUB is attached to the book you pick.`}
-          onPicked={(book) => void attachTo(book)}
-        />
-      )}
     </>
   )
 }
 
+// One dialog for both steps: closing one dialog while opening another left the page locked.
 function BookPicker({
   candidate,
   described,
   books,
   onPick,
-  onAddNew,
   onClose
 }: {
   candidate: EpubCandidate | null
   described: string
   books: Book[]
   onPick: (book: Book) => void
-  onAddNew: () => void
   onClose: () => void
 }): ReactNode {
+  const [searching, setSearching] = useState(false)
   const [filter, setFilter] = useState('')
   const matches = useMemo(
     () => (candidate ? matchLibrary(candidate, books) : { clear: null, close: [] }),
@@ -196,86 +175,120 @@ function BookPicker({
           onEscapeKeyDown={(event) => event.stopPropagation()}
           className="fixed left-1/2 top-[12vh] z-50 flex max-h-[72vh] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-hairline bg-surface shadow-pop"
         >
-          <div className="border-b border-hairline p-4">
-            <Dialog.Title className="text-[15px] font-medium">
-              Which book is this EPUB?
-            </Dialog.Title>
-            <Dialog.Description className="mt-0.5 truncate text-[13px] text-ink-muted">
-              {described}
-            </Dialog.Description>
-
-            {clear && (
-              <div className="mt-3 flex items-center gap-3 rounded-control border border-hairline p-2">
-                <span className="w-8 shrink-0">
-                  <Cover
-                    title={clear.title}
-                    author={clear.author}
-                    path={clear.coverPath}
-                    size="sm"
-                  />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium">{clear.title}</span>
-                  <span className="block truncate text-[12px] text-ink-muted">
-                    {clear.author ?? 'Unknown author'}
-                  </span>
-                </span>
+          {searching ? (
+            <>
+              <div className="border-b border-hairline px-4 pt-4 pb-3">
                 <button
                   type="button"
-                  autoFocus
-                  className="btn btn-primary shrink-0"
-                  onClick={() => onPick(clear)}
+                  className="btn btn-ghost -ml-2 mb-1 text-[12px]"
+                  onClick={() => setSearching(false)}
                 >
-                  Attach to this book
+                  ← Back to your library
+                </button>
+                <Dialog.Title className="text-[15px] font-medium">
+                  Find this book on Open Library
+                </Dialog.Title>
+                <Dialog.Description className="mt-0.5 truncate text-[13px] text-ink-muted">
+                  {described}. The EPUB is attached to the book you pick.
+                </Dialog.Description>
+              </div>
+              <BookSearch
+                initialQuery={[candidate?.title?.replace(/\s*[:([].*$/, ''), candidate?.author]
+                  .filter(Boolean)
+                  .join(' ')}
+                onPicked={onPick}
+                onClose={onClose}
+              />
+            </>
+          ) : (
+            <>
+              <div className="border-b border-hairline p-4">
+                <Dialog.Title className="text-[15px] font-medium">
+                  Which book is this EPUB?
+                </Dialog.Title>
+                <Dialog.Description className="mt-0.5 truncate text-[13px] text-ink-muted">
+                  {described}
+                </Dialog.Description>
+
+                {clear && (
+                  <div className="mt-3 flex items-center gap-3 rounded-control border border-hairline p-2">
+                    <span className="w-8 shrink-0">
+                      <Cover
+                        title={clear.title}
+                        author={clear.author}
+                        path={clear.coverPath}
+                        size="sm"
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium">{clear.title}</span>
+                      <span className="block truncate text-[12px] text-ink-muted">
+                        {clear.author ?? 'Unknown author'}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      autoFocus
+                      className="btn btn-primary shrink-0"
+                      onClick={() => onPick(clear)}
+                    >
+                      Attach to this book
+                    </button>
+                  </div>
+                )}
+
+                <input
+                  autoFocus={!clear}
+                  className="field mt-3 w-full text-[13px]"
+                  placeholder={clear ? 'Or choose another book…' : 'Filter your library…'}
+                  aria-label="Filter your library"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                />
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                {rows.map((book) => (
+                  <button
+                    key={book.id}
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left hover:bg-hover"
+                    onClick={() => onPick(book)}
+                  >
+                    <span className="w-7 shrink-0">
+                      <Cover
+                        title={book.title}
+                        author={book.author}
+                        path={book.coverPath}
+                        size="sm"
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px]">{book.title}</span>
+                      <span className="block truncate text-[11px] text-ink-faint">
+                        {book.author ?? 'Unknown author'}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+                {rows.length === 0 && (
+                  <p className="px-4 py-6 text-center text-[13px] text-ink-muted">
+                    No book in your library matches.
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t border-hairline p-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center rounded-control border border-dashed border-hairline-strong px-3 py-2 text-[13px] text-ink-muted hover:bg-hover"
+                  onClick={() => setSearching(true)}
+                >
+                  Add a new book
                 </button>
               </div>
-            )}
-
-            <input
-              autoFocus={!clear}
-              className="field mt-3 w-full text-[13px]"
-              placeholder={clear ? 'Or choose another book…' : 'Filter your library…'}
-              aria-label="Filter your library"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {rows.map((book) => (
-              <button
-                key={book.id}
-                type="button"
-                className="flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left hover:bg-hover"
-                onClick={() => onPick(book)}
-              >
-                <span className="w-7 shrink-0">
-                  <Cover title={book.title} author={book.author} path={book.coverPath} size="sm" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">{book.title}</span>
-                  <span className="block truncate text-[11px] text-ink-faint">
-                    {book.author ?? 'Unknown author'}
-                  </span>
-                </span>
-              </button>
-            ))}
-            {rows.length === 0 && (
-              <p className="px-4 py-6 text-center text-[13px] text-ink-muted">
-                No book in your library matches.
-              </p>
-            )}
-          </div>
-
-          <div className="border-t border-hairline p-2">
-            <button
-              type="button"
-              className="flex w-full items-center justify-center rounded-control border border-dashed border-hairline-strong px-3 py-2 text-[13px] text-ink-muted hover:bg-hover"
-              onClick={onAddNew}
-            >
-              Add a new book
-            </button>
-          </div>
+            </>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
