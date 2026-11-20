@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 
 import { useBooks, useNotes } from '../lib/queries'
 import { isQuote } from '../lib/quotes'
@@ -21,6 +21,13 @@ interface NavItem {
   count?: number
   /** Views that should also light this item up. */
   matches: View['kind'][]
+  group: 'books' | 'journal' | 'explore'
+}
+
+const GROUP_LABELS: Record<NavItem['group'], string> = {
+  books: 'Books',
+  journal: 'Journal',
+  explore: 'Explore'
 }
 
 function Icon({ children }: { children: ReactNode }): ReactNode {
@@ -55,6 +62,7 @@ export default function Sidebar({
   const items: NavItem[] = [
     {
       label: 'Library',
+      group: 'books',
       view: { kind: 'library' },
       matches: ['library', 'book'],
       count: books?.length,
@@ -66,6 +74,7 @@ export default function Sidebar({
     },
     {
       label: 'Reading queue',
+      group: 'books',
       view: { kind: 'queue' },
       matches: ['queue'],
       count: books?.filter((book) => book.status === 'want').length,
@@ -77,6 +86,7 @@ export default function Sidebar({
     },
     {
       label: 'Reading history',
+      group: 'books',
       view: { kind: 'history' },
       matches: ['history'],
       count: books?.filter((book) => book.status === 'read').length,
@@ -88,6 +98,7 @@ export default function Sidebar({
     },
     {
       label: 'Reviews',
+      group: 'journal',
       view: { kind: 'reviews' },
       matches: ['reviews', 'review'],
       count: books && notes ? reviewEntries(books, notes).length : undefined,
@@ -99,6 +110,7 @@ export default function Sidebar({
     },
     {
       label: 'Notes',
+      group: 'journal',
       view: { kind: 'notes' },
       matches: ['notes', 'note', 'new-note'],
       count: notes?.filter((note) => note.kind === 'thought').length,
@@ -110,6 +122,7 @@ export default function Sidebar({
     },
     {
       label: 'Quotes',
+      group: 'journal',
       view: { kind: 'quotes' },
       matches: ['quotes'],
       count: notes?.filter(isQuote).length,
@@ -123,6 +136,7 @@ export default function Sidebar({
     },
     {
       label: 'Discover',
+      group: 'explore',
       view: { kind: 'discover' },
       matches: ['discover'],
       icon: (
@@ -134,6 +148,7 @@ export default function Sidebar({
     },
     {
       label: 'Stats',
+      group: 'explore',
       view: { kind: 'stats' },
       matches: ['stats'],
       icon: (
@@ -141,19 +156,16 @@ export default function Sidebar({
           <path d="M5 20V10M12 20V4M19 20v-7" />
         </Icon>
       )
-    },
-    {
-      label: 'Data',
-      view: { kind: 'data' },
-      matches: ['data'],
-      icon: (
-        <Icon>
-          <ellipse cx="12" cy="6" rx="8" ry="3" />
-          <path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
-        </Icon>
-      )
     }
   ]
+
+  const dataActive = view.kind === 'data'
+  const dataIcon = (
+    <Icon>
+      <ellipse cx="12" cy="6" rx="8" ry="3" />
+      <path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
+    </Icon>
+  )
 
   return (
     <aside
@@ -162,8 +174,8 @@ export default function Sidebar({
       }`}
     >
       <header
-        className={`flex items-center pt-4 pb-3 ${
-          collapsed ? 'justify-center px-2' : 'justify-between px-4'
+        className={`flex items-center ${
+          collapsed ? 'justify-center px-2 pt-3 pb-1.5' : 'justify-between px-4 pt-4 pb-3'
         }`}
       >
         {collapsed ? (
@@ -215,7 +227,7 @@ export default function Sidebar({
       </header>
 
       {collapsed && (
-        <div className="flex justify-center px-2 pb-2">
+        <div className="flex justify-center px-2 pb-1">
           <button
             type="button"
             onClick={onPalette}
@@ -231,38 +243,76 @@ export default function Sidebar({
         </div>
       )}
 
-      <nav className={`flex flex-col gap-0.5 ${collapsed ? 'items-center px-2' : 'px-2'}`}>
-        {items.map((item) => {
+      {/* Scrolls only when the window is too short for the list; the footer stays put. */}
+      <nav
+        className={`sidebar-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto ${
+          collapsed ? 'items-center px-2' : 'px-2'
+        }`}
+      >
+        {items.map((item, index) => {
           const active = item.matches.includes(view.kind)
+          const startsGroup = index === 0 || items[index - 1].group !== item.group
           return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => navigate(item.view)}
-              aria-current={active ? 'page' : undefined}
-              aria-label={collapsed ? item.label : undefined}
-              title={collapsed ? item.label : undefined}
-              className={`flex items-center gap-2.5 rounded-control py-2 text-left text-[14px] transition-colors ${
-                collapsed ? 'sidebar-icon-button size-9 justify-center px-0' : 'w-full px-2.5'
-              } ${
-                active
-                  ? 'sidebar-nav-active font-medium'
-                  : 'text-ink-muted hover:bg-hover hover:text-ink'
-              }`}
-            >
-              {item.icon}
-              {!collapsed && <span className="flex-1">{item.label}</span>}
-              {!collapsed && item.count !== undefined && (
-                <span className="text-xs tabular-nums text-ink-faint">{item.count}</span>
-              )}
-            </button>
+            <Fragment key={item.label}>
+              {/* Collapsed to icons, a label would not fit: a short rule marks the break instead. */}
+              {startsGroup &&
+                (collapsed ? (
+                  index > 0 && (
+                    <span aria-hidden className="my-1 h-px w-5 shrink-0 bg-hairline-strong" />
+                  )
+                ) : (
+                  <span
+                    className={`shrink-0 px-2.5 pb-1 text-[11px] font-medium tracking-wider text-ink-faint uppercase ${
+                      index > 0 ? 'pt-3' : 'pt-0.5'
+                    }`}
+                  >
+                    {GROUP_LABELS[item.group]}
+                  </span>
+                ))}
+              <button
+                type="button"
+                onClick={() => navigate(item.view)}
+                aria-current={active ? 'page' : undefined}
+                aria-label={collapsed ? item.label : undefined}
+                title={collapsed ? item.label : undefined}
+                className={`flex shrink-0 items-center gap-2.5 rounded-control py-2 text-left text-[14px] transition-colors ${
+                  collapsed ? 'sidebar-icon-button size-9 justify-center px-0' : 'w-full px-2.5'
+                } ${
+                  active
+                    ? 'sidebar-nav-active font-medium'
+                    : 'text-ink-muted hover:bg-hover hover:text-ink'
+                }`}
+              >
+                {item.icon}
+                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && item.count !== undefined && (
+                  <span className="text-xs tabular-nums text-ink-faint">{item.count}</span>
+                )}
+              </button>
+            </Fragment>
           )
         })}
       </nav>
 
-      <div className="flex-1" />
-
-      <footer className={collapsed ? 'flex flex-col items-center gap-1 p-2' : 'space-y-2 p-3'}>
+      <footer
+        className={
+          collapsed ? 'flex shrink-0 flex-col items-center gap-0.5 p-2' : 'shrink-0 space-y-2 p-3'
+        }
+      >
+        {/* Visited rarely, like Settings, so it waits down here rather than among the daily views. */}
+        <button
+          type="button"
+          onClick={() => navigate({ kind: 'data' })}
+          aria-current={dataActive ? 'page' : undefined}
+          aria-label="Data"
+          title={collapsed ? 'Data' : undefined}
+          className={`btn btn-ghost ${
+            collapsed ? 'sidebar-icon-button size-9 px-0' : 'w-full justify-start'
+          } ${dataActive ? 'sidebar-nav-active font-medium' : 'text-ink-muted'}`}
+        >
+          {dataIcon}
+          {!collapsed && 'Data'}
+        </button>
         <SettingsDialog collapsed={collapsed} />
         {collapsed ? (
           <>

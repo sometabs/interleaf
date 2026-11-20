@@ -627,6 +627,16 @@
     flex-shrink: 0;
   }
 
+  /* Only needed in a very short window, so it stays out of sight until hovered. */
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .sidebar-scroll:hover {
+    scrollbar-color: var(--color-hairline-strong) transparent;
+  }
+
   .sidebar-collapsed .sidebar-icon-button {
     transition:
       background-color 120ms ease,
