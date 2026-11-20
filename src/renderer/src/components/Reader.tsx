@@ -18,6 +18,7 @@ import { confirm } from '../lib/confirm'
 import { fromDateInput, toDateInput } from '../lib/dates'
 import { fail, notify } from '../lib/feedback'
 import { inertPage, isPage } from '../lib/epubContent'
+import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
 import { usePersistentState } from '../lib/persistent'
 import {
   useBook,
@@ -51,6 +52,11 @@ interface TocItem {
 interface FoliateBook {
   toc?: TocItem[]
   transformTarget?: EventTarget
+  resolveHref?: (href: string) => {
+    index: number
+    anchor: (doc: Document) => Element | Range | null
+  }
+  sections: { createDocument?: () => Promise<Document> }[]
 }
 
 interface Relocation {
@@ -167,6 +173,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const [picked, setPicked] = useState<Picked | null>(null)
   const [noteDraft, setNoteDraft] = useState<string | null>(null)
   const [opened, setOpened] = useState<(Point & { note: Note }) | null>(null)
+  const [footnote, setFootnote] = useState<(Point & { text: string; href: string }) | null>(null)
+  // Where a link jump left from, so one click goes back.
+  const [returnTo, setReturnTo] = useState<string | null>(null)
   const [chromeShown, setChromeShown] = useState(true)
   const [fullScreen, setFullScreen] = useState(false)
   const [startAsked, setStartAsked] = useState(false)
@@ -177,7 +186,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const located = useMemo(() => notes.filter((note) => note.location), [notes])
   const locatedRef = useRef(located)
   const lookRef = useRef(look)
-  const overlayRef = useRef({ panel, picked, opened })
+  const overlayRef = useRef({ panel, picked, opened, footnote })
   const pendingPosition = useRef<Relocation | null>(null)
   // Opened at a quote, the saved place stays put until the reader moves on from there.
   const following = useRef(at === undefined)
@@ -186,7 +195,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   useLayoutEffect(() => {
     locatedRef.current = located
     lookRef.current = look
-    overlayRef.current = { panel, picked, opened }
+    overlayRef.current = { panel, picked, opened, footnote }
     savePositionRef.current = savePosition.mutate
   })
 
@@ -207,8 +216,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 
   // Overlays first, then the screen: one Escape never does both.
   const dismissOverlay = useCallback((): boolean => {
-    const { panel: open, picked: selection, opened: highlight } = overlayRef.current
-    if (selection) clearSelection()
+    const { panel: open, picked: selection, opened: highlight, footnote: note } = overlayRef.current
+    if (note) setFootnote(null)
+    else if (selection) clearSelection()
     else if (highlight) setOpened(null)
     else if (open) setPanel(null)
     else return false
@@ -221,6 +231,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       target instanceof HTMLElement &&
       (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
     if (!view || typing) return false
+    // Turning the page means reading on from here, so the way back is no longer needed.
+    if (/^(ArrowLeft|ArrowRight|PageUp|PageDown| )$/.test(key)) setReturnTo(null)
     if (key === 'ArrowLeft' || key === 'PageUp') void view.goLeft()
     else if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') void view.goRight()
     else return false
@@ -300,7 +312,10 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         const frame = doc.defaultView?.frameElement?.getBoundingClientRect()
         turnAtEdge((frame?.left ?? 0) + clickEvent.clientX)
       })
-      doc.addEventListener('pointerdown', () => setOpened(null))
+      doc.addEventListener('pointerdown', () => {
+        setOpened(null)
+        setFootnote(null)
+      })
       doc.addEventListener('pointerup', () => {
         // The selection settles after pointerup.
         window.setTimeout(() => {
@@ -324,8 +339,42 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       if (lookRef.current.flow !== 'paginated') return
       const area = host.getBoundingClientRect()
       const x = pageX - area.left
-      if (x < area.width * 0.2) void view.goLeft()
-      else if (x > area.width * 0.8) void view.goRight()
+      if (x < area.width * 0.2) {
+        setReturnTo(null)
+        void view.goLeft()
+      } else if (x > area.width * 0.8) {
+        setReturnTo(null)
+        void view.goRight()
+      }
+    }
+
+    // A footnote opens in place; any other link inside the book jumps, with a way back.
+    // Every link waits until its target is read: only then is it clear whether it is a note.
+    const onLink = (event: Event): void => {
+      const { a, href } = (event as CustomEvent<{ a: HTMLAnchorElement; href: string }>).detail
+      const from = (view as FoliateView & { lastLocation?: { cfi?: string } }).lastLocation?.cfi
+      event.preventDefault()
+      setFootnote(null)
+      const range = a.ownerDocument.createRange()
+      range.selectNodeContents(a)
+      const point = pointOf(range, host)
+      const jump = (): void => {
+        if (from) setReturnTo(from)
+        void view.goTo(href)
+      }
+      void (async () => {
+        try {
+          const target = view.book.resolveHref?.(href)
+          const doc = target ? await view.book.sections[target.index]?.createDocument?.() : null
+          const found = target && doc ? target.anchor(doc) : null
+          const text = isNoteReference(a) || isNoteTarget(found) ? noteText(found) : ''
+          if (text) setFootnote({ text, href, ...point })
+          else jump()
+        } catch {
+          // A note that can't be read in place is still reachable the ordinary way.
+          jump()
+        }
+      })()
     }
     // Clicks inside a book frame never reach here; these are the margins around it.
     host.addEventListener('click', (clickEvent) => turnAtEdge(clickEvent.clientX))
@@ -386,6 +435,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         view.addEventListener('create-overlay', onCreateOverlay)
         view.addEventListener('draw-annotation', onDraw)
         view.addEventListener('show-annotation', onShowAnnotation)
+        view.addEventListener('link', onLink)
         applyLook(view, lookRef.current)
         // A quote from a replaced file may point nowhere; then open where reading stopped.
         let placed = false
@@ -628,6 +678,46 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
               </div>
             )}
           </Popover>
+        )}
+
+        {footnote && (
+          <Popover point={footnote} label="Footnote">
+            <div className="w-80 max-w-[70vw] p-1.5">
+              <p className="max-h-56 overflow-y-auto text-[13px] leading-relaxed whitespace-pre-line">
+                {footnote.text}
+              </p>
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  className="reader-btn"
+                  onClick={() => {
+                    const from = (
+                      readyView as (FoliateView & { lastLocation?: { cfi?: string } }) | null
+                    )?.lastLocation?.cfi
+                    if (from) setReturnTo(from)
+                    setFootnote(null)
+                    void readyView?.goTo(footnote.href)
+                  }}
+                >
+                  Go to note
+                </button>
+              </div>
+            </div>
+          </Popover>
+        )}
+
+        {returnTo && status === 'ready' && (
+          <button
+            type="button"
+            className="absolute bottom-4 left-4 z-10 rounded-card border border-hairline bg-surface px-3 py-1.5 text-[13px] text-ink shadow-pop hover:bg-hover"
+            onClick={() => {
+              const back = returnTo
+              setReturnTo(null)
+              void readyView?.goTo(back)
+            }}
+          >
+            ← Back to where you were
+          </button>
         )}
 
         {opened && (

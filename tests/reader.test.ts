@@ -3,6 +3,7 @@ import type { EpubCandidate } from '@shared/api'
 import { describe, expect, it } from 'vitest'
 
 import { inertPage } from '../src/renderer/src/lib/epubContent'
+import { isNoteReference, isNoteTarget, noteText } from '../src/renderer/src/lib/footnotes'
 import { matchLibrary, normalTitle } from '../src/renderer/src/lib/epubMatch'
 import {
   bookCss,
@@ -173,5 +174,64 @@ describe('page label', () => {
   it('shows nothing while scrolling or before the chapter is laid out', () => {
     expect(pageLabel(null, 3, 10, 1, true)).toBe('')
     expect(pageLabel(null, 0, 0, 1, false)).toBe('')
+  })
+})
+
+describe('footnotes', () => {
+  const page = (body: string): Document =>
+    new DOMParser().parseFromString(
+      `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>${body}</body></html>`,
+      'application/xhtml+xml'
+    )
+
+  it('recognises a reference the book marks as a note', () => {
+    const doc = page('<p>Text<a epub:type="noteref" href="n.xhtml#n1">1</a></p>')
+    expect(isNoteReference(doc.querySelector('a')!)).toBe(true)
+  })
+
+  it('recognises a raised number, the way print shows a note', () => {
+    const doc = page('<p>Text<sup><a href="n.xhtml#n1">1</a></sup></p>')
+    expect(isNoteReference(doc.querySelector('a')!)).toBe(true)
+  })
+
+  it('recognises a bare marker such as [1] or † as a note, but not words', () => {
+    const doc = page(
+      '<p><a id="bracket" href="n.xhtml#n1">[1]</a><a id="dagger" href="n.xhtml#n2">†</a><a id="words" href="c2.xhtml">see chapter 2</a></p>'
+    )
+    expect(isNoteReference(doc.getElementById('bracket')!)).toBe(true)
+    expect(isNoteReference(doc.getElementById('dagger')!)).toBe(true)
+    expect(isNoteReference(doc.getElementById('words')!)).toBe(false)
+  })
+
+  it('recognises a link pointing at something the book marks as a note', () => {
+    const doc = page(
+      '<aside id="fn1"><p>A note.</p></aside><ol><li id="en1" role="doc-endnote"><p id="inner">An endnote.</p></li></ol><p id="plain">A paragraph.</p>'
+    )
+    expect(isNoteTarget(doc.getElementById('fn1'))).toBe(true)
+    expect(isNoteTarget(doc.getElementById('inner'))).toBe(true)
+    expect(isNoteTarget(doc.getElementById('plain'))).toBe(false)
+    expect(isNoteTarget(null)).toBe(false)
+  })
+
+  it('treats an ordinary link as a jump, and a link back from a note as no note', () => {
+    const doc = page(
+      '<p><a id="plain" href="c2.xhtml">Chapter two</a><sup><a id="back" epub:type="backlink" href="c1.xhtml#r1">↩</a></sup></p>'
+    )
+    expect(isNoteReference(doc.getElementById('plain')!)).toBe(false)
+    expect(isNoteReference(doc.getElementById('back')!)).toBe(false)
+  })
+
+  it('reads the whole note as plain text, without its link back', () => {
+    const doc = page(
+      '<aside id="n1" epub:type="footnote"><p><a epub:type="backlink" href="c1.xhtml#r1">1.</a> The keeper counted <em>every</em> tree.</p></aside>'
+    )
+    expect(noteText(doc.querySelector('em'))).toBe('The keeper counted every tree.')
+  })
+
+  it('cuts a very long note short', () => {
+    const doc = page(`<p id="n1">${'word '.repeat(600)}</p>`)
+    const text = noteText(doc.getElementById('n1'))
+    expect(text.length).toBeLessThanOrEqual(1501)
+    expect(text.endsWith('…')).toBe(true)
   })
 })
