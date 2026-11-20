@@ -274,3 +274,43 @@ describe('Stats', () => {
     })
   })
 })
+
+describe('Time reading', () => {
+  it('stays out of Stats until the reader has recorded something', async () => {
+    installBridge({ books: [makeBook()] })
+    renderApp(<Stats />)
+
+    await screen.findByRole('heading', { name: 'Stats' })
+    expect(screen.queryByRole('heading', { name: 'Time reading' })).toBeNull()
+  })
+
+  it('shows the year, the week and the books read longest', async () => {
+    const weeks = Array.from({ length: 12 }, (_, index) => ({
+      start: 1_760_000_000 + index * 604_800,
+      seconds: index === 11 ? 3 * 3600 + 40 * 60 : 0
+    }))
+    installBridge(
+      { books: [makeBook()] },
+      {
+        readingTimeSummary: async () => ({
+          anySessions: true,
+          yearSeconds: 48 * 3600,
+          weekSeconds: 3 * 3600 + 40 * 60,
+          usualSessionSeconds: 35 * 60,
+          weeks,
+          topBooks: [{ bookId: 1, title: 'The Lighthouse Keeper', seconds: 9 * 3600 + 600 }]
+        })
+      }
+    )
+    renderApp(<Stats />)
+
+    const section = (await screen.findByRole('heading', { name: 'Time reading' })).closest(
+      'section'
+    )!
+    expect(within(section).getByText('48 h')).toBeDefined()
+    expect(within(section).getAllByText('3 h 40 min').length).toBeGreaterThan(0)
+    expect(within(section).getByText('35 min')).toBeDefined()
+    expect(within(section).getByText('The Lighthouse Keeper')).toBeDefined()
+    expect(within(section).getByRole('img', { name: 'This week: 3 h 40 min' })).toBeDefined()
+  })
+})

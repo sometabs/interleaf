@@ -45,7 +45,9 @@ import type {
   AttachEpubResult,
   BookFile,
   Bookmark,
+  BookReadingTime,
   NewBookmark,
+  ReadingTimeSummary,
   ReadingPosition,
   BackupStatus,
   MarkdownExportResult,
@@ -65,6 +67,8 @@ const keys = {
   position: (bookId: number) => ['reading-position', bookId] as const,
   recentReading: ['recent-reading'] as const,
   bookmarks: (bookId: number) => ['bookmarks', bookId] as const,
+  readingTime: ['reading-time'] as const,
+  bookTime: (bookId: number) => ['book-time', bookId] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
@@ -230,6 +234,27 @@ export function useRemoveBookmark(bookId: number): UseMutationResult<void, Error
         list?.filter((bookmark) => bookmark.id !== id)
       ),
     onSettled: () => client.invalidateQueries({ queryKey: keys.bookmarks(bookId) })
+  })
+}
+
+export function useReadingTimeSummary(): UseQueryResult<ReadingTimeSummary> {
+  return useQuery({ queryKey: keys.readingTime, queryFn: () => api().readingTimeSummary() })
+}
+
+export function useBookReadingTime(bookId: number): UseQueryResult<BookReadingTime> {
+  return useQuery({ queryKey: keys.bookTime(bookId), queryFn: () => api().bookReadingTime(bookId) })
+}
+
+export function useRecordReading(
+  bookId: number
+): UseMutationResult<void, Error, { startedAt: number; seconds: number }> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ startedAt, seconds }) => api().recordReadingSession(bookId, startedAt, seconds),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.readingTime })
+      void client.invalidateQueries({ queryKey: keys.bookTime(bookId) })
+    }
   })
 }
 

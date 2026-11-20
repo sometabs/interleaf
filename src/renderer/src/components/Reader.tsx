@@ -20,6 +20,7 @@ import { fail, notify } from '../lib/feedback'
 import { inertPage, isPage } from '../lib/epubContent'
 import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
 import { usePersistentState } from '../lib/persistent'
+import { ReadingClock } from '../lib/readingClock'
 import {
   useAddBookmark,
   useBook,
@@ -27,6 +28,7 @@ import {
   useCreateNote,
   useDeleteNote,
   useNotes,
+  useRecordReading,
   useRemoveBookmark,
   useSaveReadingPosition,
   useUpdateBook
@@ -133,6 +135,9 @@ const HIGHLIGHT = '#f2c94c'
 const UNDERLINE = '#5b84c9'
 const CHROME_IDLE_MS = 2500
 const CHROME_EDGE = 64
+const TIME_SAVE_MS = 60_000
+// Opening a book to check a passage is not a reading session.
+const TIME_MINIMUM_SECONDS = 20
 
 function today(): number | null {
   return fromDateInput(toDateInput(Math.floor(Date.now() / 1000)))
@@ -206,6 +211,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const deleteNote = useDeleteNote()
   const updateBook = useUpdateBook()
   const savePosition = useSaveReadingPosition(bookId)
+  const recordReading = useRecordReading(bookId)
   const { data: bookmarks = [] } = useBookmarks(bookId)
   const addBookmark = useAddBookmark(bookId)
   const removeBookmark = useRemoveBookmark(bookId)
@@ -251,12 +257,14 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const following = useRef(at === undefined)
   const saveTimer = useRef<number | undefined>(undefined)
   const savePositionRef = useRef(savePosition.mutate)
+  const recordReadingRef = useRef(recordReading.mutate)
   useLayoutEffect(() => {
     locatedRef.current = located
     lookRef.current = look
     themeRef.current = themeShown
     overlayRef.current = { panel, picked, opened, footnote }
     savePositionRef.current = savePosition.mutate
+    recordReadingRef.current = recordReading.mutate
   })
 
   const flushPosition = useCallback((): void => {
@@ -342,9 +350,29 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     host.append(view)
     viewRef.current = view
 
+    const startedAt = Math.floor(Date.now() / 1000)
+    const clock = new ReadingClock(Date.now())
+    if (document.hidden) clock.pause(Date.now())
+    let opened = false
+    const saveTime = (): void => {
+      const seconds = clock.seconds
+      if (opened && seconds >= TIME_MINIMUM_SECONDS)
+        recordReadingRef.current({ startedAt, seconds })
+    }
+    const touch = (): void => clock.activity(Date.now())
+    const onVisibility = (): void => {
+      if (document.hidden) {
+        clock.pause(Date.now())
+        saveTime()
+      } else clock.resume(Date.now())
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    const timeTimer = window.setInterval(saveTime, TIME_SAVE_MS)
+
     const onRelocate = (event: Event): void => {
       const detail = (event as CustomEvent<Relocation>).detail
       const { renderer } = view
+      touch()
       setShown(pageOf(view, detail))
       setPlace({
         fraction: detail.fraction ?? 0,
@@ -362,13 +390,17 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     const follow = (): void => {
       following.current = true
     }
-    for (const type of ['pointerdown', 'keydown', 'wheel'])
+    for (const type of ['pointerdown', 'keydown', 'wheel']) {
       window.addEventListener(type, follow, true)
+      window.addEventListener(type, touch, true)
+    }
 
     const onLoad = (event: Event): void => {
       const { doc, index } = (event as CustomEvent<{ doc: Document; index: number }>).detail
-      for (const type of ['pointerdown', 'keydown', 'wheel'])
+      for (const type of ['pointerdown', 'keydown', 'wheel']) {
         doc.addEventListener(type, follow, true)
+        doc.addEventListener(type, touch, true)
+      }
       doc.addEventListener('keydown', (keyEvent) => {
         const current = handlers.current
         if (isBookmarkKey(keyEvent)) {
@@ -521,6 +553,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         }
         if (!placed) await view.init({ lastLocation: position?.cfi, showTextStart: !position })
         if (cancelled) return
+        opened = true
         setStatus('ready')
         setReadyView(view)
       } catch (error) {
@@ -531,8 +564,14 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     })()
 
     return () => {
-      for (const type of ['pointerdown', 'keydown', 'wheel'])
+      for (const type of ['pointerdown', 'keydown', 'wheel']) {
         window.removeEventListener(type, follow, true)
+        window.removeEventListener(type, touch, true)
+      }
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.clearInterval(timeTimer)
+      clock.pause(Date.now())
+      saveTime()
       cancelled = true
       flush()
       view.close?.()

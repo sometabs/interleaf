@@ -236,3 +236,23 @@ describe('managing one book’s data', () => {
     await waitFor(() => expect(deleteBookNotes).toHaveBeenCalledWith(1, 'highlight'))
   })
 })
+
+describe('time read', () => {
+  it('shows the time spent in the reader on the book page', async () => {
+    installBridge(
+      { books: [makeBook()] },
+      { bookReadingTime: async () => ({ seconds: 9 * 3600 + 600, sessions: 14 }) }
+    )
+    renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
+
+    expect((await screen.findByTestId('time-read')).textContent).toBe('9 h 10 min · 14 sessions')
+  })
+
+  it('leaves the row out for a book never opened in the reader', async () => {
+    installBridge({ books: [makeBook()] })
+    renderApp(<BookRoute id={1} />, { kind: 'book', id: 1 })
+
+    await screen.findByText('Started')
+    expect(screen.queryByTestId('time-read')).toBeNull()
+  })
+})

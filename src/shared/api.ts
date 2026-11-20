@@ -266,6 +266,22 @@ export interface Bookmark {
 
 export type NewBookmark = Pick<Bookmark, 'cfi' | 'excerpt' | 'chapter'>
 
+export interface BookReadingTime {
+  seconds: number
+  sessions: number
+}
+
+export interface ReadingTimeSummary {
+  // False until the reader has recorded anything, so Stats can leave the section out.
+  anySessions: boolean
+  yearSeconds: number
+  weekSeconds: number
+  usualSessionSeconds: number | null
+  // Oldest first; the last is the current week.
+  weeks: { start: number; seconds: number }[]
+  topBooks: { bookId: number; title: string; seconds: number }[]
+}
+
 export interface RecentReading {
   bookId: number
   fraction: number
@@ -387,6 +403,9 @@ export interface InterleafApi {
   listBookmarks(bookId: number): Promise<Bookmark[]>
   addBookmark(bookId: number, bookmark: NewBookmark): Promise<Bookmark>
   removeBookmark(id: number): Promise<void>
+  recordReadingSession(bookId: number, startedAt: number, seconds: number): Promise<void>
+  bookReadingTime(bookId: number): Promise<BookReadingTime>
+  readingTimeSummary(): Promise<ReadingTimeSummary>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
@@ -489,6 +508,9 @@ export const IPC_CHANNELS = [
   'listBookmarks',
   'addBookmark',
   'removeBookmark',
+  'recordReadingSession',
+  'bookReadingTime',
+  'readingTimeSummary',
   'getSpineColors',
   'createBook',
   'updateBook',

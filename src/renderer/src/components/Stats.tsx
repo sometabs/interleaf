@@ -1,6 +1,15 @@
 import { useRef, useState, type ReactNode } from 'react'
 
-import { useBooks, useNotes, useReadingGoals, useSetReadingGoal } from '../lib/queries'
+import type { ReadingTimeSummary } from '@shared/api'
+
+import {
+  useBooks,
+  useNotes,
+  useReadingGoals,
+  useReadingTimeSummary,
+  useSetReadingGoal
+} from '../lib/queries'
+import { formatDuration } from '../lib/readingClock'
 import { calculateStats, goalStatus, readingYears, type CountedLabel } from '../lib/stats'
 import FilterPicker from './FilterPicker'
 
@@ -9,6 +18,7 @@ const number = new Intl.NumberFormat()
 export default function Stats(): ReactNode {
   const { data: books = [], isPending: booksPending } = useBooks()
   const { data: notes = [], isPending: notesPending } = useNotes()
+  const { data: time } = useReadingTimeSummary()
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState<number | 'all' | null>(null)
   const years = readingYears(books, currentYear)
@@ -109,6 +119,8 @@ export default function Stats(): ReactNode {
           </div>
         </section>
 
+        {time?.anySessions && <ReadingTime time={time} />}
+
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <section aria-labelledby="status-heading">
             <h2 id="status-heading" className="eyebrow mb-2">
@@ -173,6 +185,79 @@ export default function Stats(): ReactNode {
         </div>
       </div>
     </div>
+  )
+}
+
+const weekLabel = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
+
+function ReadingTime({ time }: { time: ReadingTimeSummary }): ReactNode {
+  const most = Math.max(0, ...time.weeks.map((week) => week.seconds))
+  const first = time.weeks[0]
+  return (
+    <section aria-labelledby="time-heading" className="mt-8">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 id="time-heading" className="eyebrow">
+          Time reading
+        </h2>
+        <span className="text-[11px] text-ink-faint">In the Interleaf reader</span>
+      </div>
+      <div className="card grid gap-6 p-5 md:grid-cols-[180px_1fr]">
+        <div className="grid grid-cols-3 gap-3 md:grid-cols-1">
+          <SmallMetric label="This year" value={formatDuration(time.yearSeconds)} />
+          <SmallMetric label="This week" value={formatDuration(time.weekSeconds)} />
+          <SmallMetric
+            label="Usual session"
+            value={
+              time.usualSessionSeconds === null ? '—' : formatDuration(time.usualSessionSeconds)
+            }
+          />
+        </div>
+        <div className="min-w-0">
+          <p className="mb-3 text-[12px] text-ink-muted">Last 12 weeks</p>
+          <div className="flex h-28 items-end gap-2 border-b border-hairline-strong px-1">
+            {time.weeks.map((week, index) => {
+              const current = index === time.weeks.length - 1
+              const label = `${current ? 'This week' : `Week of ${weekLabel.format(week.start * 1000)}`}: ${formatDuration(week.seconds)}`
+              return (
+                <div
+                  key={week.start}
+                  role="img"
+                  aria-label={label}
+                  title={label}
+                  className="flex h-full min-w-0 flex-1 items-end justify-center"
+                >
+                  {week.seconds > 0 && (
+                    <span
+                      className={`w-full max-w-8 rounded-t-[2px] ${current ? 'bg-accent' : 'bg-accent-soft'}`}
+                      style={{ height: Math.max(4, (week.seconds / most) * 104) }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-1 flex justify-between px-1 text-[10px] text-ink-faint">
+            <span>{first ? weekLabel.format(first.start * 1000) : ''}</span>
+            <span>This week</span>
+          </div>
+          {time.topBooks.length > 0 && (
+            <>
+              <p className="mt-5 mb-1.5 text-[12px] text-ink-muted">Most time this year</p>
+              <ol className="space-y-1 text-[13px]">
+                {time.topBooks.map((book) => (
+                  <li key={book.bookId} className="flex justify-between gap-3">
+                    <span className="min-w-0 truncate">{book.title}</span>
+                    <span className="shrink-0 tabular-nums text-ink-muted">
+                      {formatDuration(book.seconds)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 

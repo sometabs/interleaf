@@ -132,6 +132,16 @@ export function installBridge(
     listReadingGoals: async () => state.goals.map((goal) => ({ ...goal })),
     listBookFiles: async () => [],
     recentReading: async () => [],
+    readingTimeSummary: async () => ({
+      anySessions: false,
+      yearSeconds: 0,
+      weekSeconds: 0,
+      usualSessionSeconds: null,
+      weeks: [],
+      topBooks: []
+    }),
+    bookReadingTime: async () => ({ seconds: 0, sessions: 0 }),
+    recordReadingSession: async () => {},
     getBackupStatus: async () => ({ folder: 'C:/backups', isDefault: true, latestAt: null }),
     getReadingPosition: async () => null,
     setReadingGoal: async (year, books) => {

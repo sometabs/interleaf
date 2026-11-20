@@ -20,6 +20,7 @@ import * as bookshelf from '../repos/bookshelf'
 import * as goals from '../repos/goals'
 import * as bookFiles from '../repos/bookFiles'
 import * as bookmarks from '../repos/bookmarks'
+import * as readingTime from '../repos/readingTime'
 import {
   attachEpub,
   describeEpub,
@@ -217,6 +218,15 @@ const api: InterleafApi = {
   },
   async removeBookmark(id) {
     bookmarks.removeBookmark(getDb(), id)
+  },
+  async recordReadingSession(bookId, startedAt, seconds) {
+    readingTime.recordSession(getDb(), bookId, startedAt, seconds)
+  },
+  async bookReadingTime(bookId) {
+    return readingTime.bookReadingTime(getDb(), bookId)
+  },
+  async readingTimeSummary() {
+    return readingTime.readingTimeSummary(getDb())
   },
   getSpineColors,
   async createBook(input) {

@@ -12,6 +12,7 @@ import {
 import { notify } from '../lib/feedback'
 import {
   useBookMetadata,
+  useBookReadingTime,
   useCreateNote,
   useDeleteBook,
   useDeleteBookNotes,
@@ -25,6 +26,7 @@ import {
 import { toPlainText } from '@shared/plaintext'
 
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
+import { formatDuration } from '../lib/readingClock'
 import { statusPatch } from '../lib/status'
 import { SCREEN_NAMES, useView } from '../lib/view'
 import ActionsMenu, { type MenuAction } from './ActionsMenu'
@@ -56,6 +58,7 @@ export default function BookDetail({ book }: Props): ReactNode {
   const { navigate, previous: cameFrom, back } = useView()
   const { data: notes = [], isPending } = useNotes(book.id)
   const { data: metadata } = useBookMetadata(book.id)
+  const { data: time } = useBookReadingTime(book.id)
 
   const updateBook = useUpdateBook()
   const deleteBook = useDeleteBook()
@@ -365,6 +368,19 @@ export default function BookDetail({ book }: Props): ReactNode {
                   </span>
                 )}
               </dd>
+              {time && time.sessions > 0 && (
+                <>
+                  <dt className="text-ink-faint">Time read</dt>
+                  <dd
+                    data-testid="time-read"
+                    title="Time spent reading this book in the Interleaf reader"
+                    className="text-ink-muted"
+                  >
+                    {formatDuration(time.seconds)} · {time.sessions}{' '}
+                    {time.sessions === 1 ? 'session' : 'sessions'}
+                  </dd>
+                </>
+              )}
             </dl>
 
             {backwards && (
