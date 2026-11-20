@@ -1,6 +1,8 @@
-export type ReaderTheme = 'light' | 'sepia' | 'dark'
+export type ReaderTheme = 'auto' | 'light' | 'sepia' | 'dark'
+export type ShownTheme = Exclude<ReaderTheme, 'auto'>
 export type ReaderFont = 'book' | 'serif' | 'sans'
 export type ReaderFlow = 'paginated' | 'scrolled'
+export type PageCount = 'left' | 'position'
 
 export interface ReaderLook {
   theme: ReaderTheme
@@ -11,16 +13,18 @@ export interface ReaderLook {
   flow: ReaderFlow
   // Pages side by side in the paginated layout; a narrow window shows one regardless.
   pages: 1 | 2
+  pageCount: PageCount
 }
 
 export const DEFAULT_LOOK: ReaderLook = {
-  theme: 'light',
+  theme: 'auto',
   font: 'book',
   size: 100,
   spacing: 1.5,
   width: 680,
   flow: 'paginated',
-  pages: 2
+  pages: 2,
+  pageCount: 'left'
 }
 
 export const LIMITS = {
@@ -37,7 +41,7 @@ interface Theme {
   colors?: Record<string, string>
 }
 
-export const THEMES: Record<ReaderTheme, Theme> = {
+export const THEMES: Record<ShownTheme, Theme> = {
   light: { label: 'Light', background: '#fbfaf7', text: '#2d2926' },
   sepia: {
     label: 'Sepia',
@@ -67,6 +71,14 @@ const FONTS: Record<Exclude<ReaderFont, 'book'>, string> = {
   sans: '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif'
 }
 
+export const THEME_CHOICES: ReaderTheme[] = ['auto', 'light', 'sepia', 'dark']
+
+// Auto follows the app between light and dark; sepia is only ever a deliberate choice.
+export function shownTheme(theme: ReaderTheme, appDark: boolean): ShownTheme {
+  if (theme !== 'auto') return theme
+  return appDark ? 'dark' : 'light'
+}
+
 const clamp = (value: number, { min, max }: { min: number; max: number }): number =>
   Math.min(max, Math.max(min, value))
 
@@ -74,13 +86,14 @@ export function parseLook(raw: unknown): ReaderLook | null {
   if (!raw || typeof raw !== 'object') return null
   const look = raw as Partial<ReaderLook>
   return {
-    theme: look.theme && look.theme in THEMES ? look.theme : DEFAULT_LOOK.theme,
+    theme: look.theme && THEME_CHOICES.includes(look.theme) ? look.theme : DEFAULT_LOOK.theme,
     font: look.font === 'serif' || look.font === 'sans' ? look.font : 'book',
     size: clamp(Number(look.size) || DEFAULT_LOOK.size, LIMITS.size),
     spacing: clamp(Number(look.spacing) || DEFAULT_LOOK.spacing, LIMITS.spacing),
     width: clamp(Number(look.width) || DEFAULT_LOOK.width, LIMITS.width),
     flow: look.flow === 'scrolled' ? 'scrolled' : 'paginated',
-    pages: look.pages === 1 ? 1 : 2
+    pages: look.pages === 1 ? 1 : 2,
+    pageCount: look.pageCount === 'position' ? 'position' : 'left'
   }
 }
 
@@ -103,39 +116,46 @@ export function step(look: ReaderLook, key: keyof typeof LIMITS, direction: 1 | 
 }
 
 // Light keeps the book's own colours; sepia and dark recolour text so it stays readable.
-export function bookCss(look: ReaderLook): string {
-  const theme = THEMES[look.theme]
+export function bookCss(look: ReaderLook, shown: ShownTheme): string {
+  const theme = THEMES[shown]
   const recolour =
-    look.theme === 'light'
+    shown === 'light'
       ? ''
       : `
     html, body, body * { color: ${theme.text} !important; background-color: transparent !important; }
-    a, a * { color: ${look.theme === 'dark' ? '#9fb6da' : '#8a5a2b'} !important; }`
+    a, a * { color: ${shown === 'dark' ? '#9fb6da' : '#8a5a2b'} !important; }`
   const font =
     look.font === 'book'
       ? ''
       : `
     body, body *:not(code):not(pre):not(kbd):not(samp) { font-family: ${FONTS[look.font]} !important; }`
   return `
-    html { color-scheme: ${look.theme === 'dark' ? 'dark' : 'light'}; background: transparent !important; font-size: ${look.size}% !important; }
+    html { color-scheme: ${shown === 'dark' ? 'dark' : 'light'}; background: transparent !important; font-size: ${look.size}% !important; }
     p, li, blockquote, dd, div { line-height: ${look.spacing} !important; }
     pre { white-space: pre-wrap !important; }
     img, svg, video { max-width: 100%; height: auto; }${recolour}${font}`
 }
 
-// A reflowing book has no fixed pages: print page numbers when it carries them, else what is left.
+// A reflowing book has no fixed pages: print page numbers when it carries them, else count
+// within the chapter, either what is left or where you are.
 export function pageLabel(
   printed: string | null,
   screen: number,
   screens: number,
   columns: number,
-  scrolled: boolean
+  scrolled: boolean,
+  count: PageCount = 'left'
 ): string {
   if (printed?.trim()) return `Page ${printed.trim()}`
   // The paginator pads each chapter with a blank screen at both ends.
   const content = screens - 2
   if (scrolled || content <= 0) return ''
-  const left = Math.max(0, content - screen) * Math.max(1, columns)
+  const perScreen = Math.max(1, columns)
+  if (count === 'position') {
+    const current = Math.min(content, Math.max(1, screen))
+    return `${(current - 1) * perScreen + 1} / ${content * perScreen} in chapter`
+  }
+  const left = Math.max(0, content - screen) * perScreen
   if (left === 0) return 'Last page in chapter'
   return `${left} ${left === 1 ? 'page' : 'pages'} left in chapter`
 }

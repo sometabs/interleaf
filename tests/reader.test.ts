@@ -12,6 +12,7 @@ import {
   LIMITS,
   pageLabel,
   parseLook,
+  shownTheme,
   step,
   withLayout
 } from '../src/renderer/src/lib/readerLook'
@@ -131,14 +132,14 @@ describe('reader look', () => {
   })
 
   it('keeps the book’s own colours and fonts in the light theme', () => {
-    const css = bookCss(DEFAULT_LOOK)
+    const css = bookCss(DEFAULT_LOOK, 'light')
 
     expect(css).not.toContain('font-family')
     expect(css).not.toContain('color: #')
   })
 
   it('recolours text in the dark theme and sets the chosen font', () => {
-    const css = bookCss({ ...DEFAULT_LOOK, theme: 'dark', font: 'serif' })
+    const css = bookCss({ ...DEFAULT_LOOK, theme: 'dark', font: 'serif' }, 'dark')
 
     expect(css).toContain('color-scheme: dark')
     expect(css).toMatch(/font-family: [^;]*serif/)
@@ -156,6 +157,19 @@ describe('reader look', () => {
     expect(parseLook({ flow: 'paginated' })?.pages).toBe(2)
     expect(parseLook({ flow: 'paginated', pages: 1 })?.pages).toBe(1)
   })
+
+  it('keeps a theme chosen before Auto existed', () => {
+    expect(parseLook({ theme: 'sepia' })?.theme).toBe('sepia')
+    expect(parseLook({ theme: 'auto' })?.theme).toBe('auto')
+    expect(parseLook({})?.pageCount).toBe('left')
+  })
+
+  it('follows the app between light and dark on Auto, and never picks sepia', () => {
+    expect(shownTheme('auto', false)).toBe('light')
+    expect(shownTheme('auto', true)).toBe('dark')
+    expect(shownTheme('sepia', true)).toBe('sepia')
+    expect(shownTheme('light', true)).toBe('light')
+  })
 })
 
 describe('page label', () => {
@@ -169,6 +183,13 @@ describe('page label', () => {
     expect(pageLabel(null, 5, 10, 2, false)).toBe('6 pages left in chapter')
     expect(pageLabel(null, 7, 10, 1, false)).toBe('1 page left in chapter')
     expect(pageLabel(null, 8, 10, 2, false)).toBe('Last page in chapter')
+  })
+
+  it('can show where you are in the chapter instead', () => {
+    expect(pageLabel(null, 5, 10, 1, false, 'position')).toBe('5 / 8 in chapter')
+    expect(pageLabel(null, 1, 10, 2, false, 'position')).toBe('1 / 16 in chapter')
+    expect(pageLabel(null, 8, 10, 2, false, 'position')).toBe('15 / 16 in chapter')
+    expect(pageLabel(' 42 ', 5, 10, 1, false, 'position')).toBe('Page 42')
   })
 
   it('shows nothing while scrolling or before the chapter is laid out', () => {
