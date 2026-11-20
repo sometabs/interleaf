@@ -24,15 +24,15 @@
   --color-action: light-dark(var(--color-action-light), #4a6a98);
   --color-action-hover: light-dark(#3b5679, #5677a6);
 
-  --color-danger: light-dark(#bf3a30, #f09a90);
-  --color-danger-soft: light-dark(#f7e6e1, #422b28);
-  --color-danger-action: light-dark(#b64f59, #b64239);
-  --color-danger-action-hover: light-dark(#9b414b, #c4483f);
+  --color-danger: light-dark(#bf3a30, #dc9488);
+  --color-danger-soft: light-dark(#f7e6e1, #3d2a26);
+  --color-danger-action: light-dark(#b64f59, #a3473e);
+  --color-danger-action-hover: light-dark(#9b414b, #b3524a);
   --color-star: light-dark(#d49a3a, #dfb66d);
   --color-overlay: light-dark(rgb(45 41 38 / 0.25), rgb(0 0 0 / 0.65));
 
-  --radius-card: 3px;
-  --radius-control: 3px;
+  --radius-card: 6px;
+  --radius-control: 4px;
 
   --shadow-card:
     0 1px 2px light-dark(rgb(48 36 24 / 0.04), rgb(0 0 0 / 0.18)),
@@ -345,7 +345,7 @@
     --shelf-back-edge: light-dark(#e4d7c4, #29221d);
     --shelf-recess: light-dark(rgb(92 62 32 / 0.25), rgb(0 0 0 / 0.42));
     border: var(--shelf-frame) solid var(--shelf-wood);
-    border-radius: var(--radius-card);
+    border-radius: 3px;
     box-shadow: var(--shadow-card);
   }
 

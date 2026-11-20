@@ -47,7 +47,7 @@ export default function Cover({
   return (
     <div
       data-testid="cover"
-      className={`relative aspect-[2/3] w-full overflow-hidden rounded-control bg-sunken ${shadow}`}
+      className={`relative aspect-[2/3] w-full overflow-hidden rounded-[3px] bg-sunken ${shadow}`}
       style={{ containerType: 'inline-size' }}
     >
       {src && !failed ? (
