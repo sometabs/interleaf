@@ -12,19 +12,44 @@ import {
   setAsideDatabase,
   type RestoreResult
 } from './backup'
+import type { BackupStatus } from '../../shared/api'
 import { epubDir } from './bookFiles'
+import { readMainSettings, writeMainSettings } from './mainSettings'
 import { coversDir } from './covers'
 
-function backupDirectory(): string {
+function defaultBackupDirectory(): string {
   return join(app.getPath('userData'), 'backups')
+}
+
+// A chosen folder, such as one a sync service mirrors off this computer.
+function backupDirectory(): string {
+  return readMainSettings(app.getPath('userData')).backupFolder ?? defaultBackupDirectory()
 }
 
 let automatic: AutomaticBackups | undefined
 
 export function startAutomaticBackups(refresh = false): void {
   automatic?.stop()
-  automatic = new AutomaticBackups(backupDirectory(), coversDir())
+  automatic = new AutomaticBackups(backupDirectory(), coversDir(), epubDir())
   automatic.start(getDb(), refresh)
+}
+
+export function backupStatus(): BackupStatus {
+  const folder = backupDirectory()
+  return {
+    folder,
+    isDefault: folder === defaultBackupDirectory(),
+    latestAt: automatic?.latestAt() ?? null
+  }
+}
+
+// Null returns to the default folder. The next backup is written right away, so the new
+// folder is never empty.
+export function setBackupFolder(folder: string | null): BackupStatus {
+  const userData = app.getPath('userData')
+  writeMainSettings(userData, folder === null ? {} : { backupFolder: folder })
+  startAutomaticBackups(true)
+  return backupStatus()
 }
 
 export function stopAutomaticBackups(): void {
@@ -50,7 +75,9 @@ const START_EMPTY = 1
 const QUIT = 2
 
 function recoverAtStartup(dbPath: string, damaged: boolean): boolean | null {
-  const snapshot = latestRecoverySnapshot(backupDirectory())
+  // A chosen folder can be offline, such as an unplugged drive.
+  const snapshot =
+    latestRecoverySnapshot(backupDirectory()) ?? latestRecoverySnapshot(defaultBackupDirectory())
   if (!snapshot) return null
   const selected = dialog.showMessageBoxSync({
     type: 'warning',
@@ -71,7 +98,10 @@ function recoverAtStartup(dbPath: string, damaged: boolean): boolean | null {
   if (selected === START_EMPTY) {
     if (damaged) setAsideDatabase(dbPath)
   } else {
-    restoreBackup(snapshot.dir, dbPath, coversDir(), { preserveDamaged: damaged })
+    restoreBackup(snapshot.dir, dbPath, coversDir(), {
+      preserveDamaged: damaged,
+      epubDir: epubDir()
+    })
   }
   checkDatabaseIntegrity(initDb())
   return true
@@ -112,7 +142,18 @@ export function restoreLibrary(source: string): RestoreResult {
     result = restoreBackup(source, dbPath, covers, {
       preservePrevious: false,
       epubDir: epubDir(),
+      // Runs once the chosen backup has checked out: the library about to be replaced
+      // becomes an automatic backup, so a wrong restore can be undone.
       beforeReplace: () => {
+        try {
+          if (!automatic) throw new BackupError('Automatic backups are not running.')
+          automatic.backupNow()
+        } catch (err) {
+          throw new BackupError(
+            `Nothing was restored: your current library could not be saved first. ${(err as Error).message}`,
+            { cause: err }
+          )
+        }
         stopAutomaticBackups()
         closeDb()
         closed = true

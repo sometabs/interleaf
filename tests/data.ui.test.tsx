@@ -31,13 +31,32 @@ function setup(
     deleteEverything: vi.fn(async () => undefined),
     restoreDismissed: vi.fn(async () => undefined),
     exportBackup: vi.fn(async () => ({
-      dir: 'C:/backup',
+      dir: 'C:/backup/interleaf-backup-2026-11-20-1430',
       books: 2,
       notes: 5,
       covers: 4,
+      epubs: 1
+    })),
+    restoreBackup: vi.fn(async () => ({ books: 2, notes: 5, covers: 4, replaced: null })),
+    exportMarkdown: vi.fn(async () => ({
+      dir: 'C:/notes/interleaf-markdown-2026-11-20-1430',
       files: 3
     })),
-    restoreBackup: vi.fn(async () => ({ books: 2, notes: 5, covers: 4, replaced: 'C:/old.bak' }))
+    getBackupStatus: vi.fn(async () => ({
+      folder: 'C:/Users/reader/AppData/Roaming/Interleaf/backups',
+      isDefault: true,
+      latestAt: null
+    })),
+    chooseBackupFolder: vi.fn(async () => ({
+      folder: 'D:/Sync/Interleaf backups',
+      isDefault: false,
+      latestAt: Date.UTC(2026, 10, 20, 9, 12)
+    })),
+    useDefaultBackupFolder: vi.fn(async () => ({
+      folder: 'C:/Users/reader/AppData/Roaming/Interleaf/backups',
+      isDefault: true,
+      latestAt: null
+    }))
   }
 
   installBridge(
@@ -164,11 +183,48 @@ describe('the Data screen', () => {
   it('backs up, naming where it went and what went with it', async () => {
     const spies = setup()
 
-    await press('Export library')
+    await press('Back up…')
 
     await waitFor(() => expect(spies.exportBackup).toHaveBeenCalled())
-    expect(await screen.findByText(/2 books and 5 notes/)).toBeDefined()
-    expect(await screen.findByText(/3 Markdown files, to C:\/backup/)).toBeDefined()
+    expect(
+      await screen.findByText(
+        'Backed up 2 books, 5 notes and 1 EPUBs to C:/backup/interleaf-backup-2026-11-20-1430'
+      )
+    ).toBeDefined()
+  })
+
+  it('exports Markdown separately from backups', async () => {
+    const spies = setup()
+
+    await press('Export…')
+
+    await waitFor(() => expect(spies.exportMarkdown).toHaveBeenCalled())
+    expect(spies.exportBackup).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(
+        'Exported 3 Markdown files to C:/notes/interleaf-markdown-2026-11-20-1430'
+      )
+    ).toBeDefined()
+  })
+
+  it('shows where automatic backups go, and lets that folder change and change back', async () => {
+    const spies = setup()
+
+    expect(
+      await screen.findByText('C:/Users/reader/AppData/Roaming/Interleaf/backups')
+    ).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Use default folder' })).toBeNull()
+
+    await press('Change folder…')
+
+    expect(await screen.findByText('D:/Sync/Interleaf backups')).toBeDefined()
+    expect(spies.chooseBackupFolder).toHaveBeenCalled()
+
+    await press('Use default folder')
+
+    expect(
+      await screen.findByText('C:/Users/reader/AppData/Roaming/Interleaf/backups')
+    ).toBeDefined()
   })
 
   // A cancelled picker returns null, which is not a failure.
@@ -176,25 +232,25 @@ describe('the Data screen', () => {
     const cancelled = vi.fn(async () => null)
     setup({}, [], { exportBackup: cancelled })
 
-    await press('Export library')
+    await press('Back up…')
 
     await waitFor(() => expect(cancelled).toHaveBeenCalled())
-    expect(screen.queryByText(/Exported/)).toBeNull()
+    expect(screen.queryByText(/Backed up/)).toBeNull()
   })
 
   it('asks before restoring, since it replaces the whole library', async () => {
     const spies = setup()
 
-    await press('Import')
+    await press('Restore…')
 
-    expect(await screen.findByText('Import a library?')).toBeDefined()
+    expect(await screen.findByText('Restore a backup?')).toBeDefined()
     expect(spies.restoreBackup).not.toHaveBeenCalled()
   })
 
   it('restores nothing when the confirmation is refused', async () => {
     const spies = setup()
 
-    await press('Import')
+    await press('Restore…')
     await press('Cancel')
 
     expect(spies.restoreBackup).not.toHaveBeenCalled()
@@ -203,8 +259,8 @@ describe('the Data screen', () => {
   it('restores once the confirmation is accepted', async () => {
     const spies = setup()
 
-    await press('Import')
-    await press('Choose an export')
+    await press('Restore…')
+    await press('Choose a backup')
 
     await waitFor(() => expect(spies.restoreBackup).toHaveBeenCalled())
   })

@@ -131,6 +131,7 @@ export function installBridge(
     getBookshelfLayout: async () => state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT,
     listReadingGoals: async () => state.goals.map((goal) => ({ ...goal })),
     listBookFiles: async () => [],
+    getBackupStatus: async () => ({ folder: 'C:/backups', isDefault: true, latestAt: null }),
     getReadingPosition: async () => null,
     setReadingGoal: async (year, books) => {
       state.goals = state.goals.filter((goal) => goal.year !== year)

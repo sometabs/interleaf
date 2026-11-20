@@ -56,17 +56,18 @@ describe('what a vault holds', () => {
     notes.createNote(db, { title: 'On Reading', bodyMd: 'Some thought' })
 
     expect(writeVault(db, dir)).toBe(2)
-    expect(readdirSync(join(dir, 'markdown', 'books'))).toEqual(['dune.md'])
-    expect(readdirSync(join(dir, 'markdown', 'unlinked-notes'))).toEqual(['on-reading.md'])
+    expect(readdirSync(join(dir, 'books'))).toEqual(['dune.md'])
+    expect(readdirSync(join(dir, 'unlinked-notes'))).toEqual(['on-reading.md'])
   })
 
-  it('keeps the prose in its own folder, apart from the database', () => {
+  // Only backups restore; a Markdown export must never look like one.
+  it('writes readable files and never a database', () => {
     books.createBook(db, { title: 'Dune' })
 
     writeVault(db, dir)
 
-    expect(existsSync(join(dir, 'markdown', 'books', 'dune.md'))).toBe(true)
-    expect(existsSync(join(dir, 'books'))).toBe(false)
+    expect(existsSync(join(dir, 'books', 'dune.md'))).toBe(true)
+    expect(existsSync(join(dir, 'interleaf.db'))).toBe(false)
   })
 
   it('keeps the shelf state a reader would want, and none of the plumbing', () => {
@@ -75,7 +76,7 @@ describe('what a vault holds', () => {
     notes.createNote(db, { bookId: book.id, kind: 'review', bodyMd: 'Sprawling. #scifi' })
 
     writeVault(db, dir)
-    const text = readFileSync(join(dir, 'markdown', 'books', 'dune.md'), 'utf8')
+    const text = readFileSync(join(dir, 'books', 'dune.md'), 'utf8')
 
     expect(text).toContain('title: Dune')
     expect(text).toContain('author: Herbert')
@@ -100,9 +101,7 @@ describe('what a vault holds', () => {
 
     writeVault(db, dir)
 
-    expect(readFileSync(join(dir, 'markdown', 'books', 'dune.md'), 'utf8')).toContain(
-      '*2026-03-01*'
-    )
+    expect(readFileSync(join(dir, 'books', 'dune.md'), 'utf8')).toContain('*2026-03-01*')
   })
 
   it('dates a note that belongs to no book', () => {
@@ -114,9 +113,9 @@ describe('what a vault holds', () => {
 
     writeVault(db, dir)
 
-    expect(
-      readFileSync(join(dir, 'markdown', 'unlinked-notes', 'on-reading.md'), 'utf8')
-    ).toContain('created: 2025-11-20')
+    expect(readFileSync(join(dir, 'unlinked-notes', 'on-reading.md'), 'utf8')).toContain(
+      'created: 2025-11-20'
+    )
   })
 
   it('embeds the cover, so a Markdown reader shows the jacket', () => {
@@ -128,8 +127,8 @@ describe('what a vault holds', () => {
 
     writeVault(db, dir, cache)
 
-    expect(readFileSync(join(dir, 'markdown', 'books', 'dark-matter.md'), 'utf8')).toContain(
-      '![](../../covers/book-1-99.jpg)'
+    expect(readFileSync(join(dir, 'books', 'dark-matter.md'), 'utf8')).toContain(
+      '![](../covers/book-1-99.jpg)'
     )
     expect(existsSync(join(dir, 'covers', 'book-1-99.jpg'))).toBe(true)
   })
@@ -140,7 +139,7 @@ describe('what a vault holds', () => {
 
     writeVault(db, dir)
 
-    expect(readdirSync(join(dir, 'markdown', 'books')).sort()).toEqual([
+    expect(readdirSync(join(dir, 'books')).sort()).toEqual([
       'selected-poems-2.md',
       'selected-poems.md'
     ])

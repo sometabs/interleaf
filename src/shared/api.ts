@@ -264,7 +264,18 @@ export interface BackupResult {
   books: number
   notes: number
   covers: number
+  epubs: number
+}
+
+export interface MarkdownExportResult {
+  dir: string
   files: number
+}
+
+export interface BackupStatus {
+  folder: string
+  isDefault: boolean
+  latestAt: number | null
 }
 
 export interface RestoreResult {
@@ -389,9 +400,16 @@ export interface InterleafApi {
   dismissRecommendation(olid: string): Promise<void>
   saveRecommendation(book: OlBookDto): Promise<Book>
 
+  // A restorable copy: database, covers and EPUBs, in a new dated folder each time.
   exportBackup(): Promise<BackupResult | null>
   // Replaces the whole library, so the app relaunches onto the restored file.
   restoreBackup(): Promise<RestoreResult | null>
+  // Readable files for other apps; nothing restores from them.
+  exportMarkdown(): Promise<MarkdownExportResult | null>
+  getBackupStatus(): Promise<BackupStatus>
+  // Null when the folder picker was cancelled.
+  chooseBackupFolder(): Promise<BackupStatus | null>
+  useDefaultBackupFolder(): Promise<BackupStatus>
 
   listDismissed(): Promise<DismissedBook[]>
   restoreDismissed(olid: string): Promise<void>
@@ -474,6 +492,10 @@ export const IPC_CHANNELS = [
   'saveRecommendation',
   'exportBackup',
   'restoreBackup',
+  'exportMarkdown',
+  'getBackupStatus',
+  'chooseBackupFolder',
+  'useDefaultBackupFolder',
   'listDismissed',
   'restoreDismissed',
   'readHighlightExport',

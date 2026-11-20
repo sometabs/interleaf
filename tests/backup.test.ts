@@ -20,6 +20,7 @@ import * as notes from '../src/main/repos/notes'
 import {
   BackupError,
   exportBackup,
+  exportMarkdown,
   resolveBackupRoot,
   restoreBackup
 } from '../src/main/services/backup'
@@ -111,16 +112,26 @@ describe('writing a backup', () => {
     expect(readFileSync(join(result.dir, 'covers', 'book-1-99.jpg'), 'utf8')).toBe('JPEGBYTES')
   })
 
-  it('writes the readable copy alongside the database', () => {
+  // Markdown is its own export; a backup holds only what a restore reads.
+  it('leaves the readable Markdown out of a backup', () => {
     const db = seed()
-    const { dir, files } = exportBackup(db, parent)
+    const { dir } = exportBackup(db, parent)
     db.close()
 
+    expect(existsSync(join(dir, 'interleaf.db'))).toBe(true)
+    expect(existsSync(join(dir, 'markdown'))).toBe(false)
+    expect(existsSync(join(dir, 'books'))).toBe(false)
+  })
+
+  it('exports Markdown into its own dated folder, with no database', () => {
+    const db = seed()
+    const { dir, files } = exportMarkdown(db, parent, undefined, new Date(2026, 10, 20, 14, 30))
+    db.close()
+
+    expect(dir).toBe(join(parent, 'interleaf-markdown-2026-11-20-1430'))
     expect(files).toBe(1)
-    expect(existsSync(join(dir, 'markdown', 'books', 'dark-matter.md'))).toBe(true)
-    expect(readFileSync(join(dir, 'markdown', 'books', 'dark-matter.md'), 'utf8')).toContain(
-      'rating: 5'
-    )
+    expect(readFileSync(join(dir, 'books', 'dark-matter.md'), 'utf8')).toContain('rating: 5')
+    expect(existsSync(join(dir, 'interleaf.db'))).toBe(false)
   })
 
   it('leaves the Discover thumbnail cache behind', () => {
@@ -141,17 +152,21 @@ describe('writing a backup', () => {
     expect(existsSync(join(result.dir, 'covers', 'cover-12345.jpg'))).toBe(false)
   })
 
-  it('replaces the previous backup rather than refusing to overwrite it', () => {
+  it('writes each backup into a new dated folder, keeping the earlier ones', () => {
     const db = seed()
-    exportBackup(db, parent)
+    const at = new Date(2026, 10, 20, 14, 30)
+    const first = exportBackup(db, parent, undefined, undefined, at)
     books.createBook(db, { title: 'Upgrade' })
-    const { books: counted } = exportBackup(db, parent)
+    const second = exportBackup(db, parent, undefined, undefined, at)
     db.close()
 
-    expect(counted).toBe(2)
+    expect(first.dir).toBe(join(parent, 'interleaf-backup-2026-11-20-1430'))
+    expect(second.dir).toBe(join(parent, 'interleaf-backup-2026-11-20-1430-2'))
+    expect(second.books).toBe(2)
+    expect(existsSync(join(first.dir, 'interleaf.db'))).toBe(true)
   })
 
-  it('keeps the previous backup when writing its replacement fails', () => {
+  it('leaves no half-written folder when a backup fails', () => {
     const db = seed()
     const { dir } = exportBackup(db, parent)
     const before = readFileSync(join(dir, 'interleaf.db'))
@@ -159,6 +174,9 @@ describe('writing a backup', () => {
     try {
       expect(() => exportBackup(db, parent)).toThrow(BackupError)
       expect(readFileSync(join(dir, 'interleaf.db'))).toEqual(before)
+      expect(readdirSync(parent).filter((name) => name.startsWith('interleaf-backup'))).toEqual([
+        dir.split(/[\\/]/).pop()
+      ])
     } finally {
       db.exec('ROLLBACK')
       db.close()
@@ -184,13 +202,23 @@ describe('writing a backup', () => {
 })
 
 describe('finding a backup', () => {
-  it('accepts the backup folder, or the folder it was written into', () => {
+  it('accepts a dated backup folder', () => {
     const db = seed()
     const { dir } = exportBackup(db, parent)
     db.close()
 
     expect(resolveBackupRoot(dir)).toBe(dir)
-    expect(resolveBackupRoot(parent)).toBe(dir)
+  })
+
+  // Exports made before backups were dated all sat in one fixed folder.
+  it('still finds a backup written before they were dated', () => {
+    const legacy = join(parent, 'interleaf-backup')
+    mkdirSync(legacy)
+    const db = seed()
+    db.prepare('VACUUM INTO ?').run(join(legacy, 'interleaf.db'))
+    db.close()
+
+    expect(resolveBackupRoot(parent)).toBe(legacy)
   })
 
   it('is null for a folder holding no library', () => {

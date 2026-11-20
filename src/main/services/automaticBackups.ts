@@ -3,7 +3,14 @@ import { randomUUID } from 'crypto'
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
-import { BackupError, DB_NAME, verifySnapshot, writeRecoverySnapshot } from './backup'
+import {
+  BackupError,
+  DB_NAME,
+  epubNamesIn,
+  sharedEpubDir,
+  verifySnapshot,
+  writeRecoverySnapshot
+} from './backup'
 
 export const BACKUP_INTERVAL = 24 * 60 * 60 * 1000
 const RETRY_INTERVAL = 5 * 60 * 1000
@@ -65,8 +72,13 @@ export class AutomaticBackups {
 
   constructor(
     private readonly root: string,
-    private readonly covers: string
+    private readonly covers: string,
+    private readonly epubs?: string
   ) {}
+
+  latestAt(): number | null {
+    return this.latest?.createdAt ?? null
+  }
 
   start(db: Database, refresh = false): void {
     this.stop()
@@ -129,7 +141,7 @@ export class AutomaticBackups {
       )
       mkdirSync(dir)
       try {
-        writeRecoverySnapshot(this.db, dir, this.covers)
+        writeRecoverySnapshot(this.db, dir, this.covers, this.epubs)
         // Publish a file within the folder. Windows can refuse to rename the
         // folder itself while its freshly written contents are being scanned.
         const marker = join(dir, '.pending')
@@ -164,8 +176,22 @@ export class AutomaticBackups {
         }
         rmSync(snapshot.dir, { recursive: true, force: true })
       }
+      this.pruneEpubs()
     } catch (err) {
       console.warn('Could not remove old automatic backups.', err)
+    }
+  }
+
+  // An EPUB stays while any kept snapshot still lists it.
+  private pruneEpubs(): void {
+    const store = sharedEpubDir(this.root)
+    if (!existsSync(store)) return
+    const keep = new Set<string>()
+    for (const snapshot of listSnapshots(this.root)) {
+      for (const name of epubNamesIn(join(snapshot.dir, DB_NAME))) keep.add(name)
+    }
+    for (const name of readdirSync(store)) {
+      if (name.endsWith('.epub') && !keep.has(name)) rmSync(join(store, name), { force: true })
     }
   }
 

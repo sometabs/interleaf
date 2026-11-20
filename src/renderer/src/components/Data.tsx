@@ -16,7 +16,10 @@ import {
   useDeleteAllThoughts,
   useDeleteEverything,
   useDismissed,
+  useBackupStatus,
   useExportBackup,
+  useExportMarkdown,
+  useSetBackupFolder,
   useImportHighlights,
   useMetadataRefreshProgress,
   useReadHighlightExport,
@@ -35,6 +38,9 @@ export default function Data(): ReactNode {
   const { data: counts } = useDataCounts()
   const exportBackup = useExportBackup()
   const restoreBackup = useRestoreBackup()
+  const exportMarkdown = useExportMarkdown()
+  const { data: backupStatus } = useBackupStatus()
+  const setBackupFolder = useSetBackupFolder()
   const readExport = useReadHighlightExport()
   const runImport = useImportHighlights()
 
@@ -57,22 +63,25 @@ export default function Data(): ReactNode {
     // A null result is the folder picker being cancelled, not a failure.
     const result = await exportBackup.mutateAsync()
     if (!result) return
-    notify(
-      `Exported ${result.books} books and ${result.notes} notes, ` +
-        `with ${result.files} Markdown files, to ${result.dir}`
-    )
+    const epubs = result.epubs > 0 ? ` and ${result.epubs} EPUBs` : ''
+    notify(`Backed up ${result.books} books, ${result.notes} notes${epubs} to ${result.dir}`)
   }
 
   async function onRestore(): Promise<void> {
     const ok = await confirm({
-      title: 'Import a library?',
-      body: 'This replaces your current library with the export you choose, then restarts Interleaf. Export your current library first if you want to keep a copy.',
-      confirmLabel: 'Choose an export',
+      title: 'Restore a backup?',
+      body: 'This replaces your current library with the backup you choose, then restarts Interleaf. Your current library is saved as an automatic backup first.',
+      confirmLabel: 'Choose a backup',
       destructive: true
     })
     if (!ok) return
     // Success never returns here: the app relaunches onto the restored file.
     restoreBackup.mutate()
+  }
+
+  async function onExportMarkdown(): Promise<void> {
+    const result = await exportMarkdown.mutateAsync()
+    if (result) notify(`Exported ${result.files} Markdown files to ${result.dir}`)
   }
 
   // The matching screen is only worth showing when there is something to
@@ -183,39 +192,104 @@ export default function Data(): ReactNode {
         </header>
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-[14px] font-medium">Library import and export</h2>
+          <h2 className="text-[14px] font-medium">Backups</h2>
 
-          <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-[14px]">Library export</p>
-              <p className="mt-0.5 text-[13px] text-ink-muted">
-                Database, book covers, and a readable Markdown copy
-              </p>
+          <div className="divide-y divide-hairline rounded-card border border-hairline bg-surface">
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[14px]">Back up library</p>
+                <p className="mt-0.5 text-[13px] text-ink-muted">
+                  A complete copy you can restore from, on this computer or a new one. Includes your
+                  EPUBs.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary shrink-0"
+                onClick={() => void onBackup()}
+                disabled={exportBackup.isPending || restoreBackup.isPending}
+              >
+                {exportBackup.isPending ? 'Backing up…' : 'Back up…'}
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary shrink-0"
-              onClick={onBackup}
-              disabled={exportBackup.isPending || restoreBackup.isPending}
-            >
-              {exportBackup.isPending ? 'Exporting…' : 'Export library'}
-            </button>
+
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[14px]">Restore from backup</p>
+                <p className="mt-0.5 text-[13px] text-ink-muted">
+                  Replaces this library with a backup. Your current library is saved first.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline shrink-0"
+                onClick={() => void onRestore()}
+                disabled={restoreBackup.isPending || exportBackup.isPending}
+              >
+                {restoreBackup.isPending ? 'Restoring…' : 'Restore…'}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[14px]">Automatic backups</p>
+                <p className="mt-0.5 text-[13px] text-ink-muted">
+                  Daily, last 3 kept.
+                  {backupStatus?.latestAt
+                    ? ` Last one ${formatDateTime(backupStatus.latestAt)}.`
+                    : ' None yet.'}
+                </p>
+                {backupStatus && (
+                  <p
+                    className="mt-0.5 truncate text-[12px] text-ink-faint"
+                    title={backupStatus.folder}
+                  >
+                    {backupStatus.folder}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={setBackupFolder.isPending}
+                  onClick={() => setBackupFolder.mutate('choose')}
+                >
+                  Change folder…
+                </button>
+                {backupStatus && !backupStatus.isDefault && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost -mr-2 text-[12px]"
+                    disabled={setBackupFolder.isPending}
+                    onClick={() => setBackupFolder.mutate('default')}
+                  >
+                    Use default folder
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h2 className="text-[14px] font-medium">Export</h2>
 
           <div className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px]">Library import</p>
+              <p className="text-[14px]">Export as Markdown</p>
               <p className="mt-0.5 text-[13px] text-ink-muted">
-                Replaces your library, then restarts
+                Readable copies of your reviews, quotes and notes for other apps, like Obsidian.
+                Interleaf can&apos;t restore from these.
               </p>
             </div>
             <button
               type="button"
               className="btn btn-outline shrink-0"
-              onClick={onRestore}
-              disabled={restoreBackup.isPending || exportBackup.isPending}
+              onClick={() => void onExportMarkdown()}
+              disabled={exportMarkdown.isPending}
             >
-              {restoreBackup.isPending ? 'Importing…' : 'Import'}
+              {exportMarkdown.isPending ? 'Exporting…' : 'Export…'}
             </button>
           </div>
         </section>
@@ -570,4 +644,13 @@ function NotForMe(): ReactNode {
       )}
     </section>
   )
+}
+
+function formatDateTime(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }

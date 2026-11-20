@@ -17,6 +17,7 @@ import { createDatabase } from '../src/main/db/database'
 import { createBook, listBooks, updateBook } from '../src/main/repos/books'
 import { getBookshelfLayout, saveBookshelfLayout } from '../src/main/repos/bookshelf'
 import { createNote, listNotes } from '../src/main/repos/notes'
+import { setBookFile } from '../src/main/repos/bookFiles'
 import {
   AutomaticBackups,
   BACKUP_INTERVAL,
@@ -209,5 +210,74 @@ describe('automatic backups', () => {
     )
     mkdirSync(unpublished)
     expect(bookCount()).toBe(1)
+  })
+})
+
+describe('EPUBs in automatic backups', () => {
+  function attachFile(title: string, sha: string, epubs: string): void {
+    const book = createBook(db, { title })
+    writeFileSync(join(epubs, `${sha}.epub`), `epub ${title}`)
+    setBookFile(db, book.id, { sha256: sha, fileName: `${title}.epub`, size: 10 })
+  }
+
+  it('keeps one shared copy of each EPUB, however many snapshots list it', () => {
+    const epubs = join(directory, 'books')
+    mkdirSync(epubs)
+    backups.stop()
+    backups = new AutomaticBackups(root, covers, epubs)
+    backups.start(db)
+    const sha = 'a'.repeat(64)
+    attachFile('The Glass Orchard', sha, epubs)
+
+    backups.backupNow()
+    createBook(db, { title: 'Another' })
+    vi.advanceTimersByTime(1)
+    backups.backupNow()
+
+    expect(readdirSync(join(root, 'books'))).toEqual([`${sha}.epub`])
+    const snapshots = readdirSync(root).filter((name) => name.startsWith('snapshot-'))
+    expect(snapshots).toHaveLength(2)
+    for (const name of snapshots) expect(existsSync(join(root, name, 'books'))).toBe(false)
+  })
+
+  it('drops an EPUB once no kept snapshot lists it', () => {
+    const epubs = join(directory, 'books')
+    mkdirSync(epubs)
+    backups.stop()
+    backups = new AutomaticBackups(root, covers, epubs)
+    backups.start(db)
+    const sha = 'b'.repeat(64)
+    attachFile('Salt and Cinder', sha, epubs)
+    backups.backupNow()
+
+    db.prepare('DELETE FROM book_file').run()
+    for (let i = 0; i < 3; i++) {
+      createBook(db, { title: `Later ${i}` })
+      vi.advanceTimersByTime(1)
+      backups.backupNow()
+    }
+
+    expect(readdirSync(join(root, 'books'))).toEqual([])
+  })
+
+  it('brings the EPUBs back when a snapshot is restored', () => {
+    const epubs = join(directory, 'books')
+    mkdirSync(epubs)
+    backups.stop()
+    backups = new AutomaticBackups(root, covers, epubs)
+    backups.start(db)
+    const sha = 'c'.repeat(64)
+    attachFile('Grey Channel', sha, epubs)
+    backups.backupNow()
+    const snapshot = latestRecoverySnapshot(root)!
+    db.close()
+
+    const fresh = join(directory, 'fresh')
+    mkdirSync(fresh)
+    restoreBackup(snapshot.dir, join(fresh, DB_NAME), join(fresh, 'covers'), {
+      epubDir: join(fresh, 'books')
+    })
+
+    expect(readFileSync(join(fresh, 'books', `${sha}.epub`), 'utf8')).toBe('epub Grey Channel')
   })
 })

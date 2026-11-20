@@ -33,8 +33,10 @@ import * as searchRepo from '../repos/search'
 import * as backup from '../services/backup'
 import {
   backupBeforeBulkDelete,
+  backupStatus,
   restoreLibrary,
   scheduleAutomaticBackup,
+  setBackupFolder,
   stopAutomaticBackups
 } from '../services/libraryRecovery'
 import * as highlights from '../services/highlights'
@@ -350,13 +352,28 @@ const api: InterleafApi = {
   },
 
   async exportBackup() {
-    const dir = await pickDirectory('Choose where to export your library', 'Export here')
+    const dir = await pickDirectory('Choose where to save the backup', 'Back up here')
     if (!dir) return null
     return backup.exportBackup(getDb(), dir, coversDir(), epubDir())
   },
   async restoreBackup() {
-    const dir = await pickDirectory('Choose a library export folder', 'Import from here')
+    const dir = await pickDirectory('Choose a backup folder', 'Restore from here')
     return dir ? restoreAndRestart(dir) : null
+  },
+  async exportMarkdown() {
+    const dir = await pickDirectory('Choose where to export your journal', 'Export here')
+    if (!dir) return null
+    return backup.exportMarkdown(getDb(), dir, coversDir())
+  },
+  async getBackupStatus() {
+    return backupStatus()
+  },
+  async chooseBackupFolder() {
+    const dir = await pickDirectory('Choose a folder for automatic backups', 'Use this folder')
+    return dir ? setBackupFolder(dir) : null
+  },
+  async useDefaultBackupFolder() {
+    return setBackupFolder(null)
   },
 
   async listDismissed() {

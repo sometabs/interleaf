@@ -294,3 +294,78 @@ describe('library backup integration', () => {
     expect(showError).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('newer'))
   })
 })
+
+describe('restoring keeps the library it replaces', () => {
+  function titlesInEverySnapshot(folder: string): string[] {
+    return readdirSync(folder)
+      .filter((name) => name.startsWith('snapshot-'))
+      .flatMap((name) => {
+        const copy = createDatabase(join(folder, name, DB_NAME))
+        try {
+          return listBooks(copy).map(({ title }) => title)
+        } finally {
+          copy.close()
+        }
+      })
+  }
+
+  it('saves the current library as an automatic backup before replacing it', async () => {
+    await saveCurrent()
+    const source = makeExport()
+
+    restoreLibrary(source)
+
+    expect(listBooks(getDb())[0].title).toBe('From export')
+    expect(titlesInEverySnapshot(root)).toContain('Current library')
+  })
+
+  it('restores nothing when the current library cannot be saved first', async () => {
+    await saveCurrent()
+    // Not yet in any automatic backup, so the restore has to save it first.
+    await invoke('createBook', { title: 'Unsaved change' })
+    const source = makeExport()
+    const rename = vi.mocked(renameSync).getMockImplementation()!
+    vi.mocked(renameSync).mockImplementation((from, to) => {
+      if (String(to).endsWith('.verified')) throw new Error('Disk full')
+      rename(from, to)
+    })
+    try {
+      expect(() => restoreLibrary(source)).toThrow(/Nothing was restored/)
+      expect(listBooks(getDb()).map(({ title }) => title)).toContain('Unsaved change')
+    } finally {
+      vi.mocked(renameSync).mockImplementation(rename)
+    }
+  })
+})
+
+describe('choosing where automatic backups go', () => {
+  it('starts in the default folder', async () => {
+    await expect(invoke('getBackupStatus')).resolves.toMatchObject({
+      folder: root,
+      isDefault: true
+    })
+  })
+
+  it('moves to a chosen folder, backing up there at once, and can move back', async () => {
+    await saveCurrent()
+    const synced = join(dir, 'synced')
+    pick.mockResolvedValueOnce({ canceled: false, filePaths: [synced] })
+
+    const moved = (await invoke('chooseBackupFolder')) as { folder: string; latestAt: number }
+
+    expect(moved).toMatchObject({ folder: synced, isDefault: false })
+    expect(moved.latestAt).not.toBeNull()
+    expect(latestRecoverySnapshot(synced)).not.toBeNull()
+    await expect(invoke('useDefaultBackupFolder')).resolves.toMatchObject({
+      folder: root,
+      isDefault: true
+    })
+  })
+
+  it('changes nothing when the folder picker is cancelled', async () => {
+    pick.mockResolvedValueOnce({ canceled: true, filePaths: [] })
+
+    await expect(invoke('chooseBackupFolder')).resolves.toBeNull()
+    await expect(invoke('getBackupStatus')).resolves.toMatchObject({ isDefault: true })
+  })
+})

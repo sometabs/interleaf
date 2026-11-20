@@ -44,7 +44,9 @@ import type {
   ReadingGoal,
   AttachEpubResult,
   BookFile,
-  ReadingPosition
+  ReadingPosition,
+  BackupStatus,
+  MarkdownExportResult
 } from '@shared/api'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
@@ -56,6 +58,7 @@ const keys = {
   bookshelf: ['bookshelf'] as const,
   goals: ['reading-goals'] as const,
   bookFiles: ['book-files'] as const,
+  backupStatus: ['backup-status'] as const,
   position: (bookId: number) => ['reading-position', bookId] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
@@ -686,6 +689,29 @@ export function useDeleteEverything(): UseMutationResult<void, Error, void> {
   return useMutation({
     mutationFn: () => api().deleteEverything(),
     onSuccess: () => invalidateEverything(client)
+  })
+}
+
+export function useExportMarkdown(): UseMutationResult<MarkdownExportResult | null, Error, void> {
+  return useMutation({ mutationFn: () => api().exportMarkdown() })
+}
+
+export function useBackupStatus(): UseQueryResult<BackupStatus> {
+  return useQuery({ queryKey: keys.backupStatus, queryFn: () => api().getBackupStatus() })
+}
+
+export function useSetBackupFolder(): UseMutationResult<
+  BackupStatus | null,
+  Error,
+  'choose' | 'default'
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (which) =>
+      which === 'choose' ? api().chooseBackupFolder() : api().useDefaultBackupFolder(),
+    onSuccess: (status) => {
+      if (status) client.setQueryData(keys.backupStatus, status)
+    }
   })
 }
 

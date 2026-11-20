@@ -6,8 +6,7 @@ import type { Book } from '../../shared/api'
 import * as books from '../repos/books'
 import * as notes from '../repos/notes'
 
-// The readable half of a backup, kept apart from the database a restore reads.
-const MARKDOWN_DIR = 'markdown'
+// A readable copy of the journal for other apps. Nothing reads it back in.
 
 // Named for the reason they sit apart: these belong to no book.
 const LOOSE_DIR = 'unlinked-notes'
@@ -67,8 +66,8 @@ function bookMarkdown(book: Book, bookNotes: ReturnType<typeof notes.listNotes>)
   ]
 
   const cover = safeCoverName(book.coverPath)
-  // Out of `markdown/books/`, then out of `markdown/`, to the shared covers.
-  if (cover) parts.push(`![](../../covers/${cover})`, '')
+  // Out of `books/` to the covers beside it.
+  if (cover) parts.push(`![](../covers/${cover})`, '')
 
   if (review) {
     parts.push('## Review', '', ...dateLine(review.createdAt), review.bodyMd.trim(), '')
@@ -122,8 +121,8 @@ function copyCover(name: string, fromDir: string, toDir: string): void {
 // Writes into an existing directory rather than making its own, so it can sit
 // alongside the database in a backup. Returns the number of files written.
 export function writeVault(db: Database, dir: string, coversDir?: string): number {
-  const booksDir = join(dir, MARKDOWN_DIR, 'books')
-  const notesDir = join(dir, MARKDOWN_DIR, LOOSE_DIR)
+  const booksDir = join(dir, 'books')
+  const notesDir = join(dir, LOOSE_DIR)
   mkdirSync(booksDir, { recursive: true })
   mkdirSync(notesDir, { recursive: true })
 

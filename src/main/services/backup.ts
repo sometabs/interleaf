@@ -16,6 +16,7 @@ import { createDatabase, MIGRATIONS } from '../db/database'
 import { writeVault } from './vault'
 
 const BACKUP_DIR = 'interleaf-backup'
+const MARKDOWN_EXPORT_DIR = 'interleaf-markdown'
 export const DB_NAME = 'interleaf.db'
 const COVERS_DIR = 'covers'
 const EPUB_DIR = 'books'
@@ -32,7 +33,11 @@ export interface BackupResult {
   books: number
   notes: number
   covers: number
-  // Markdown files, written for reading rather than for restoring.
+  epubs: number
+}
+
+export interface MarkdownExportResult {
+  dir: string
   files: number
 }
 
@@ -103,7 +108,8 @@ function copyCovers(
 
 // Named by content hash, so a file already at the destination is the same file.
 function copyEpubs(fromDir: string | undefined, toDir: string, keep: ReadonlySet<string>): number {
-  if (!fromDir || !isDir(fromDir, false) || resolve(fromDir) === resolve(toDir)) return 0
+  if (!fromDir || !isDir(fromDir, false)) return 0
+  if (resolve(fromDir) === resolve(toDir)) return keep.size
   let copied = 0
   for (const name of readdirSync(fromDir)) {
     if (!/^[0-9a-f]{64}\.epub$/.test(name) || !keep.has(name)) continue
@@ -126,11 +132,54 @@ export function writeDatabaseSnapshot(db: Database.Database, target: string): vo
   db.prepare('VACUUM INTO ?').run(target)
 }
 
-export function writeRecoverySnapshot(db: Database.Database, dir: string, coversDir: string): void {
+// EPUBs go into a `books` folder beside the snapshots, shared by all of them: the files
+// never change, so three snapshots need not hold three copies.
+export function writeRecoverySnapshot(
+  db: Database.Database,
+  dir: string,
+  coversDir: string,
+  epubDir?: string
+): void {
   const target = join(dir, DB_NAME)
   writeDatabaseSnapshot(db, target)
   copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db), true)
+  copyEpubs(epubDir, join(dirname(dir), EPUB_DIR), referencedEpubs(db))
   verifySnapshot(target)
+}
+
+export function sharedEpubDir(snapshotsRoot: string): string {
+  return join(snapshotsRoot, EPUB_DIR)
+}
+
+export function epubNamesIn(snapshot: string): Set<string> {
+  let db: Database.Database
+  try {
+    db = new Database(snapshot, { readonly: true, fileMustExist: true })
+  } catch {
+    return new Set()
+  }
+  try {
+    return referencedEpubs(db)
+  } catch {
+    // Written before EPUBs existed.
+    return new Set()
+  } finally {
+    db.close()
+  }
+}
+
+function stamp(now: Date): string {
+  const two = (n: number): string => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`
+}
+
+// A new folder every time, so an older backup is never overwritten.
+function datedFolder(parent: string, prefix: string, now: Date): string {
+  const base = join(parent, `${prefix}-${stamp(now)}`)
+  let dir = base
+  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`
+  mkdirSync(dir, { recursive: true })
+  return dir
 }
 
 export function referencedCovers(db: Database.Database): Set<string> {
@@ -152,26 +201,43 @@ export function exportBackup(
   db: Database.Database,
   parent: string,
   coversDir?: string,
-  epubDir?: string
+  epubDir?: string,
+  now = new Date()
 ): BackupResult {
-  const dir = join(parent, BACKUP_DIR)
-  mkdirSync(dir, { recursive: true })
-
-  const pendingDir = mkdtempSync(join(dir, '.pending-'))
+  let dir: string | null = null
   try {
-    const target = join(pendingDir, DB_NAME)
-    writeDatabaseSnapshot(db, target)
-    const covers = copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db))
-    copyEpubs(epubDir, join(dir, EPUB_DIR), referencedEpubs(db))
-    const files = writeVault(db, dir, coversDir)
-    const result = { dir, ...counts(db), covers, files }
-    // Only replace the restorable database after the new export has finished.
-    renameSync(target, join(dir, DB_NAME))
-    return result
+    dir = datedFolder(parent, BACKUP_DIR, now)
+    const pendingDir = mkdtempSync(join(dir, '.pending-'))
+    try {
+      const target = join(pendingDir, DB_NAME)
+      writeDatabaseSnapshot(db, target)
+      const covers = copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db))
+      const epubs = copyEpubs(epubDir, join(dir, EPUB_DIR), referencedEpubs(db))
+      // The database lands last, so a folder holding one is a finished backup.
+      renameSync(target, join(dir, DB_NAME))
+      return { dir, ...counts(db), covers, epubs }
+    } finally {
+      rmSync(pendingDir, { recursive: true, force: true })
+    }
   } catch (err) {
+    if (dir) rmSync(dir, { recursive: true, force: true })
     throw new BackupError(`The backup could not be written. ${(err as Error).message}`)
-  } finally {
-    rmSync(pendingDir, { recursive: true, force: true })
+  }
+}
+
+export function exportMarkdown(
+  db: Database.Database,
+  parent: string,
+  coversDir?: string,
+  now = new Date()
+): MarkdownExportResult {
+  let dir: string | null = null
+  try {
+    dir = datedFolder(parent, MARKDOWN_EXPORT_DIR, now)
+    return { dir, files: writeVault(db, dir, coversDir) }
+  } catch (err) {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    throw new BackupError(`The Markdown export could not be written. ${(err as Error).message}`)
   }
 }
 
@@ -179,6 +245,7 @@ export function exportBackup(
 export function resolveBackupRoot(dir: string): string | null {
   if (existsSync(join(dir, DB_NAME))) return dir
 
+  // Backups made before they were dated sat in one fixed folder.
   const nested = join(dir, BACKUP_DIR)
   if (existsSync(join(nested, DB_NAME))) return nested
 
@@ -280,7 +347,9 @@ export function restoreBackup(
 ): RestoreResult {
   const root = resolveBackupRoot(sourceDir)
   if (!root) {
-    throw new BackupError(`No ${DB_NAME} in that folder. Pick the folder a backup was written to.`)
+    throw new BackupError(
+      `No ${DB_NAME} in that folder. Pick the backup folder itself, named like ${BACKUP_DIR}-2026-11-20-1430.`
+    )
   }
 
   const source = join(root, DB_NAME)
@@ -312,7 +381,10 @@ export function restoreBackup(
     try {
       covers = copyCovers(join(root, COVERS_DIR), stagedCovers, referencedCovers(snapshot), true)
       if (options.epubDir) {
-        copyEpubs(join(root, EPUB_DIR), options.epubDir, referencedEpubs(snapshot))
+        // A manual backup holds its own EPUBs; automatic snapshots share the folder beside them.
+        const own = join(root, EPUB_DIR)
+        const source = isDir(own, false) ? own : sharedEpubDir(dirname(root))
+        copyEpubs(source, options.epubDir, referencedEpubs(snapshot))
       }
     } finally {
       snapshot.close()
