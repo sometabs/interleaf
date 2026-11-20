@@ -1,0 +1,177 @@
+// @vitest-environment jsdom
+import type { EpubCandidate } from '@shared/api'
+import { describe, expect, it } from 'vitest'
+
+import { inertPage } from '../src/renderer/src/lib/epubContent'
+import { matchLibrary, normalTitle } from '../src/renderer/src/lib/epubMatch'
+import {
+  bookCss,
+  DEFAULT_LOOK,
+  layoutOf,
+  LIMITS,
+  pageLabel,
+  parseLook,
+  step,
+  withLayout
+} from '../src/renderer/src/lib/readerLook'
+import { makeBook } from './helpers/render'
+
+const XHTML = 'application/xhtml+xml'
+
+function candidate(overrides: Partial<EpubCandidate> = {}): EpubCandidate {
+  return {
+    path: 'C:/books/orchard.epub',
+    fileName: 'orchard.epub',
+    title: 'The Glass Orchard',
+    author: 'Mira Halden',
+    isbn: null,
+    bookId: null,
+    ...overrides
+  }
+}
+
+describe('making book pages inert', () => {
+  const page = (body: string): string =>
+    `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>x</title></head><body>${body}</body></html>`
+
+  it('removes scripts, frames, forms and event handlers but keeps the text', () => {
+    const out = inertPage(
+      page(
+        '<p onclick="steal()">Kept text</p><script>steal()</script><iframe src="https://example.com"/><form action="x"><input/></form><img src="a.png" onerror="steal()"/>'
+      ),
+      XHTML
+    )
+
+    expect(out).toContain('Kept text')
+    expect(out).toContain('a.png')
+    expect(out).not.toMatch(/script|iframe|<form|onclick|onerror|steal/)
+  })
+
+  it('removes script links but keeps ordinary ones', () => {
+    const out = inertPage(
+      page('<a href="javascript:steal()">bad</a><a href="chapter2.xhtml#n1">good</a>'),
+      XHTML
+    )
+
+    expect(out).not.toContain('javascript:')
+    expect(out).toContain('chapter2.xhtml#n1')
+  })
+
+  it('handles plain HTML pages too', () => {
+    const out = inertPage(
+      '<html><body><p>Text</p><script>steal()</script></body></html>',
+      'text/html'
+    )
+
+    expect(out).toContain('<p>Text</p>')
+    expect(out).not.toContain('steal')
+  })
+})
+
+describe('finding the book an EPUB belongs to', () => {
+  const library = [
+    makeBook({ id: 1, title: 'The Glass Orchard', author: 'Mira Halden' }),
+    makeBook({ id: 2, title: 'Glass Houses', author: 'Teo Marsh' }),
+    makeBook({ id: 3, title: 'Salt and Cinder', author: 'Ines Varga', isbn: '978-0-00-000000-2' })
+  ]
+
+  it('ignores case, articles, punctuation and subtitles', () => {
+    expect(normalTitle('The Glass Orchard: A Novel')).toBe('glass orchard')
+    expect(normalTitle('Glass Orchard (Deluxe Edition)')).toBe('glass orchard')
+  })
+
+  it('offers the one clear match first', () => {
+    const matches = matchLibrary(candidate({ title: 'Glass Orchard (Deluxe Edition)' }), library)
+
+    expect(matches.clear?.id).toBe(1)
+    expect(matches.close.map((book) => book.id)).toEqual([1])
+  })
+
+  it('matches on ISBN when titles differ', () => {
+    const matches = matchLibrary(
+      candidate({ title: 'Sel et cendre', author: null, isbn: '9780000000002' }),
+      library
+    )
+
+    expect(matches.clear?.id).toBe(3)
+  })
+
+  it('offers no single match when several books fit equally', () => {
+    const twins = [
+      ...library,
+      makeBook({ id: 4, title: 'The Glass Orchard', author: 'Mira Halden' })
+    ]
+
+    expect(matchLibrary(candidate(), twins).clear).toBeNull()
+  })
+
+  it('finds nothing for an unrelated file', () => {
+    expect(matchLibrary(candidate({ title: 'Untitled', author: 'Unknown' }), library)).toEqual({
+      clear: null,
+      close: []
+    })
+  })
+})
+
+describe('reader look', () => {
+  it('falls back to defaults for unknown or out-of-range values', () => {
+    expect(parseLook({ theme: 'neon', size: 9000, flow: 'sideways' })).toEqual({
+      ...DEFAULT_LOOK,
+      size: LIMITS.size.max
+    })
+    expect(parseLook('nonsense')).toBeNull()
+  })
+
+  it('steps within the limits', () => {
+    const smallest = { ...DEFAULT_LOOK, size: LIMITS.size.min }
+
+    expect(step(smallest, 'size', -1).size).toBe(LIMITS.size.min)
+    expect(step(DEFAULT_LOOK, 'spacing', 1).spacing).toBe(1.6)
+  })
+
+  it('keeps the book’s own colours and fonts in the light theme', () => {
+    const css = bookCss(DEFAULT_LOOK)
+
+    expect(css).not.toContain('font-family')
+    expect(css).not.toContain('color: #')
+  })
+
+  it('recolours text in the dark theme and sets the chosen font', () => {
+    const css = bookCss({ ...DEFAULT_LOOK, theme: 'dark', font: 'serif' })
+
+    expect(css).toContain('color-scheme: dark')
+    expect(css).toMatch(/font-family: [^;]*serif/)
+  })
+
+  it('offers two pages, one page or scrolling', () => {
+    expect(layoutOf(DEFAULT_LOOK)).toBe('two')
+    expect(withLayout(DEFAULT_LOOK, 'one')).toMatchObject({ flow: 'paginated', pages: 1 })
+    expect(layoutOf(withLayout(DEFAULT_LOOK, 'scroll'))).toBe('scroll')
+    // Scrolling keeps the page count, so going back to pages restores it.
+    expect(layoutOf(withLayout(withLayout(DEFAULT_LOOK, 'one'), 'scroll'))).toBe('scroll')
+  })
+
+  it('reads looks saved before the one-page option as two pages', () => {
+    expect(parseLook({ flow: 'paginated' })?.pages).toBe(2)
+    expect(parseLook({ flow: 'paginated', pages: 1 })?.pages).toBe(1)
+  })
+})
+
+describe('page label', () => {
+  it('uses the print page number when the book has one', () => {
+    expect(pageLabel(' 42 ', 1, 10, 2, false)).toBe('Page 42')
+  })
+
+  // Ten screens include a blank one at each end, so eight hold text.
+  it('counts the pages left in the chapter, two per screen side by side', () => {
+    expect(pageLabel(null, 5, 10, 1, false)).toBe('3 pages left in chapter')
+    expect(pageLabel(null, 5, 10, 2, false)).toBe('6 pages left in chapter')
+    expect(pageLabel(null, 7, 10, 1, false)).toBe('1 page left in chapter')
+    expect(pageLabel(null, 8, 10, 2, false)).toBe('Last page in chapter')
+  })
+
+  it('shows nothing while scrolling or before the chapter is laid out', () => {
+    expect(pageLabel(null, 3, 10, 1, true)).toBe('')
+    expect(pageLabel(null, 0, 0, 1, false)).toBe('')
+  })
+})

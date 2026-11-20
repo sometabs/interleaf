@@ -27,19 +27,21 @@ export function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
   }
 }
 
+// Copy diagnostics uses writeText() and the reader can go full screen. Reading the clipboard,
+// media access, location, notifications and all other browser capabilities are not needed.
+const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen'])
+
 export function restrictPermissions(session: Session): void {
-  // Copy diagnostics uses writeText(). Reading the clipboard, media access,
-  // location, notifications and all other browser capabilities are not needed.
   session.setPermissionCheckHandler((contents, permission, _origin, details) => {
     return (
-      permission === 'clipboard-sanitized-write' &&
+      ALLOWED_PERMISSIONS.has(permission) &&
       details.isMainFrame &&
       isTrustedRenderer(contents, details.requestingUrl)
     )
   })
   session.setPermissionRequestHandler((contents, permission, callback, details) => {
     callback(
-      permission === 'clipboard-sanitized-write' &&
+      ALLOWED_PERMISSIONS.has(permission) &&
         details.isMainFrame &&
         isTrustedRenderer(contents, details.requestingUrl)
     )

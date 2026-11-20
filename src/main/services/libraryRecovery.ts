@@ -12,6 +12,7 @@ import {
   setAsideDatabase,
   type RestoreResult
 } from './backup'
+import { epubDir } from './bookFiles'
 import { coversDir } from './covers'
 
 function backupDirectory(): string {
@@ -110,6 +111,7 @@ export function restoreLibrary(source: string): RestoreResult {
   try {
     result = restoreBackup(source, dbPath, covers, {
       preservePrevious: false,
+      epubDir: epubDir(),
       beforeReplace: () => {
         stopAutomaticBackups()
         closeDb()

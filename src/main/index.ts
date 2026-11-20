@@ -25,6 +25,8 @@ import {
   stopAutomaticBackups
 } from './services/libraryRecovery'
 import { watchForUpdates } from './services/updates'
+import { epubDir, pruneOrphanEpubs } from './services/bookFiles'
+import { storedEpubNames } from './repos/bookFiles'
 import { UPDATE_READY_CHANNEL, type ReadyUpdate } from '../shared/api'
 
 // Must run before anything touches disk.
@@ -126,6 +128,7 @@ app.whenReady().then(() => {
     return
   }
   pruneOrphanCovers(coversDir(), referencedCovers(getDb()))
+  pruneOrphanEpubs(epubDir(), storedEpubNames(getDb()))
   pruneDiscoverCovers(coversDir(), candidateCoverIds(getDb()))
   startAutomaticBackups()
   registerCoverProtocol()

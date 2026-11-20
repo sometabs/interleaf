@@ -25,6 +25,7 @@ import CoverPicker from './CoverPicker'
 import QuoteCard from './QuoteCard'
 import EditableNumber from './EditableNumber'
 import EditableTitle from './EditableTitle'
+import EpubActions from './EpubActions'
 import Editor from './Editor'
 import Rating from './Rating'
 
@@ -308,6 +309,10 @@ export default function BookDetail({ book }: Props): ReactNode {
                 value={book.rating}
                 onChange={(rating) => updateBook.mutate({ id: book.id, patch: { rating } })}
               />
+            </div>
+
+            <div className="mt-4">
+              <EpubActions book={book} />
             </div>
 
             {metadata && metadata.subjects.length > 0 && (

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 
 import AboutDialog from './components/AboutDialog'
 import AddBookDialog from './components/AddBookDialog'
@@ -8,6 +8,7 @@ import ConfirmDialog from './components/ConfirmDialog'
 import Data from './components/Data'
 import Discover from './components/Discover'
 import Empty from './components/Empty'
+import EpubDrop from './components/EpubDrop'
 import HighlightImport from './components/HighlightImport'
 import Library from './components/Library'
 import NoteView from './components/NoteView'
@@ -26,6 +27,9 @@ import { usePendingConfirm } from './lib/confirm'
 import { usePersistentState } from './lib/persistent'
 import { useBook, useBookshelfLayout } from './lib/queries'
 import { useView } from './lib/view'
+
+// Loaded on first open, so the reader engine costs nothing until a book is read.
+const Reader = lazy(() => import('./components/Reader'))
 
 export default function App(): ReactNode {
   useBookshelfLayout()
@@ -79,6 +83,11 @@ export default function App(): ReactNode {
         {view.kind === 'queue' && <ReadingQueue />}
         {view.kind === 'history' && <ReadingHistory />}
         {view.kind === 'book' && <BookRoute id={view.id} />}
+        {view.kind === 'reader' && (
+          <Suspense fallback={null}>
+            <Reader key={view.bookId} bookId={view.bookId} />
+          </Suspense>
+        )}
         {view.kind === 'reviews' && <Reviews />}
         {view.kind === 'review' && <ReviewView key={view.bookId} bookId={view.bookId} />}
         {view.kind === 'notes' && <Notes />}
@@ -98,6 +107,7 @@ export default function App(): ReactNode {
         onOpenChange={setPaletteOpen}
         onAddBook={() => setAddOpen(true)}
       />
+      <EpubDrop />
       <ConfirmDialog />
       <Toasts />
       <UpdateNotice />

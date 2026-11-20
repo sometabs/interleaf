@@ -18,6 +18,7 @@ import { writeVault } from './vault'
 const BACKUP_DIR = 'interleaf-backup'
 export const DB_NAME = 'interleaf.db'
 const COVERS_DIR = 'covers'
+const EPUB_DIR = 'books'
 const SIDECARS = ['-wal', '-shm', '-journal']
 
 // An AppImage runs from a temporary mount, and the path Electron would relaunch
@@ -100,6 +101,26 @@ function copyCovers(
   return copied
 }
 
+// Named by content hash, so a file already at the destination is the same file.
+function copyEpubs(fromDir: string | undefined, toDir: string, keep: ReadonlySet<string>): number {
+  if (!fromDir || !isDir(fromDir, false) || resolve(fromDir) === resolve(toDir)) return 0
+  let copied = 0
+  for (const name of readdirSync(fromDir)) {
+    if (!/^[0-9a-f]{64}\.epub$/.test(name) || !keep.has(name)) continue
+    if (!existsSync(join(toDir, name))) {
+      mkdirSync(toDir, { recursive: true })
+      copyFileSync(join(fromDir, name), join(toDir, name))
+    }
+    copied++
+  }
+  return copied
+}
+
+function referencedEpubs(db: Database.Database): Set<string> {
+  const rows = db.prepare<[], { sha256: string }>('SELECT sha256 FROM book_file').all()
+  return new Set(rows.map((row) => `${row.sha256}.epub`))
+}
+
 export function writeDatabaseSnapshot(db: Database.Database, target: string): void {
   // Copy the committed WAL contents along with the main file.
   db.prepare('VACUUM INTO ?').run(target)
@@ -130,7 +151,8 @@ function counts(db: Database.Database): { books: number; notes: number } {
 export function exportBackup(
   db: Database.Database,
   parent: string,
-  coversDir?: string
+  coversDir?: string,
+  epubDir?: string
 ): BackupResult {
   const dir = join(parent, BACKUP_DIR)
   mkdirSync(dir, { recursive: true })
@@ -140,6 +162,7 @@ export function exportBackup(
     const target = join(pendingDir, DB_NAME)
     writeDatabaseSnapshot(db, target)
     const covers = copyCovers(coversDir, join(dir, COVERS_DIR), referencedCovers(db))
+    copyEpubs(epubDir, join(dir, EPUB_DIR), referencedEpubs(db))
     const files = writeVault(db, dir, coversDir)
     const result = { dir, ...counts(db), covers, files }
     // Only replace the restorable database after the new export has finished.
@@ -244,6 +267,8 @@ interface RestoreOptions {
   beforeReplace?: () => void
   preservePrevious?: boolean
   preserveDamaged?: boolean
+  // Where EPUB files live. Only added to, so a failed restore leaves nothing to undo.
+  epubDir?: string
 }
 
 // The live connection must be closed before publication.
@@ -286,6 +311,9 @@ export function restoreBackup(
     let covers: number
     try {
       covers = copyCovers(join(root, COVERS_DIR), stagedCovers, referencedCovers(snapshot), true)
+      if (options.epubDir) {
+        copyEpubs(join(root, EPUB_DIR), options.epubDir, referencedEpubs(snapshot))
+      }
     } finally {
       snapshot.close()
     }

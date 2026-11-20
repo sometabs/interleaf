@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 import {
   HARVEST_PROGRESS_CHANNEL,
@@ -59,6 +59,9 @@ const bridge: InterleafBridge = {
     return () => {
       ipcRenderer.off(UPDATE_READY_CHANNEL, wrapped)
     }
+  },
+  pathForFile(file: File) {
+    return webUtils.getPathForFile(file)
   }
 }
 

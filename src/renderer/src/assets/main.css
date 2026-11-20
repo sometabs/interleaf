@@ -214,6 +214,28 @@
     padding: 5px 9px;
   }
 
+  /* Takes the reader theme's colour instead of the app's. */
+  .reader-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    border-radius: var(--radius-control);
+    font-size: 13px;
+    color: inherit;
+    opacity: 0.72;
+  }
+
+  .reader-btn:hover,
+  .reader-btn[aria-pressed='true'] {
+    opacity: 1;
+    background: color-mix(in srgb, currentColor 9%, transparent);
+  }
+
+  .reader-progress {
+    accent-color: currentColor;
+    opacity: 0.6;
+  }
+
   .btn-danger:hover:not(:disabled) {
     background: var(--color-danger-soft);
     color: var(--color-danger);

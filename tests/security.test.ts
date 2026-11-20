@@ -129,6 +129,21 @@ describe('unused permissions', () => {
     expect(check(trusted, 'clipboard-sanitized-write', '', { isMainFrame: true })).toBe(false)
   })
 
+  it('lets the app main frame, and nothing else, go full screen', () => {
+    const trusted = renderer()
+    trustRenderer(trusted, APP_URL)
+    const { request } = permissions()
+    for (const [contents, details, allowed] of [
+      [trusted, { isMainFrame: true, requestingUrl: APP_URL }, true],
+      [trusted, { isMainFrame: false, requestingUrl: APP_URL }, false],
+      [renderer(), { isMainFrame: true, requestingUrl: APP_URL }, false]
+    ] as const) {
+      const callback = vi.fn()
+      request(contents, 'fullscreen', callback, details)
+      expect(callback).toHaveBeenCalledExactlyOnceWith(allowed)
+    }
+  })
+
   it('denies device permission grants', () => {
     expect(
       permissions().device({} as Parameters<ReturnType<typeof permissions>['device']>[0])

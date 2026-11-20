@@ -1,9 +1,14 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import type { OlBookDto } from '@shared/api'
+import type { Book, OlBookDto } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
 import { notify } from '../lib/feedback'
-import { useAddFromOpenLibrary, useCreateBook, useOpenLibrarySearch } from '../lib/queries'
+import {
+  useAddFromOpenLibrary,
+  useBooks,
+  useCreateBook,
+  useOpenLibrarySearch
+} from '../lib/queries'
 import { useView } from '../lib/view'
 import Cover from './Cover'
 import Spinner from './Spinner'
@@ -11,13 +16,26 @@ import Spinner from './Spinner'
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // For attaching an EPUB: the search starts from the file, and the chosen book is handed back.
+  initialQuery?: string
+  purpose?: string
+  onPicked?: (book: Book) => void
 }
 
-export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode {
+export default function AddBookDialog({
+  open,
+  onOpenChange,
+  initialQuery = '',
+  purpose,
+  onPicked
+}: Props): ReactNode {
   const { navigate } = useView()
-  const [query, setQuery] = useState('')
+  const { data: library = [] } = useBooks()
+  const [query, setQuery] = useState(initialQuery)
   /** The last query actually sent. Only this reaches the network. */
-  const [submitted, setSubmitted] = useState('')
+  const [submitted, setSubmitted] = useState(
+    initialQuery.trim().length >= 2 ? initialQuery.trim() : ''
+  )
   // Adding does not close the dialog, and results under one title look alike,
   // so these rows mark themselves and refuse a second click.
   const [added, setAdded] = useState<Set<string>>(new Set())
@@ -44,6 +62,22 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
 
   /** Adds and stays, so one search can yield several books. A toast reports each. */
   function add(book: OlBookDto): void {
+    if (onPicked) {
+      // The same Open Library work already in the library gets the file, not a duplicate.
+      const existing = library.find((owned) => owned.olid === book.olid)
+      if (existing) {
+        onPicked(existing)
+        close()
+        return
+      }
+      addFromOl.mutate(book, {
+        onSuccess: (created) => {
+          onPicked(created)
+          close()
+        }
+      })
+      return
+    }
     addFromOl.mutate(book, {
       onSuccess: (created) => {
         setAdded((current) => new Set(current).add(book.olid))
@@ -62,7 +96,8 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
         onSuccess: (created) => {
           // Nothing is fetched: Open Library answers any string with its
           // closest match, so a lookup here attaches an unrelated book.
-          navigate({ kind: 'book', id: created.id })
+          if (onPicked) onPicked(created)
+          else navigate({ kind: 'book', id: created.id })
           close()
         }
       }
@@ -78,8 +113,13 @@ export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode 
     <Dialog.Root open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
-        <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 flex max-h-[70vh] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-hairline bg-surface shadow-pop">
-          <Dialog.Title className="sr-only">Add a book</Dialog.Title>
+        <Dialog.Content
+          onEscapeKeyDown={(event) => event.stopPropagation()}
+          className="fixed left-1/2 top-[12vh] z-50 flex max-h-[70vh] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-hairline bg-surface shadow-pop"
+        >
+          <Dialog.Title className={purpose ? 'px-4 pt-4 text-[13px] text-ink-muted' : 'sr-only'}>
+            {purpose ?? 'Add a book'}
+          </Dialog.Title>
           <Dialog.Description className="sr-only">
             Search Open Library by title, author, or ISBN.
           </Dialog.Description>

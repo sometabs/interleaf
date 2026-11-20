@@ -7,7 +7,7 @@
       `default-src`. The websocket allowance is Vite's hot reload. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: bookcover:; font-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' blob:; img-src 'self' data: blob: bookcover:; font-src 'self' data: blob:; media-src blob:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; object-src 'none'; frame-src blob:; base-uri 'none'; form-action 'none'"
     />
     <script src="/theme-init.js"></script>
   </head>

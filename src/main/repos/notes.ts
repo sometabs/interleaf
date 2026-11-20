@@ -14,6 +14,7 @@ interface NoteRow {
   tag: string | null
   created_at: number
   updated_at: number
+  location: string | null
 }
 
 function toNote(row: NoteRow): Note {
@@ -25,7 +26,8 @@ function toNote(row: NoteRow): Note {
     bodyMd: row.body_md,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    tag: row.tag
+    tag: row.tag,
+    location: row.location
   }
 }
 
@@ -70,8 +72,8 @@ export function createNote(db: Database, input: NewNote): Note {
     // default is only applied when the column is left out entirely.
     const info = db
       .prepare(
-        `INSERT INTO note (book_id, kind, title, body_md, tag, created_at, updated_at)
-         VALUES (@bookId, @kind, @title, @bodyMd, @tag,
+        `INSERT INTO note (book_id, kind, title, body_md, tag, location, created_at, updated_at)
+         VALUES (@bookId, @kind, @title, @bodyMd, @tag, @location,
                  coalesce(@createdAt, unixepoch()), coalesce(@createdAt, unixepoch()))`
       )
       .run({
@@ -80,6 +82,7 @@ export function createNote(db: Database, input: NewNote): Note {
         title,
         bodyMd,
         tag: asNoteTag(data.tag),
+        location: typeof data.location === 'string' ? data.location : null,
         createdAt: data.createdAt ?? null
       })
 

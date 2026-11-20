@@ -18,6 +18,14 @@ import { assertTrustedIpcSender } from '../security'
 import * as books from '../repos/books'
 import * as bookshelf from '../repos/bookshelf'
 import * as goals from '../repos/goals'
+import * as bookFiles from '../repos/bookFiles'
+import {
+  attachEpub,
+  describeEpub,
+  detachEpub,
+  epubDir,
+  readStoredEpub
+} from '../services/bookFiles'
 import * as data from '../repos/data'
 import * as meta from '../repos/metadata'
 import * as notes from '../repos/notes'
@@ -54,6 +62,8 @@ const libraryWrites = new Set<keyof InterleafApi>([
   'getBookshelfLayout',
   'saveBookshelfLayout',
   'setReadingGoal',
+  'attachEpub',
+  'removeEpub',
   'createBook',
   'updateBook',
   'reorderPriority',
@@ -158,6 +168,40 @@ const api: InterleafApi = {
   },
   async setReadingGoal(year, count) {
     goals.setReadingGoal(getDb(), year, count)
+  },
+  async listBookFiles() {
+    return bookFiles.listBookFiles(getDb())
+  },
+  async chooseEpub() {
+    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const options = {
+      title: 'Choose an EPUB',
+      properties: ['openFile' as const],
+      filters: [{ name: 'EPUB', extensions: ['epub'] }]
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || result.filePaths.length === 0) return null
+    return describeEpub(getDb(), result.filePaths[0])
+  },
+  async inspectEpub(path) {
+    return describeEpub(getDb(), String(path))
+  },
+  async attachEpub(bookId, path, replace) {
+    return attachEpub(getDb(), epubDir(), bookId, String(path), replace === true)
+  },
+  async removeEpub(bookId) {
+    detachEpub(getDb(), epubDir(), bookId)
+  },
+  async readEpub(bookId) {
+    return readStoredEpub(getDb(), epubDir(), bookId)
+  },
+  async getReadingPosition(bookId) {
+    return bookFiles.getReadingPosition(getDb(), bookId)
+  },
+  async saveReadingPosition(bookId, position) {
+    bookFiles.saveReadingPosition(getDb(), bookId, position)
   },
   getSpineColors,
   async createBook(input) {
@@ -308,7 +352,7 @@ const api: InterleafApi = {
   async exportBackup() {
     const dir = await pickDirectory('Choose where to export your library', 'Export here')
     if (!dir) return null
-    return backup.exportBackup(getDb(), dir, coversDir())
+    return backup.exportBackup(getDb(), dir, coversDir(), epubDir())
   },
   async restoreBackup() {
     const dir = await pickDirectory('Choose a library export folder', 'Import from here')

@@ -272,6 +272,7 @@ export default function Quotes(): ReactNode {
                 title: '',
                 bodyMd: draft,
                 tag: null,
+                location: null,
                 createdAt: 0,
                 updatedAt: 0
               }}

@@ -58,7 +58,9 @@ describe('upgrading a library that predates the import', () => {
     const bookId = Number(
       before.prepare("INSERT INTO book (title) VALUES ('Frankenstein')").run().lastInsertRowid
     )
-    notes.createNote(before, { bookId, kind: 'highlight', bodyMd: 'Typed by hand' })
+    before
+      .prepare("INSERT INTO note (book_id, kind, body_md) VALUES (?, 'highlight', 'Typed by hand')")
+      .run(bookId)
     before.close()
 
     const after = createDatabase(file)

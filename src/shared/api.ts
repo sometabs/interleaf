@@ -66,6 +66,8 @@ export interface Note {
   updatedAt: number
   // One label from `NOTE_TAGS`, or null.
   tag: string | null
+  // An EPUB CFI when the note was taken in the reader.
+  location: string | null
 }
 
 export interface NewNote {
@@ -77,6 +79,7 @@ export interface NewNote {
   // Unix seconds. Importers pass the date the passage was written down;
   // everything else lets the schema default to now.
   createdAt?: number
+  location?: string | null
 }
 
 export interface NotePatch {
@@ -223,6 +226,34 @@ export interface ReadyUpdate {
   notes: ReleaseNoteLine[]
 }
 
+export interface BookFile {
+  bookId: number
+  fileName: string
+  size: number
+  addedAt: number
+}
+
+// An EPUB looked at but not yet attached. `bookId` is the book already holding this exact file.
+export interface EpubCandidate {
+  path: string
+  fileName: string
+  title: string | null
+  author: string | null
+  isbn: string | null
+  bookId: number | null
+}
+
+export type AttachEpubResult =
+  | { kind: 'attached' }
+  | { kind: 'already-attached' }
+  | { kind: 'held-by'; bookId: number }
+  | { kind: 'replace-needed' }
+
+export interface ReadingPosition {
+  cfi: string
+  fraction: number
+}
+
 export interface ReadingGoal {
   year: number
   books: number
@@ -312,6 +343,16 @@ export interface InterleafApi {
   listReadingGoals(): Promise<ReadingGoal[]>
   // Null removes the goal for that year.
   setReadingGoal(year: number, books: number | null): Promise<void>
+
+  listBookFiles(): Promise<BookFile[]>
+  // Null when the file picker was cancelled.
+  chooseEpub(): Promise<EpubCandidate | null>
+  inspectEpub(path: string): Promise<EpubCandidate>
+  attachEpub(bookId: number, path: string, replace: boolean): Promise<AttachEpubResult>
+  removeEpub(bookId: number): Promise<void>
+  readEpub(bookId: number): Promise<Uint8Array>
+  getReadingPosition(bookId: number): Promise<ReadingPosition | null>
+  saveReadingPosition(bookId: number, position: ReadingPosition): Promise<void>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
@@ -384,6 +425,8 @@ export interface InterleafBridge extends InterleafApi {
   onMetadataRefreshProgress(listener: (progress: MetadataRefreshProgress) => void): () => void
   onSemanticProgress(listener: (progress: SemanticProgress) => void): () => void
   onUpdateReady(listener: (update: ReadyUpdate) => void): () => void
+  // A dropped file's path on disk, which the renderer cannot see on its own.
+  pathForFile(file: File): string
 }
 
 // Derived from the interface so the two cannot drift.
@@ -393,6 +436,14 @@ export const IPC_CHANNELS = [
   'saveBookshelfLayout',
   'listReadingGoals',
   'setReadingGoal',
+  'listBookFiles',
+  'chooseEpub',
+  'inspectEpub',
+  'attachEpub',
+  'removeEpub',
+  'readEpub',
+  'getReadingPosition',
+  'saveReadingPosition',
   'getSpineColors',
   'createBook',
   'updateBook',

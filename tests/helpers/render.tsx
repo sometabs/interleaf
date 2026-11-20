@@ -51,6 +51,7 @@ export function makeNote(overrides: Partial<Note> = {}): Note {
     createdAt: 0,
     updatedAt: Math.floor(Date.now() / 1000),
     tag: null,
+    location: null,
     ...overrides
   }
 }
@@ -129,6 +130,8 @@ export function installBridge(
     listBooks: async () => state.books.map((book) => ({ ...book })),
     getBookshelfLayout: async () => state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT,
     listReadingGoals: async () => state.goals.map((goal) => ({ ...goal })),
+    listBookFiles: async () => [],
+    getReadingPosition: async () => null,
     setReadingGoal: async (year, books) => {
       state.goals = state.goals.filter((goal) => goal.year !== year)
       if (books !== null) state.goals.push({ year, books })
@@ -208,7 +211,8 @@ export function installBridge(
         bookId: input.bookId ?? null,
         kind: input.kind ?? 'thought',
         title: input.title ?? '',
-        bodyMd: input.bodyMd ?? ''
+        bodyMd: input.bodyMd ?? '',
+        location: input.location ?? null
       })
       state.notes.push(note)
       state.created.push(input)

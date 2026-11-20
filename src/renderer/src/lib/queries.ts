@@ -40,7 +40,10 @@ import type {
   SemanticProgress,
   SearchHit,
   SpineColors,
-  ReadingGoal
+  ReadingGoal,
+  AttachEpubResult,
+  BookFile,
+  ReadingPosition
 } from '@shared/api'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
@@ -51,6 +54,8 @@ const keys = {
   books: ['books'] as const,
   bookshelf: ['bookshelf'] as const,
   goals: ['reading-goals'] as const,
+  bookFiles: ['book-files'] as const,
+  position: (bookId: number) => ['reading-position', bookId] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
@@ -148,6 +153,58 @@ export function useSetReadingGoal(): UseMutationResult<
   return useMutation({
     mutationFn: ({ year, books }) => api().setReadingGoal(year, books),
     onSettled: () => client.invalidateQueries({ queryKey: keys.goals })
+  })
+}
+
+export function useBookFiles(): UseQueryResult<BookFile[]> {
+  return useQuery({ queryKey: keys.bookFiles, queryFn: () => api().listBookFiles() })
+}
+
+export function useBookFile(bookId: number): BookFile | null {
+  return useBookFiles().data?.find((file) => file.bookId === bookId) ?? null
+}
+
+export function useReadingPosition(bookId: number): UseQueryResult<ReadingPosition | null> {
+  return useQuery({
+    queryKey: keys.position(bookId),
+    queryFn: () => api().getReadingPosition(bookId)
+  })
+}
+
+// Saved quietly on every page turn: the cache is updated in place rather than refetched.
+export function useSaveReadingPosition(
+  bookId: number
+): UseMutationResult<void, Error, ReadingPosition> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (position) => api().saveReadingPosition(bookId, position),
+    onMutate: (position) => client.setQueryData(keys.position(bookId), position)
+  })
+}
+
+export function useAttachEpub(): UseMutationResult<
+  AttachEpubResult,
+  Error,
+  { bookId: number; path: string; replace: boolean }
+> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ bookId, path, replace }) => api().attachEpub(bookId, path, replace),
+    onSuccess: (_result, { bookId }) => {
+      void client.invalidateQueries({ queryKey: keys.bookFiles })
+      void client.invalidateQueries({ queryKey: keys.position(bookId) })
+    }
+  })
+}
+
+export function useRemoveEpub(): UseMutationResult<void, Error, number> {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (bookId) => api().removeEpub(bookId),
+    onSuccess: (_result, bookId) => {
+      void client.invalidateQueries({ queryKey: keys.bookFiles })
+      void client.invalidateQueries({ queryKey: keys.position(bookId) })
+    }
   })
 }
 
@@ -326,6 +383,7 @@ export function useDeleteBook(): UseMutationResult<void, Error, number> {
     mutationFn: (id: number) => api().deleteBook(id),
     onSuccess: () => {
       invalidateBooks(client)
+      void client.invalidateQueries({ queryKey: keys.bookFiles })
       invalidateNotes(client)
       invalidateRecommendations(client)
     }
