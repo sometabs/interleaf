@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 
-import type { BookFile, ReadingPosition } from '../../shared/api'
+import type { BookFile, ReadingPosition, RecentReading } from '../../shared/api'
 
 interface BookFileRow {
   book_id: number
@@ -84,4 +84,16 @@ export function saveReadingPosition(db: Database, bookId: number, position: Read
       ON CONFLICT (book_id) DO UPDATE
       SET cfi = excluded.cfi, fraction = excluded.fraction, updated_at = unixepoch()`
   ).run(bookId, position.cfi, fraction)
+}
+
+// Books still attached to an EPUB, most recently read first.
+export function recentReading(db: Database, limit = 3): RecentReading[] {
+  return db
+    .prepare<[number], RecentReading>(
+      `SELECT p.book_id AS bookId, p.fraction, p.updated_at AS updatedAt
+         FROM reading_position p JOIN book_file f ON f.book_id = p.book_id
+        ORDER BY p.updated_at DESC, p.book_id DESC
+        LIMIT ?`
+    )
+    .all(limit)
 }

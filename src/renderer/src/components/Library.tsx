@@ -7,6 +7,7 @@ import { groupBooks, GROUPINGS, type Grouping, type Shelf } from '../lib/shelves
 import { useSettings } from '../lib/settings'
 import { useView } from '../lib/view'
 import Bookshelf from './Bookshelf'
+import ContinueReading from './ContinueReading'
 import Cover from './Cover'
 import Empty from './Empty'
 import Rating from './Rating'
@@ -80,6 +81,7 @@ export default function Library({ onAdd }: Props): ReactNode {
 
       {shelfLayout ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-16">
+          {!query && <ContinueReading />}
           <div className="-mx-6">
             <Bookshelf
               books={books}
@@ -90,14 +92,20 @@ export default function Library({ onAdd }: Props): ReactNode {
             />
           </div>
         </div>
-      ) : matching.length === 0 ? (
-        <p className="py-8 text-center text-ink-muted">
-          {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
-        </p>
       ) : (
-        groupBooks(matching, grouping).map((shelf) => (
-          <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />
-        ))
+        <>
+          {/* Hidden while filtering, where it would read as a filter result. */}
+          {!query && <ContinueReading />}
+          {matching.length === 0 ? (
+            <p className="py-8 text-center text-ink-muted">
+              {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
+            </p>
+          ) : (
+            groupBooks(matching, grouping).map((shelf) => (
+              <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />
+            ))
+          )}
+        </>
       )}
     </div>
   )

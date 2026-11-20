@@ -205,6 +205,9 @@ const api: InterleafApi = {
   async saveReadingPosition(bookId, position) {
     bookFiles.saveReadingPosition(getDb(), bookId, position)
   },
+  async recentReading() {
+    return bookFiles.recentReading(getDb())
+  },
   getSpineColors,
   async createBook(input) {
     return books.createBook(getDb(), input)

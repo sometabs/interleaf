@@ -254,6 +254,12 @@ export interface ReadingPosition {
   fraction: number
 }
 
+export interface RecentReading {
+  bookId: number
+  fraction: number
+  updatedAt: number
+}
+
 export interface ReadingGoal {
   year: number
   books: number
@@ -364,6 +370,7 @@ export interface InterleafApi {
   readEpub(bookId: number): Promise<Uint8Array>
   getReadingPosition(bookId: number): Promise<ReadingPosition | null>
   saveReadingPosition(bookId: number, position: ReadingPosition): Promise<void>
+  recentReading(): Promise<RecentReading[]>
   getSpineColors(coverPaths: string[]): Promise<Record<string, SpineColors>>
   createBook(input: NewBook): Promise<Book>
   updateBook(id: number, patch: BookPatch): Promise<Book | null>
@@ -462,6 +469,7 @@ export const IPC_CHANNELS = [
   'readEpub',
   'getReadingPosition',
   'saveReadingPosition',
+  'recentReading',
   'getSpineColors',
   'createBook',
   'updateBook',

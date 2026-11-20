@@ -46,7 +46,8 @@ import type {
   BookFile,
   ReadingPosition,
   BackupStatus,
-  MarkdownExportResult
+  MarkdownExportResult,
+  RecentReading
 } from '@shared/api'
 
 // SQLite is the source of truth: a mutation invalidates the slices it touched
@@ -60,6 +61,7 @@ const keys = {
   bookFiles: ['book-files'] as const,
   backupStatus: ['backup-status'] as const,
   position: (bookId: number) => ['reading-position', bookId] as const,
+  recentReading: ['recent-reading'] as const,
   notes: ['notes'] as const,
   notesFor: (bookId?: number | null) => ['notes', bookId ?? 'all'] as const,
   note: (id: number) => ['note', id] as const,
@@ -186,13 +188,18 @@ export function useReadingPosition(bookId: number): UseQueryResult<ReadingPositi
 }
 
 // Saved quietly on every page turn: the cache is updated in place rather than refetched.
+export function useRecentReading(): UseQueryResult<RecentReading[]> {
+  return useQuery({ queryKey: keys.recentReading, queryFn: () => api().recentReading() })
+}
+
 export function useSaveReadingPosition(
   bookId: number
 ): UseMutationResult<void, Error, ReadingPosition> {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (position) => api().saveReadingPosition(bookId, position),
-    onMutate: (position) => client.setQueryData(keys.position(bookId), position)
+    onMutate: (position) => client.setQueryData(keys.position(bookId), position),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.recentReading })
   })
 }
 
@@ -207,6 +214,7 @@ export function useAttachEpub(): UseMutationResult<
     onSuccess: (_result, { bookId }) => {
       void client.invalidateQueries({ queryKey: keys.bookFiles })
       void client.invalidateQueries({ queryKey: keys.position(bookId) })
+      void client.invalidateQueries({ queryKey: keys.recentReading })
     }
   })
 }
@@ -218,6 +226,7 @@ export function useRemoveEpub(): UseMutationResult<void, Error, number> {
     onSuccess: (_result, bookId) => {
       void client.invalidateQueries({ queryKey: keys.bookFiles })
       void client.invalidateQueries({ queryKey: keys.position(bookId) })
+      void client.invalidateQueries({ queryKey: keys.recentReading })
     }
   })
 }

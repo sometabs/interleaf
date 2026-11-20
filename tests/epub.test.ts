@@ -241,3 +241,26 @@ describe('backing up EPUBs', () => {
     }
   })
 })
+
+describe('recent reading', () => {
+  it('lists books read in the reader, latest first, while they still have their EPUB', () => {
+    const db = createDatabase(':memory:')
+    const first = books.createBook(db, { title: 'First' })
+    const second = books.createBook(db, { title: 'Second' })
+    const detached = books.createBook(db, { title: 'Detached' })
+    files.setBookFile(db, first.id, { sha256: 'a'.repeat(64), fileName: 'a.epub', size: 1 })
+    files.setBookFile(db, second.id, { sha256: 'b'.repeat(64), fileName: 'b.epub', size: 1 })
+    files.setBookFile(db, detached.id, { sha256: 'c'.repeat(64), fileName: 'c.epub', size: 1 })
+    files.saveReadingPosition(db, first.id, { cfi: 'epubcfi(/6/2)', fraction: 0.2 })
+    files.saveReadingPosition(db, second.id, { cfi: 'epubcfi(/6/4)', fraction: 0.6 })
+    files.saveReadingPosition(db, detached.id, { cfi: 'epubcfi(/6/6)', fraction: 0.9 })
+    db.prepare('UPDATE reading_position SET updated_at = 100 WHERE book_id = ?').run(first.id)
+    db.prepare('UPDATE reading_position SET updated_at = 200 WHERE book_id = ?').run(second.id)
+    files.removeBookFile(db, detached.id)
+
+    expect(files.recentReading(db).map((row) => [row.bookId, row.fraction])).toEqual([
+      [second.id, 0.6],
+      [first.id, 0.2]
+    ])
+  })
+})
