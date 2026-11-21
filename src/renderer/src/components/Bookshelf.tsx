@@ -35,6 +35,7 @@ import { notify } from '../lib/feedback'
 import { useBookshelfLayout, useSaveBookshelfLayout, useSpineColors } from '../lib/queries'
 import { useSettings } from '../lib/settings'
 import Cover from './Cover'
+import EpubBadge from './EpubBadge'
 import EditableTitle from './EditableTitle'
 import FilterPicker from './FilterPicker'
 
@@ -44,7 +45,12 @@ interface Props {
   query: string
   tools: HTMLDivElement | null
   onOpen: (book: Book) => void
+  epubIds?: Set<number>
+  // Fades the books without an EPUB rather than removing them, so the arrangement stays put.
+  epubOnly?: boolean
 }
+
+const NO_EPUBS = new Set<number>()
 
 interface Placement {
   row: ShelfRow
@@ -108,6 +114,8 @@ function BookshelfView({
   query,
   tools,
   onOpen,
+  epubIds = NO_EPUBS,
+  epubOnly = false,
   layout
 }: Props & {
   layout: BookshelfLayout
@@ -560,7 +568,9 @@ function BookshelfView({
     const palette = (book.coverPath && spineColors?.[book.coverPath]) || paletteFor(book.title)
     const size = sizes.get(book.id)!
     const width = stacked ? size.spineLength : size.uprightWidth
-    const label = book.author ? `${book.title} by ${book.author}` : book.title
+    const label =
+      (book.author ? `${book.title} by ${book.author}` : book.title) +
+      (epubIds.has(book.id) ? ', has an EPUB' : '')
     const faceOut = !stacked && faceOutIds.has(book.id)
     const style = {
       width,
@@ -585,6 +595,7 @@ function BookshelfView({
         data-shelf-book={book.id}
         data-dragging={draggedBookId === book.id || undefined}
         data-search-match={(query && matchingIds.has(book.id)) || undefined}
+        data-epub={epubIds.has(book.id) || undefined}
         onMouseEnter={(event) => queuePreview(book.id, event.currentTarget, !faceOut)}
         onMouseLeave={hidePreview}
         onClick={() => onOpen(book)}
@@ -610,8 +621,9 @@ function BookshelfView({
         onDragEnd={endDrag}
       >
         {faceOut ? (
-          <div aria-hidden="true" className="pointer-events-none">
+          <div aria-hidden="true" className="pointer-events-none relative">
             <Cover title={book.title} author={book.author} path={book.coverPath} />
+            {epubIds.has(book.id) && <EpubBadge />}
           </div>
         ) : (
           <span aria-hidden="true" className="book-spine-copy">
@@ -619,6 +631,7 @@ function BookshelfView({
             {book.author && <span className="book-spine-author">{book.author}</span>}
           </span>
         )}
+        {!faceOut && epubIds.has(book.id) && <span aria-hidden className="book-spine-epub" />}
       </button>
     )
   }
@@ -683,6 +696,7 @@ function BookshelfView({
       aria-label="Bookshelf"
       className="bookshelf-section"
       data-searching={(query && matchingIds.size > 0) || undefined}
+      data-epub-only={epubOnly || undefined}
     >
       {tools &&
         createPortal(

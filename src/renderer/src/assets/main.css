@@ -469,6 +469,28 @@
     outline-offset: 2px;
   }
 
+  .bookshelf-section[data-epub-only]
+    .bookshelf-book:not([data-epub], :hover, :focus-visible, [data-dragging]) {
+    opacity: 0.28;
+  }
+
+  .book-spine-epub {
+    position: absolute;
+    inset-inline: 6px;
+    bottom: 2px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    opacity: 0.75;
+    pointer-events: none;
+  }
+
+  .book-spine-horizontal .book-spine-epub {
+    inset: 6px auto 6px 2px;
+    width: 2px;
+    height: auto;
+  }
+
   .bookshelf-section[data-searching]
     .bookshelf-book:not([data-search-match], :hover, :focus-visible, [data-dragging]) {
     opacity: 0.65;

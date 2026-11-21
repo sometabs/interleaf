@@ -779,3 +779,51 @@ describe('arranging the bookshelf', () => {
     expect(within(second).getByRole('button', { name: 'Book 12' })).toBe(lastBook)
   })
 })
+
+describe('books with an EPUB', () => {
+  const EPUB_FILE = { bookId: PICNIC.id, fileName: 'picnic.epub', size: 1000, addedAt: 0 }
+
+  function showWithEpub(): ReturnType<typeof userEvent.setup> {
+    installBridge({ books: [SOLARIS, PICNIC, HALL] }, { listBookFiles: async () => [EPUB_FILE] })
+    renderApp(<Library onAdd={() => {}} />)
+    return userEvent.setup()
+  }
+
+  it('marks the cover of a book that can be read in the app', async () => {
+    showWithEpub()
+
+    const badges = await screen.findAllByTestId('epub-badge')
+    expect(badges).toHaveLength(1)
+    expect(badges[0].closest('button')?.textContent).toContain('Roadside Picnic')
+  })
+
+  it('offers no EPUB filter when no book has one', async () => {
+    show()
+
+    await headings()
+    expect(screen.queryByRole('button', { name: /EPUBs only/ })).toBeNull()
+  })
+
+  it('narrows the grid to books with an EPUB, saying how many each group kept', async () => {
+    const user = showWithEpub()
+
+    await user.click(await screen.findByRole('button', { name: /EPUBs only/ }))
+
+    expect(await headings()).toEqual(['Reading · 1 of 1'])
+    expect(screen.queryByText('Solaris')).toBeNull()
+    expect(window.localStorage.getItem('interleaf.libraryEpubOnly')).toBe('true')
+  })
+
+  it('fades the other books on the shelves instead of moving them', async () => {
+    window.localStorage.setItem('interleaf.libraryLayout', '"shelf"')
+    window.localStorage.setItem('interleaf.libraryEpubOnly', 'true')
+    showWithEpub()
+
+    const picnic = await screen.findByRole('button', {
+      name: 'Roadside Picnic by Strugatsky, has an EPUB'
+    })
+    expect(picnic.hasAttribute('data-epub')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Solaris by Stanisław Lem' })).toBeDefined()
+    expect(screen.getByLabelText('Bookshelf').hasAttribute('data-epub-only')).toBe(true)
+  })
+})

@@ -2,13 +2,14 @@ import type { Book } from '@shared/api'
 import { useState, type ReactNode } from 'react'
 
 import { usePersistentState } from '../lib/persistent'
-import { useBooks } from '../lib/queries'
+import { useBookFiles, useBooks } from '../lib/queries'
 import { groupBooks, GROUPINGS, type Grouping, type Shelf } from '../lib/shelves'
 import { useSettings } from '../lib/settings'
 import { useView } from '../lib/view'
 import Bookshelf from './Bookshelf'
 import ContinueReading from './ContinueReading'
 import Cover from './Cover'
+import EpubBadge from './EpubBadge'
 import Rating from './Rating'
 import Welcome from './Welcome'
 
@@ -27,6 +28,13 @@ export default function Library({ onAdd }: Props): ReactNode {
     'status',
     parseGrouping
   )
+  const { data: files = [] } = useBookFiles()
+  const epubIds = new Set(files.map((file) => file.bookId))
+  const [epubChoice, setEpubOnly] = usePersistentState('interleaf.libraryEpubOnly', false, (raw) =>
+    typeof raw === 'boolean' ? raw : null
+  )
+  // With no EPUBs at all there is nothing to narrow to, so the filter steps aside.
+  const epubOnly = epubChoice && epubIds.size > 0
   const query = filter.trim().toLowerCase()
   const shelfLayout = layout === 'shelf'
   const matching = query
@@ -58,6 +66,32 @@ export default function Library({ onAdd }: Props): ReactNode {
           <Segmented label="Group by" options={GROUPINGS} value={grouping} onChange={setGrouping} />
         )}
 
+        {epubIds.size > 0 && (
+          <button
+            type="button"
+            aria-pressed={epubOnly}
+            title={shelfLayout ? 'Fade the books without an EPUB' : 'Show only books with an EPUB'}
+            className={`btn btn-outline gap-1.5 ${epubOnly ? 'border-accent bg-accent-soft text-accent' : ''}`}
+            onClick={() => setEpubOnly(!epubOnly)}
+          >
+            <svg
+              aria-hidden
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
+              <path d="M5 17a3 3 0 0 1 3-3h11" />
+            </svg>
+            EPUBs only
+          </button>
+        )}
+
         <input
           className="field max-w-64"
           placeholder={shelfLayout ? 'Find a book on the shelves…' : 'Filter by title or author…'}
@@ -78,6 +112,8 @@ export default function Library({ onAdd }: Props): ReactNode {
               query={query}
               tools={shelfTools}
               onOpen={openBook}
+              epubIds={epubIds}
+              epubOnly={epubOnly}
             />
           </div>
         </div>
@@ -89,9 +125,17 @@ export default function Library({ onAdd }: Props): ReactNode {
             <p className="py-8 text-center text-ink-muted">
               {query ? `Nothing matches “${filter.trim()}”.` : 'Nothing here yet.'}
             </p>
+          ) : epubOnly && !matching.some((book) => epubIds.has(book.id)) ? (
+            <p className="py-8 text-center text-ink-muted">None of these books has an EPUB.</p>
           ) : (
             groupBooks(matching, grouping).map((shelf) => (
-              <ShelfSection key={shelf.key} shelf={shelf} onOpen={openBook} />
+              <ShelfSection
+                key={shelf.key}
+                shelf={shelf}
+                epubIds={epubIds}
+                epubOnly={epubOnly}
+                onOpen={openBook}
+              />
             ))
           )}
         </>
@@ -146,28 +190,36 @@ function Segmented<T extends string | null>({
 
 function ShelfSection({
   shelf,
+  epubIds,
+  epubOnly,
   onOpen
 }: {
   shelf: Shelf
+  epubIds: Set<number>
+  epubOnly: boolean
   onOpen: (book: Book) => void
 }): ReactNode {
+  const shown = epubOnly ? shelf.books.filter((book) => epubIds.has(book.id)) : shelf.books
+  if (shown.length === 0) return null
   return (
     <section className="mb-9">
       <h2 className="eyebrow mb-3">
-        {shelf.label} · {shelf.books.length}
+        {shelf.label} · {epubOnly ? `${shown.length} of ${shelf.books.length}` : shelf.books.length}
       </h2>
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-x-4 gap-y-6">
-        {shelf.books.map((book) => (
+        {shown.map((book) => (
           <button
             key={book.id}
             type="button"
             onClick={() => onOpen(book)}
             className="group flex flex-col text-left"
           >
-            <div className="transition-transform duration-150 group-hover:-translate-y-1">
+            <div className="relative transition-transform duration-150 group-hover:-translate-y-1">
               <Cover title={book.title} author={book.author} path={book.coverPath} />
+              {epubIds.has(book.id) && <EpubBadge />}
             </div>
+            {epubIds.has(book.id) && <span className="sr-only">Has an EPUB.</span>}
             <span className="mt-2.5 line-clamp-2 text-[13px] font-medium leading-snug">
               {book.title}
             </span>
