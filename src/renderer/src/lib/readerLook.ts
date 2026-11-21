@@ -3,6 +3,7 @@ export type ShownTheme = Exclude<ReaderTheme, 'auto'>
 export type ReaderFont = 'book' | 'serif' | 'sans'
 export type ReaderFlow = 'paginated' | 'scrolled'
 export type PageCount = 'left' | 'position'
+export type ReaderAlign = 'book' | 'left' | 'justify'
 
 export interface ReaderLook {
   theme: ReaderTheme
@@ -14,6 +15,9 @@ export interface ReaderLook {
   // Pages side by side in the paginated layout; a narrow window shows one regardless.
   pages: 1 | 2
   pageCount: PageCount
+  align: ReaderAlign
+  // Space above and below the text, in CSS pixels.
+  margin: number
 }
 
 export const DEFAULT_LOOK: ReaderLook = {
@@ -24,13 +28,16 @@ export const DEFAULT_LOOK: ReaderLook = {
   width: 680,
   flow: 'paginated',
   pages: 2,
-  pageCount: 'left'
+  pageCount: 'left',
+  align: 'book',
+  margin: 40
 }
 
 export const LIMITS = {
   size: { min: 70, max: 300, step: 10 },
   spacing: { min: 1.1, max: 2.2, step: 0.1 },
-  width: { min: 440, max: 1040, step: 60 }
+  width: { min: 440, max: 1040, step: 60 },
+  margin: { min: 0, max: 120, step: 10 }
 } as const
 
 interface Theme {
@@ -93,7 +100,10 @@ export function parseLook(raw: unknown): ReaderLook | null {
     width: clamp(Number(look.width) || DEFAULT_LOOK.width, LIMITS.width),
     flow: look.flow === 'scrolled' ? 'scrolled' : 'paginated',
     pages: look.pages === 1 ? 1 : 2,
-    pageCount: look.pageCount === 'position' ? 'position' : 'left'
+    pageCount: look.pageCount === 'position' ? 'position' : 'left',
+    align: look.align === 'left' || look.align === 'justify' ? look.align : 'book',
+    margin:
+      typeof look.margin === 'number' ? clamp(look.margin, LIMITS.margin) : DEFAULT_LOOK.margin
   }
 }
 
@@ -145,12 +155,17 @@ export function bookCss(look: ReaderLook, shown: ShownTheme): string {
       ? ''
       : `
     body, body *:not(code):not(pre):not(kbd):not(samp) { font-family: ${FONTS[look.font]} !important; }`
+  const align =
+    look.align === 'book'
+      ? ''
+      : `
+    p, li, dd, blockquote { text-align: ${look.align} !important; }`
   return `
     html { color-scheme: ${shown === 'dark' ? 'dark' : 'light'}; background: transparent !important; font-size: ${look.size}% !important; }
     body { background-color: transparent !important; }
     p, li, blockquote, dd, div { line-height: ${look.spacing} !important; }
     pre { white-space: pre-wrap !important; }
-    img, svg, video { max-width: 100%; height: auto; }${recolour}${font}`
+    img, svg, video { max-width: 100%; height: auto; }${recolour}${font}${align}`
 }
 
 // A reflowing book has no fixed pages: print page numbers when it carries them, else count

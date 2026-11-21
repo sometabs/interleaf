@@ -155,6 +155,25 @@ describe('reader look', () => {
 
     expect(css).not.toContain('font-family')
     expect(css).not.toContain('color: #')
+    expect(css).not.toContain('text-align')
+  })
+
+  it('aligns paragraphs only when asked and keeps margins in range', () => {
+    expect(bookCss({ ...DEFAULT_LOOK, align: 'justify' }, 'light')).toContain(
+      'text-align: justify !important'
+    )
+    expect(bookCss({ ...DEFAULT_LOOK, align: 'left' }, 'light')).toContain(
+      'text-align: left !important'
+    )
+    expect(parseLook({ align: 'centre', margin: 'huge' })).toMatchObject({
+      align: 'book',
+      margin: 40
+    })
+    expect(parseLook({ align: 'justify', margin: 0 })).toMatchObject({
+      align: 'justify',
+      margin: 0
+    })
+    expect(parseLook({ margin: 500 })?.margin).toBe(120)
   })
 
   it('recolours text in the dark theme and sets the chosen font', () => {

@@ -1109,7 +1109,7 @@ function applyLook(view: FoliateView, look: ReaderLook, shown: ShownTheme): void
   renderer.setAttribute('flow', look.flow)
   renderer.setAttribute('max-column-count', String(look.pages))
   renderer.setAttribute('max-inline-size', `${look.width}px`)
-  renderer.setAttribute('margin', '40px')
+  renderer.setAttribute('margin', `${look.margin}px`)
   renderer.setAttribute('gap', '6%')
   renderer.setStyles?.(bookCss(look, shown))
 }
@@ -1482,10 +1482,22 @@ function LookPanel({
         onChange={(font) => onChange({ ...look, font })}
       />
 
+      <Segmented
+        legend="Alignment"
+        value={look.align}
+        options={[
+          ['book', 'Book’s own'],
+          ['left', 'Left'],
+          ['justify', 'Justified']
+        ]}
+        onChange={(align) => onChange({ ...look, align })}
+      />
+
       <div className="space-y-2">
         {stepper('size', 'Text size', `${look.size}%`)}
         {stepper('spacing', 'Line spacing', look.spacing.toFixed(1))}
         {stepper('width', 'Text width', `${look.width}`)}
+        {stepper('margin', 'Margins', `${look.margin}`)}
       </div>
 
       <Segmented
