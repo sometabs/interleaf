@@ -301,14 +301,14 @@ describe('advanced recommendations', () => {
     const first = renderApp(<App />, { kind: 'discover' })
     const user = userEvent.setup()
     await openSettings(user)
-    await user.click(screen.getByRole('button', { name: 'Tree' }))
+    await user.click(screen.getByRole('button', { name: 'Columns' }))
     await waitFor(() =>
       expect(getHybridRecommendationTree).toHaveBeenCalledWith({ limit: MIN_SHOWN })
     )
     first.unmount()
     renderApp(<App />, { kind: 'discover' })
     await openSettings(user)
-    expect(screen.getByRole('button', { name: 'Tree', pressed: true })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Columns', pressed: true })).toBeTruthy()
     expect(window.localStorage.getItem('interleaf.recommendationRanking')).toBeNull()
   })
 
@@ -330,8 +330,10 @@ describe('advanced recommendations', () => {
       }
     )
     renderApp(<Discover />)
-    expect(await screen.findByText('Advanced match')).toBeTruthy()
-    expect(screen.queryByText('3% match')).toBeNull()
+    const row = (await screen.findAllByTestId('tree-node'))[0]
+    expect(row.textContent).toContain('Top pick')
+    expect(row.title).toContain('Ranked by Advanced recommendations')
+    expect(row.title).not.toContain('3%')
   })
 
   it('uses the selected book without starting an online search', async () => {

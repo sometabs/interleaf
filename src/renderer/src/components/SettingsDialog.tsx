@@ -98,6 +98,7 @@ export default function SettingsDialog({ collapsed }: { collapsed: boolean }): R
               <Choices
                 label="Discover layout"
                 options={['grid', 'tree']}
+                labels={{ tree: 'Columns' }}
                 value={settings.discoverLayout}
                 onChange={settings.setDiscoverLayout}
               />
@@ -131,14 +132,17 @@ export default function SettingsDialog({ collapsed }: { collapsed: boolean }): R
   )
 }
 
+// Stored values stay as they are, so a renamed option never resets anyone's saved choice.
 function Choices<T extends string>({
   label,
   options,
+  labels,
   value,
   onChange
 }: {
   label: string
   options: T[]
+  labels?: Partial<Record<T, string>>
   value: T
   onChange: (value: T) => void
 }): ReactNode {
@@ -158,7 +162,7 @@ function Choices<T extends string>({
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
-            {option[0].toUpperCase() + option.slice(1)}
+            {labels?.[option] ?? option[0].toUpperCase() + option.slice(1)}
           </button>
         ))}
       </div>

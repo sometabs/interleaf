@@ -34,8 +34,8 @@ reading.
 - Attach an EPUB to a book, or drop one on the window, then read it in Interleaf. Footnotes open in
   a popup, and quotes you save reopen at their place in the book.
 - Order your reading queue, revisit finished books in reading history, and set a yearly reading goal.
-- Discover what to read next from the books you rated highly, as cards or a similarity tree, or
-  find books like a specific title in your library.
+- Discover what to read next from the books you rated highly, as cards or in columns you click
+  through from book to similar book, or find books like a specific title in your library.
 - Import Calibre or Kindle highlights with duplicate detection. Kindle clippings need English headers.
 - Press `Ctrl + K` to search your books, reviews, notes and quotes or run a command.
 

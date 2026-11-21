@@ -1,13 +1,5 @@
 import type { Recommendation, RecommendationNode } from '@shared/api'
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode
-} from 'react'
+import { useState, type ReactNode } from 'react'
 
 import Cover from './Cover'
 import Empty from './Empty'
@@ -27,469 +19,268 @@ interface Handlers {
   savingOlid: string | null
 }
 
-// Laid out with flexbox and 1px rules, so the browser centres each subtree and
-// the connectors follow. No canvas, no measuring.
+interface Column {
+  // The book this column's books are alike to; null for the first column.
+  from: RecommendationNode | null
+  books: RecommendationNode[]
+}
+
+const VISIBLE_COLUMNS = 4
+
+// Click-through columns: choosing a book opens the books like it in the next column, so only
+// the path being explored is ever shown and the tree never needs scrolling sideways.
 export default function RecommendationTree({
   roots,
   onSave,
   onDismiss,
   savingOlid
 }: Props): ReactNode {
-  const scrollerRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<Drag | null>(null)
-  const swallowClickRef = useRef(false)
-  const [dragging, setDragging] = useState(false)
-
-  const stageRef = useRef<HTMLDivElement>(null)
-  const [zoom, setZoom] = useState(1)
-  // The wheel listener is installed once, so the live value lives in a ref and
-  // the state is only for rendering.
-  const zoomRef = useRef(1)
-  const anchorRef = useRef<Anchor | null>(null)
-
-  // Before scaling: a transform does not change `offsetWidth`.
-  const [natural, setNatural] = useState({ width: 0, height: 0 })
-  useLayoutEffect(() => {
-    const stage = stageRef.current
-    if (!stage) return
-    const measure = (): void => setNatural({ width: stage.offsetWidth, height: stage.offsetHeight })
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(stage)
-    return () => observer.disconnect()
-  }, [])
-
-  // Keeps whatever sits under the cursor exactly where it is.
-  function zoomTo(next: number, clientX?: number, clientY?: number): void {
-    const current = zoomRef.current
-    const clamped = clampZoom(next)
-    if (clamped === current) return
-
-    const scroller = scrollerRef.current
-    const stage = stageRef.current
-    if (scroller && stage) {
-      const view = scroller.getBoundingClientRect()
-      const rect = stage.getBoundingClientRect()
-      const x = clientX ?? view.left + view.width / 2
-      const y = clientY ?? view.top + view.height / 2
-      anchorRef.current = {
-        contentX: (x - rect.left) / current,
-        contentY: (y - rect.top) / current,
-        clientX: x,
-        clientY: y
-      }
-    }
-
-    zoomRef.current = clamped
-    setZoom(clamped)
-  }
-
-  // After re-layout but before paint, or the tree visibly jumps. Measured
-  // rather than predicted, so errors cannot accumulate across a wheel burst.
-  useLayoutEffect(() => {
-    const scroller = scrollerRef.current
-    const stage = stageRef.current
-    const anchor = anchorRef.current
-    if (!scroller || !stage || !anchor) return
-    anchorRef.current = null
-
-    const rect = stage.getBoundingClientRect()
-    scroller.scrollLeft += rect.left + anchor.contentX * zoom - anchor.clientX
-    scroller.scrollTop += rect.top + anchor.contentY * zoom - anchor.clientY
-  }, [zoom])
-
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-
-    function onWheel(event: WheelEvent): void {
-      // A bare wheel scrolls; a trackpad pinch arrives as ctrl+wheel.
-      if (!event.ctrlKey && !event.metaKey) return
-
-      // An unhandled ctrl+wheel is Chromium's page zoom. React registers
-      // `onWheel` passively, hence the native listener.
-      event.preventDefault()
-
-      // A sideways wheel is not a zoom gesture.
-      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
-
-      zoomTo(
-        clampZoom(zoomRef.current - wheelPixels(event) * WHEEL_SENSITIVITY),
-        event.clientX,
-        event.clientY
-      )
-    }
-
-    scroller.addEventListener('wheel', onWheel, { passive: false })
-    return () => scroller.removeEventListener('wheel', onWheel)
-    // `zoomTo` reads the live zoom from a ref, so this binds once.
-  }, [])
-
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
-    const scroller = scrollerRef.current
-    swallowClickRef.current = false
-    if (!scroller || event.button !== 0) return
-    if ((event.target as HTMLElement).closest('button, a, input, textarea')) return
-
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startLeft: scroller.scrollLeft,
-      startTop: scroller.scrollTop,
-      moved: false
-    }
-    event.preventDefault()
-  }
-
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
-    const drag = dragRef.current
-    const scroller = scrollerRef.current
-    if (!drag || !scroller || event.pointerId !== drag.pointerId) return
-
-    const dx = event.clientX - drag.startX
-    const dy = event.clientY - drag.startY
-
-    if (!drag.moved) {
-      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
-      drag.moved = true
-      setDragging(true)
-      // Captured only once it is genuinely a drag, so a drag ending over a
-      // button does not press it.
-      scroller.setPointerCapture?.(drag.pointerId)
-    }
-
-    scroller.scrollLeft = drag.startLeft - dx
-    scroller.scrollTop = drag.startTop - dy
-  }
-
-  function onPointerUp(): void {
-    const drag = dragRef.current
-    const scroller = scrollerRef.current
-    if (!drag) return
-
-    if (drag.moved) {
-      swallowClickRef.current = true
-      if (scroller?.hasPointerCapture?.(drag.pointerId)) {
-        scroller.releasePointerCapture(drag.pointerId)
-      }
-    }
-    dragRef.current = null
-    setDragging(false)
-  }
-
-  function onClickCapture(event: ReactMouseEvent<HTMLDivElement>): void {
-    if (!swallowClickRef.current) return
-    swallowClickRef.current = false
-    event.stopPropagation()
-    event.preventDefault()
-  }
+  // Olids rather than nodes: the tree is rebuilt after every save or dismissal.
+  const [chosen, setChosen] = useState<string[]>([])
 
   if (roots.length === 0) {
-    return <Empty title="Nothing to arrange yet">Recommendations appear here as a tree.</Empty>
+    return <Empty title="Nothing to arrange yet">Recommendations appear here in columns.</Empty>
+  }
+
+  const path = resolvePath(roots, chosen)
+  const columns: Column[] = [{ from: null, books: roots }]
+  for (const node of path) {
+    if (node.children.length > 0) columns.push({ from: node, books: node.children })
+  }
+  const start = Math.max(0, columns.length - VISIBLE_COLUMNS)
+
+  function choose(level: number, node: RecommendationNode): void {
+    setChosen([...path.slice(0, level).map((step) => step.olid), node.olid])
   }
 
   return (
-    <div>
-      <div className="mb-3 flex items-center justify-end gap-3">
-        {/* The gesture moved off the bare wheel, so it has to be said once. */}
-        <p className="text-[12px] text-ink-faint">Drag to move · Ctrl + scroll to zoom</p>
-
-        <div
-          role="group"
-          aria-label="Zoom"
-          className="inline-flex items-center rounded-control bg-sunken p-0.5"
+    <div data-testid="tree">
+      {start > 0 && (
+        <nav
+          aria-label="Path so far"
+          className="mb-3 flex flex-wrap items-center gap-1 text-[12px]"
         >
-          <ZoomButton
-            label="Zoom out"
-            disabled={zoom <= MIN_ZOOM}
-            onClick={() => zoomTo(zoom - ZOOM_STEP)}
-          >
-            <path d="M3.5 8h9" />
-          </ZoomButton>
+          <span className="text-ink-faint">Back to</span>
+          {path.slice(0, start).map((step, index) => (
+            <button
+              key={step.olid}
+              type="button"
+              className="max-w-48 truncate rounded-control px-1.5 py-0.5 text-ink-muted hover:bg-hover hover:text-ink"
+              onClick={() => setChosen(path.slice(0, index + 1).map((node) => node.olid))}
+            >
+              {step.title}
+            </button>
+          ))}
+        </nav>
+      )}
 
-          <button
-            type="button"
-            aria-label="Reset zoom"
-            title="Reset zoom"
-            onClick={() => zoomTo(1)}
-            className="min-w-12 px-1 text-[12px] tabular-nums text-ink-muted hover:text-ink"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-
-          <ZoomButton
-            label="Zoom in"
-            disabled={zoom >= MAX_ZOOM}
-            onClick={() => zoomTo(zoom + ZOOM_STEP)}
-          >
-            <path d="M8 3.5v9M3.5 8h9" />
-          </ZoomButton>
-        </div>
+      <div className="grid grid-cols-4 gap-3">
+        {columns.slice(start).map((column, offset) => {
+          const level = start + offset
+          return (
+            <section
+              key={column.from?.olid ?? 'top'}
+              aria-label={column.from ? `Like ${column.from.title}` : 'Closest to your taste'}
+              className={`min-w-0 ${offset > 0 ? 'border-l border-hairline pl-3' : ''}`}
+            >
+              <h2 className="eyebrow mb-2 truncate">
+                {column.from ? (
+                  <>
+                    Like{' '}
+                    <span className="font-medium tracking-normal text-ink-muted normal-case">
+                      {column.from.title}
+                    </span>
+                  </>
+                ) : (
+                  'Closest to your taste'
+                )}
+              </h2>
+              <ul className="space-y-1">
+                {column.books.map((node) => (
+                  <li key={node.olid}>
+                    <NodeRow
+                      node={node}
+                      parent={column.from}
+                      selected={path[level]?.olid === node.olid}
+                      onChoose={() => choose(level, node)}
+                      onSave={onSave}
+                      onDismiss={onDismiss}
+                      savingOlid={savingOlid}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        })}
       </div>
 
-      {/* Capped, so a deep tree never pushes the page around. */}
-      <div
-        ref={scrollerRef}
-        data-testid="tree-canvas"
-        data-dragging={dragging || undefined}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onClickCapture={onClickCapture}
-        className={`flex max-h-[72vh] items-start overflow-auto overscroll-contain ${
-          dragging ? 'cursor-grabbing select-none' : 'cursor-grab'
-        }`}
-      >
-        {/* A transform does not affect layout, so this sizer holds the scaled
-            footprint open and keeps the scrollbars honest. */}
-        <div
-          data-testid="tree-sizer"
-          className="mx-auto transition-none"
-          style={{
-            width: natural.width ? natural.width * zoom : 'max-content',
-            height: natural.height ? natural.height * zoom : undefined
-          }}
-        >
-          {/* `transition-none` because reduced motion forces a 0.01ms
-              transition on everything, and the re-anchor reads back mid-flight. */}
-          <div
-            ref={stageRef}
-            data-testid="tree-stage"
-            style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: '0 0',
-              // Padding, not margin: `offsetHeight` includes it, so the sizer
-              // holds the space open and the hover shadow is not clipped.
-              paddingBottom: BOTTOM_SPACE
-            }}
-            className="flex w-max flex-col items-center gap-14 transition-none"
-          >
-            {roots.map((root, index) => (
-              <section key={root.olid} className="flex flex-col items-center">
-                {/* A root is ranked against the whole taste profile, so it is
-                    descended from no one book. */}
-                <header className="mb-4 text-center">
-                  <p className="eyebrow">
-                    {index === 0 ? 'Closest to your taste' : 'A separate thread'}
-                  </p>
-                </header>
-
-                <Subtree
-                  node={root}
-                  depth={0}
-                  onSave={onSave}
-                  onDismiss={onDismiss}
-                  savingOlid={savingOlid}
-                />
-              </section>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ZoomButton({
-  label,
-  disabled,
-  onClick,
-  children
-}: {
-  label: string
-  disabled: boolean
-  onClick: () => void
-  children: ReactNode
-}): ReactNode {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="flex size-6 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-surface hover:text-ink hover:shadow-card"
-    >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 16 16"
-        className="size-3.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      >
-        {children}
-      </svg>
-    </button>
-  )
-}
-
-const LEVEL_GAP = 32
-
-const BOTTOM_SPACE = 56
-
-const MIN_ZOOM = 0.5
-const MAX_ZOOM = 1.6
-const ZOOM_STEP = 0.1
-
-// One mouse notch is ~100px of delta, so this makes a notch one step.
-const WHEEL_SENSITIVITY = 0.001
-
-function clampZoom(value: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(value * 100) / 100))
-}
-
-// Wheel deltas arrive in pixels, lines or pages depending on the device.
-function wheelPixels(event: WheelEvent): number {
-  if (event.deltaMode === 1) return event.deltaY * 16
-  if (event.deltaMode === 2) return event.deltaY * (event.currentTarget as HTMLElement).clientHeight
-  return event.deltaY
-}
-
-// Under this many pixels a press is still a click, not a drag.
-const DRAG_THRESHOLD = 4
-
-interface Drag {
-  pointerId: number
-  startX: number
-  startY: number
-  startLeft: number
-  startTop: number
-  moved: boolean
-}
-
-interface Anchor {
-  contentX: number
-  contentY: number
-  clientX: number
-  clientY: number
-}
-
-function Subtree({
-  node,
-  depth,
-  onSave,
-  onDismiss,
-  savingOlid
-}: { node: RecommendationNode; depth: number } & Handlers): ReactNode {
-  const children = node.children
-  const lastIndex = children.length - 1
-
-  return (
-    <div className="flex flex-col items-center">
-      <NodeCard
-        node={node}
-        depth={depth}
+      <Details
+        node={path[path.length - 1]}
+        parent={path.length > 1 ? path[path.length - 2] : null}
         onSave={onSave}
         onDismiss={onDismiss}
         savingOlid={savingOlid}
       />
-
-      {children.length > 0 && (
-        <>
-          {/* The stem out of the bottom of this node, meeting the sibling rail. */}
-          <span
-            aria-hidden="true"
-            className="w-px shrink-0 bg-hairline-strong"
-            style={{ height: LEVEL_GAP / 2 }}
-          />
-
-          <div className="flex items-start">
-            {children.map((child, index) => (
-              <div
-                key={child.olid}
-                className="relative flex flex-col items-center px-3"
-                style={{ paddingTop: LEVEL_GAP / 2 }}
-              >
-                {/* The rail spanning the siblings. A lone child needs none: the
-                    drop below already lines up under its parent. */}
-                {children.length > 1 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute top-0 h-px bg-hairline-strong"
-                    style={{
-                      left: index === 0 ? '50%' : 0,
-                      right: index === lastIndex ? '50%' : 0
-                    }}
-                  />
-                )}
-
-                {/* The drop from the rail into this child. */}
-                <span
-                  aria-hidden="true"
-                  className="absolute top-0 left-1/2 w-px -translate-x-1/2 bg-hairline-strong"
-                  style={{ height: LEVEL_GAP / 2 }}
-                />
-
-                {child.similarityToParent !== null && (
-                  <span
-                    data-testid="tree-edge"
-                    title={child.subjects.slice(0, 5).join(' · ') || undefined}
-                    className="absolute top-0.5 left-1/2 -translate-x-1/2 bg-canvas px-1 text-[10px] tabular-nums text-ink-faint"
-                  >
-                    {percent(child.similarityToParent)}
-                  </span>
-                )}
-
-                <Subtree
-                  node={child}
-                  depth={depth + 1}
-                  onSave={onSave}
-                  onDismiss={onDismiss}
-                  savingOlid={savingOlid}
-                />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 }
 
-function NodeCard({
+// The last book chosen, in full, so a decision can be made without leaving Discover.
+function Details({
   node,
-  depth,
+  parent,
   onSave,
   onDismiss,
   savingOlid
-}: { node: RecommendationNode; depth: number } & Handlers): ReactNode {
+}: { node: RecommendationNode; parent: RecommendationNode | null } & Handlers): ReactNode {
+  const facts = [node.author, node.publishedYear, node.pageCount && `${node.pageCount} pages`]
+    .filter(Boolean)
+    .join(' · ')
+  const likeness =
+    parent && node.similarityToParent !== null
+      ? `${percent(node.similarityToParent)} alike to ${parent.title}`
+      : 'Top pick'
+  const taste =
+    node.scoreKind === 'fusion'
+      ? 'ranked by Advanced recommendations'
+      : `${percent(node.score)} match with your taste`
   const saving = savingOlid === node.olid
+
+  return (
+    <section
+      aria-label={`About ${node.title}`}
+      className="mt-6 flex gap-5 border-t border-hairline pt-5"
+    >
+      <span className="w-28 shrink-0">
+        <Cover title={node.title} author={node.author} coverId={node.coverId} size="lg" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-[18px] leading-snug font-medium">{node.title}</h2>
+        {facts && <p className="mt-0.5 text-[13px] text-ink-muted">{facts}</p>}
+        <p className="mt-1.5 text-[12px] text-ink-faint">
+          {likeness} · {taste}
+        </p>
+        {node.description && (
+          <p className="mt-3 line-clamp-5 max-w-prose text-[13px] leading-relaxed whitespace-pre-line text-ink-muted">
+            {node.description}
+          </p>
+        )}
+        {node.subjects.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {node.subjects.slice(0, 6).map((subject) => (
+              <span key={subject} className="chip text-[11px]">
+                {subject}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={saving}
+            onClick={() => onSave(node)}
+          >
+            {saving ? 'Adding…' : 'Want to read'}
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => onDismiss(node.olid)}>
+            Not for me
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// The first book is open from the start; a step that vanished after a dismissal ends the path.
+function resolvePath(roots: RecommendationNode[], chosen: string[]): RecommendationNode[] {
+  const path: RecommendationNode[] = []
+  let options = roots
+  for (const olid of chosen.length > 0 ? chosen : [roots[0].olid]) {
+    const next = options.find((node) => node.olid === olid)
+    if (!next) break
+    path.push(next)
+    options = next.children
+  }
+  if (path.length === 0) path.push(roots[0])
+  return path
+}
+
+function NodeRow({
+  node,
+  parent,
+  selected,
+  onChoose,
+  onSave,
+  onDismiss,
+  savingOlid
+}: {
+  node: RecommendationNode
+  parent: RecommendationNode | null
+  selected: boolean
+  onChoose: () => void
+} & Handlers): ReactNode {
+  const saving = savingOlid === node.olid
+  const taste =
+    node.scoreKind === 'fusion'
+      ? 'Ranked by Advanced recommendations'
+      : `${percent(node.score)} match with your taste`
+  const tooltip = [taste, node.subjects.slice(0, 5).join(' · ')].filter(Boolean).join('\n')
+  const opens = node.children.length > 0
+
   return (
     <article
       data-testid="tree-node"
-      data-depth={depth}
-      className="card flex w-36 flex-col items-center gap-1 p-2.5 text-center transition-shadow hover:shadow-raised"
+      data-depth={node.depth}
+      title={tooltip}
+      className={`group relative flex items-center rounded-control border transition-colors ${
+        selected ? 'border-accent/50 bg-accent-soft' : 'border-transparent hover:bg-hover'
+      }`}
     >
-      <span className="w-10">
-        <Cover title={node.title} author={node.author} coverId={node.coverId} size="sm" />
-      </span>
-
-      <h3 className="line-clamp-2 text-[12px] leading-snug font-medium">{node.title}</h3>
-      {node.author && <p className="w-full truncate text-[11px] text-ink-muted">{node.author}</p>}
-
-      {/* Only the leading subject: a node is 144px wide, and the next few are
-          on the edge tooltip. A chip row here would widen every node. */}
-      {node.subjects[0] && (
-        <span className="chip max-w-full truncate text-[10px]">{node.subjects[0]}</span>
-      )}
+      <button
+        type="button"
+        aria-pressed={selected}
+        onClick={onChoose}
+        className="flex min-w-0 flex-1 items-start gap-2.5 p-2 text-left"
+      >
+        <span className="w-8 shrink-0">
+          <Cover title={node.title} author={node.author} coverId={node.coverId} size="sm" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 text-[13px] leading-tight font-medium">{node.title}</span>
+          {node.author && (
+            <span className="block truncate text-[11px] text-ink-muted">{node.author}</span>
+          )}
+          <span className="mt-1 flex items-center justify-between gap-1.5">
+            {node.subjects[0] ? (
+              <span className="chip min-w-0 truncate text-[10px]">{node.subjects[0]}</span>
+            ) : (
+              <span />
+            )}
+            <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-ink-faint">
+              {parent && node.similarityToParent !== null ? (
+                <span title={`How alike it is to ${parent.title}`}>
+                  <span data-testid="tree-edge">{percent(node.similarityToParent)}</span> alike
+                </span>
+              ) : (
+                'Top pick'
+              )}
+              <span aria-hidden="true" className="w-2 text-[13px]">
+                {opens ? '›' : ''}
+              </span>
+            </span>
+          </span>
+        </span>
+      </button>
 
       <span
-        className="text-[10px] tabular-nums text-ink-faint"
-        title={
-          node.scoreKind === 'fusion'
-            ? 'Combined keyword and meaning-based ranking, not a similarity percentage'
-            : undefined
-        }
+        className={`absolute top-1.5 right-1.5 flex items-center gap-1 transition-opacity ${
+          saving
+            ? 'opacity-100'
+            : 'opacity-0 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100'
+        }`}
       >
-        {node.scoreKind === 'fusion' ? 'Advanced match' : `${percent(node.score)} match`}
-      </span>
-
-      {/* Icon buttons, so a node stays narrow enough for a wide tree to fit. */}
-      <div className="flex h-7 items-center gap-1 pt-0.5">
         {saving ? (
           <Spinner label={`Adding ${node.title}`} className="size-4" />
         ) : (
@@ -510,7 +301,7 @@ function NodeCard({
         >
           <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
         </IconButton>
-      </div>
+      </span>
     </article>
   )
 }
@@ -534,7 +325,7 @@ function IconButton({
       aria-label={label}
       title={tooltip}
       onClick={onClick}
-      className={`flex size-6 items-center justify-center rounded-control text-ink-faint transition-colors ${className}`}
+      className={`flex size-6 items-center justify-center rounded-control bg-surface text-ink-faint transition-colors ${className}`}
     >
       <svg
         aria-hidden="true"

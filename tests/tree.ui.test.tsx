@@ -1,5 +1,5 @@
 ﻿import type { RecommendationNode } from '@shared/api'
-import { act, fireEvent, screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -39,393 +39,128 @@ const tree = [
   ])
 ]
 
+function show(roots = tree, onSave = vi.fn()): ReturnType<typeof userEvent.setup> {
+  installBridge()
+  renderApp(
+    <RecommendationTree roots={roots} onSave={onSave} onDismiss={() => {}} savingOlid={null} />
+  )
+  return userEvent.setup()
+}
+
+const titles = (column: string): string[] =>
+  Array.from(
+    screen.getByRole('region', { name: column }).querySelectorAll('[data-testid=tree-node]'),
+    (row) => row.querySelector('.font-medium')?.textContent ?? ''
+  )
+
 describe('RecommendationTree', () => {
-  it('renders every node in the tree', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
+  it('opens on the top pick, with the books like it beside it', () => {
+    show()
 
-    expect(screen.getAllByTestId('tree-node')).toHaveLength(4)
+    expect(titles('Closest to your taste')).toEqual(['Book root'])
+    expect(titles('Like Book root')).toEqual(['Book child-a', 'Book child-b'])
   })
 
-  it('nests deeper nodes inside their parent', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
+  it('opens the books like a book in the next column when it is chosen', async () => {
+    const user = show()
 
-    const nodes = screen.getAllByTestId('tree-node')
-    const root = nodes.find((n) => n.textContent?.includes('Book root'))!
-    const grandchild = nodes.find((n) => n.textContent?.includes('Book grandchild'))!
+    await user.click(screen.getByRole('button', { name: /^Book child-a/, pressed: false }))
 
-    expect(root.parentElement?.contains(grandchild)).toBe(true)
-    expect(grandchild.dataset.depth).toBe('2')
+    expect(titles('Like Book child-a')).toEqual(['Book grandchild'])
+    expect(screen.getByRole('button', { name: /^Book child-a/, pressed: true })).toBeDefined()
   })
 
-  it('draws one edge per node below a root', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
+  it('closes the deeper column when another branch is chosen', async () => {
+    const user = show()
+    await user.click(screen.getByRole('button', { name: /^Book child-a/ }))
 
-    expect(screen.getAllByTestId('tree-edge')).toHaveLength(3)
+    await user.click(screen.getByRole('button', { name: /^Book child-b/ }))
+
+    expect(screen.queryByRole('region', { name: 'Like Book child-a' })).toBeNull()
   })
 
-  it('labels the first root as the closest match', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
+  // One meaning per number: likeness to the book chosen in the column before.
+  it('calls the first book the top pick and gives every other book its likeness', () => {
+    show()
+
+    const rows = screen.getAllByTestId('tree-node')
+    const root = rows.find((row) => row.textContent?.includes('Book root'))!
+    expect(root.textContent).toContain('Top pick')
+    expect(root.title).toContain('90% match with your taste')
+    expect(rows.find((row) => row.textContent?.includes('Book child-a'))?.textContent).toContain(
+      '80% alike'
     )
-
-    expect(screen.getByText('Closest to your taste')).toBeDefined()
-  })
-
-  it('weights each edge with the resemblance to the node above', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-
-    const weights = screen.getAllByTestId('tree-edge').map((edge) => edge.textContent)
-    expect(weights).toEqual(expect.arrayContaining(['80%', '60%', '55%']))
   })
 
   it('never claims a root grew from one book, because it did not', () => {
-    // A root is ranked against the whole profile, not one book.
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
+    show()
 
     expect(screen.queryByText(/Grown from/)).toBeNull()
     expect(screen.queryByText(/The Dispossessed/)).toBeNull()
-    expect(screen.getByText('Closest to your taste')).toBeDefined()
   })
 
-  it('acts on the node whose button was pressed', async () => {
-    const user = userEvent.setup()
+  // Four columns fit; deeper, the first ones step aside and a trail leads back.
+  it('keeps four columns in view and offers a way back', async () => {
+    let chain = node('d5', 0.3, 5, [], 0.7)
+    for (let depth = 4; depth >= 1; depth--) chain = node(`d${depth}`, 0.3, depth, [chain], 0.7)
+    const user = show([node('d0', 0.9, 0, [chain])])
+
+    for (const depth of [1, 2, 3, 4])
+      await user.click(screen.getByRole('button', { name: new RegExp(`^Book d${depth}`) }))
+
+    const columns = screen
+      .getAllByRole('region')
+      .filter((region) => !region.getAttribute('aria-label')?.startsWith('About'))
+    expect(columns).toHaveLength(4)
+    expect(screen.queryByRole('region', { name: 'Closest to your taste' })).toBeNull()
+    const trail = screen.getByRole('navigation', { name: 'Path so far' })
+    await user.click(within(trail).getByRole('button', { name: 'Book d0' }))
+
+    expect(screen.getByRole('region', { name: 'Closest to your taste' })).toBeDefined()
+  })
+
+  it('shows the last book chosen in full below the columns', async () => {
+    const user = show()
+    await user.click(screen.getByRole('button', { name: /^Book child-a/ }))
+
+    const about = screen.getByRole('region', { name: 'About Book child-a' })
+    expect(about.textContent).toContain('80% alike to Book root')
+    expect(about.textContent).toContain('70% match with your taste')
+    expect(within(about).getByText('Science fiction')).toBeDefined()
+  })
+
+  it('adds or turns down the book shown below from its own buttons', async () => {
     const onSave = vi.fn()
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={onSave} onDismiss={() => {}} savingOlid={null} />
-    )
+    const user = show(tree, onSave)
+
+    const about = screen.getByRole('region', { name: 'About Book root' })
+    await user.click(within(about).getByRole('button', { name: 'Want to read' }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'root' }))
+  })
+
+  it('acts on the book whose button was pressed', async () => {
+    const onSave = vi.fn()
+    const user = show(tree, onSave)
+    await user.click(screen.getByRole('button', { name: /^Book child-a/ }))
 
     await user.click(screen.getByLabelText('Want to read Book grandchild'))
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'grandchild' }))
   })
 
+  it('reaches a row’s actions from the keyboard', async () => {
+    const user = show()
+
+    await user.tab()
+    await user.tab()
+
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Want to read Book root')
+  })
+
   it('says so when there is nothing to arrange', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={[]} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
+    show([])
 
     expect(screen.getByText('Nothing to arrange yet')).toBeDefined()
-  })
-})
-
-function scaleOf(): string {
-  const transform = screen.getByTestId('tree-stage').style.transform
-  const match = /scale\(([^)]+)\)/.exec(transform)
-  if (!match) throw new Error(`No scale in transform: "${transform}"`)
-  return match[1]
-}
-
-describe('Zooming the tree', () => {
-  function open(): void {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-  }
-
-  it('starts at life size', () => {
-    open()
-    expect(screen.getByLabelText('Reset zoom').textContent).toBe('100%')
-    expect(scaleOf()).toBe('1')
-  })
-
-  it('scales the whole tree at once, so the connectors keep up', async () => {
-    const user = userEvent.setup()
-    open()
-
-    await user.click(screen.getByLabelText('Zoom in'))
-
-    // One transform on one element, so nothing can drift out of alignment.
-    expect(scaleOf()).toBe('1.1')
-    expect(screen.getByLabelText('Reset zoom').textContent).toBe('110%')
-    expect(screen.getAllByTestId('tree-node')).toHaveLength(4)
-  })
-
-  it('zooms out as well as in', async () => {
-    const user = userEvent.setup()
-    open()
-
-    await user.click(screen.getByLabelText('Zoom out'))
-    await user.click(screen.getByLabelText('Zoom out'))
-
-    expect(scaleOf()).toBe('0.8')
-  })
-
-  it('goes back to life size in one press', async () => {
-    const user = userEvent.setup()
-    open()
-
-    await user.click(screen.getByLabelText('Zoom in'))
-    await user.click(screen.getByLabelText('Zoom in'))
-    await user.click(screen.getByLabelText('Reset zoom'))
-
-    expect(scaleOf()).toBe('1')
-  })
-
-  it('refuses to shrink or grow past its limits', async () => {
-    const user = userEvent.setup()
-    open()
-
-    for (let i = 0; i < 20; i++) await user.click(screen.getByLabelText('Zoom out'))
-    expect(scaleOf()).toBe('0.5')
-    expect((screen.getByLabelText('Zoom out') as HTMLButtonElement).disabled).toBe(true)
-
-    for (let i = 0; i < 30; i++) await user.click(screen.getByLabelText('Zoom in'))
-    expect(scaleOf()).toBe('1.6')
-    expect((screen.getByLabelText('Zoom in') as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  // Dispatched natively because the listener is non-passive, not a React one.
-  function wheel(init: {
-    deltaY?: number
-    deltaX?: number
-    ctrlKey?: boolean
-    metaKey?: boolean
-  }): Event {
-    const event = new Event('wheel', { bubbles: true, cancelable: true })
-    Object.assign(event, {
-      deltaX: 0,
-      deltaY: 0,
-      deltaMode: 0,
-      ctrlKey: false,
-      metaKey: false,
-      clientX: 400,
-      ...init
-    })
-    act(() => {
-      canvas().dispatchEvent(event)
-    })
-    return event
-  }
-
-  it('zooms in on ctrl+wheel up and out on ctrl+wheel down', () => {
-    open()
-
-    // One notch of an ordinary mouse is ~100px of delta.
-    expect(wheel({ deltaY: -100, ctrlKey: true }).defaultPrevented).toBe(true)
-    expect(scaleOf()).toBe('1.1')
-
-    wheel({ deltaY: 200, ctrlKey: true })
-    expect(scaleOf()).toBe('0.9')
-  })
-
-  // A bare wheel belongs to the scroller, or a tall tree cannot be scrolled.
-  it('leaves a bare wheel to scroll the tree', () => {
-    open()
-
-    const event = wheel({ deltaY: -100 })
-
-    expect(event.defaultPrevented).toBe(false)
-    expect(scaleOf()).toBe('1')
-  })
-
-  it('scrolls on a bare wheel even where it could have zoomed', () => {
-    open()
-    for (let i = 0; i < 5; i++) wheel({ deltaY: 100 })
-
-    expect(scaleOf()).toBe('1')
-  })
-
-  it('zooms on meta+wheel as well', () => {
-    open()
-
-    wheel({ deltaY: -100, metaKey: true })
-    expect(scaleOf()).toBe('1.1')
-  })
-
-  it('swallows ctrl+wheel at the limit, where the window would zoom instead', () => {
-    open()
-    for (let i = 0; i < 10; i++) wheel({ deltaY: -100, ctrlKey: true })
-    expect(scaleOf()).toBe('1.6')
-
-    expect(wheel({ deltaY: -100, ctrlKey: true }).defaultPrevented).toBe(true)
-    expect(scaleOf()).toBe('1.6')
-  })
-
-  it('keeps zooming away from a limit', () => {
-    open()
-    for (let i = 0; i < 10; i++) wheel({ deltaY: 100, ctrlKey: true })
-    expect(scaleOf()).toBe('0.5')
-
-    wheel({ deltaY: -100, ctrlKey: true })
-    expect(scaleOf()).toBe('0.6')
-  })
-
-  it('leaves a sideways ctrl+wheel alone, but never lets the window have it', () => {
-    open()
-
-    // A full vertical notch, so only the larger sideways component blocks it.
-    const event = wheel({ deltaX: -400, deltaY: -100, ctrlKey: true })
-
-    expect(scaleOf()).toBe('1')
-    expect(event.defaultPrevented).toBe(true)
-  })
-
-  it('reads a wheel that reports lines rather than pixels', () => {
-    open()
-    const event = new Event('wheel', { bubbles: true, cancelable: true })
-    // deltaMode 1 is lines, so 3 means a notch rather than three pixels.
-    Object.assign(event, { deltaX: 0, deltaY: -3, deltaMode: 1, ctrlKey: true, clientX: 400 })
-    act(() => {
-      canvas().dispatchEvent(event)
-    })
-
-    expect(scaleOf()).toBe('1.05')
-  })
-
-  // Inside the stage, not a margin: the scroll sizer is computed from
-  // `offsetHeight`, which a margin is not part of.
-  it('leaves room under the last row of nodes', () => {
-    open()
-
-    const stage = screen.getByTestId('tree-stage')
-    expect(stage.style.paddingBottom).toBe('56px')
-    expect(stage.style.marginBottom).toBe('')
-  })
-})
-
-// jsdom does no layout, so `scrollLeft` is always 0 and writes are discarded.
-function trackScroll(el: HTMLElement, axis: 'scrollLeft' | 'scrollTop' = 'scrollLeft'): void {
-  let position = 0
-  Object.defineProperty(el, axis, {
-    configurable: true,
-    get: () => position,
-    set: (value: number) => {
-      position = value
-    }
-  })
-}
-
-function canvas(): HTMLElement {
-  return screen.getByTestId('tree-canvas')
-}
-
-describe('Dragging the tree around', () => {
-  it('pulls the tree sideways, following the cursor', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-
-    fireEvent.pointerDown(canvas(), { pointerId: 1, button: 0, clientX: 300, clientY: 80 })
-    fireEvent.pointerMove(canvas(), { pointerId: 1, clientX: 220, clientY: 80 })
-
-    expect(canvas().scrollLeft).toBe(80)
-  })
-
-  it('pulls the tree up and down inside its own viewport', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-    trackScroll(canvas(), 'scrollTop')
-
-    fireEvent.pointerDown(canvas(), { pointerId: 1, button: 0, clientX: 300, clientY: 400 })
-    fireEvent.pointerMove(canvas(), { pointerId: 1, clientX: 300, clientY: 250 })
-
-    // Both axes belong to the tree's scroller, or zooming shakes the page.
-    expect(canvas().scrollTop).toBe(150)
-    expect(canvas().scrollLeft).toBe(0)
-  })
-
-  it('ignores a tremor too small to be a drag', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-
-    fireEvent.pointerDown(canvas(), { pointerId: 1, button: 0, clientX: 300, clientY: 80 })
-    fireEvent.pointerMove(canvas(), { pointerId: 1, clientX: 298, clientY: 82 })
-
-    expect(canvas().scrollLeft).toBe(0)
-    expect(canvas().dataset.dragging).toBeUndefined()
-  })
-
-  it('says when it is being dragged, and stops saying so on release', () => {
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-
-    fireEvent.pointerDown(canvas(), { pointerId: 1, button: 0, clientX: 300, clientY: 80 })
-    fireEvent.pointerMove(canvas(), { pointerId: 1, clientX: 200, clientY: 80 })
-    expect(canvas().dataset.dragging).toBe('true')
-
-    fireEvent.pointerUp(canvas(), { pointerId: 1 })
-    expect(canvas().dataset.dragging).toBeUndefined()
-  })
-
-  it('leaves a press on a button alone', async () => {
-    const user = userEvent.setup()
-    const onSave = vi.fn()
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={onSave} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-
-    // The whole tree is draggable, so buttons inside it must still click.
-    await user.click(screen.getByLabelText('Want to read Book root'))
-
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'root' }))
-    expect(canvas().scrollLeft).toBe(0)
-  })
-
-  it('drags by the same distance whatever the zoom', async () => {
-    const user = userEvent.setup()
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={() => {}} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-
-    // `scrollLeft` is in unscaled pixels, so 80px of pointer is always 80px.
-    await user.click(screen.getByLabelText('Zoom in'))
-    fireEvent.pointerDown(canvas(), { pointerId: 1, button: 0, clientX: 300, clientY: 80 })
-    fireEvent.pointerMove(canvas(), { pointerId: 1, clientX: 220, clientY: 80 })
-
-    expect(canvas().scrollLeft).toBe(80)
-  })
-
-  it('does not press a button the drag happened to finish on', () => {
-    const onSave = vi.fn()
-    installBridge()
-    renderApp(
-      <RecommendationTree roots={tree} onSave={onSave} onDismiss={() => {}} savingOlid={null} />
-    )
-    trackScroll(canvas())
-    const button = screen.getByLabelText('Want to read Book root')
-
-    fireEvent.pointerDown(canvas(), { pointerId: 1, button: 0, clientX: 300, clientY: 80 })
-    fireEvent.pointerMove(canvas(), { pointerId: 1, clientX: 180, clientY: 80 })
-    fireEvent.pointerUp(canvas(), { pointerId: 1 })
-    fireEvent.click(button)
-
-    expect(onSave).not.toHaveBeenCalled()
-
-    fireEvent.click(button)
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ olid: 'root' }))
   })
 })
