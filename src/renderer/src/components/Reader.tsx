@@ -76,7 +76,6 @@ interface Relocation {
   range?: Range
   section?: { current: number }
   tocItem?: { label?: string } | null
-  pageItem?: { label?: string } | null
 }
 
 interface Page {
@@ -231,7 +230,6 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const [place, setPlace] = useState({
     fraction: 0,
     chapter: '',
-    printed: null as string | null,
     screen: 0,
     screens: 0,
     columns: 1
@@ -409,7 +407,6 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       setPlace({
         fraction: detail.fraction ?? 0,
         chapter: detail.tocItem?.label?.trim() ?? '',
-        printed: detail.pageItem?.label ?? null,
         screen: renderer.page ?? 0,
         screens: renderer.pages ?? 0,
         columns: renderer.heads?.length ?? 1
@@ -1039,7 +1036,6 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
           }`}
         >
           {pageLabel(
-            place.printed,
             place.screen,
             place.screens,
             place.columns,

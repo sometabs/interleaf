@@ -168,17 +168,15 @@ export function bookCss(look: ReaderLook, shown: ShownTheme): string {
     img, svg, video { max-width: 100%; height: auto; }${recolour}${font}${align}`
 }
 
-// A reflowing book has no fixed pages: print page numbers when it carries them, else count
-// within the chapter, either what is left or where you are.
+// A reflowing book has no fixed pages: count screens within the chapter, either what is left
+// or where you are.
 export function pageLabel(
-  printed: string | null,
   screen: number,
   screens: number,
   columns: number,
   scrolled: boolean,
   count: PageCount = 'left'
 ): string {
-  if (printed?.trim()) return `Page ${printed.trim()}`
   // The paginator pads each chapter with a blank screen at both ends.
   const content = screens - 2
   if (scrolled || content <= 0) return ''

@@ -211,28 +211,23 @@ describe('reader look', () => {
 })
 
 describe('page label', () => {
-  it('uses the print page number when the book has one', () => {
-    expect(pageLabel(' 42 ', 1, 10, 2, false)).toBe('Page 42')
-  })
-
   // Ten screens include a blank one at each end, so eight hold text.
   it('counts the pages left in the chapter, two per screen side by side', () => {
-    expect(pageLabel(null, 5, 10, 1, false)).toBe('3 pages left')
-    expect(pageLabel(null, 5, 10, 2, false)).toBe('6 pages left')
-    expect(pageLabel(null, 7, 10, 1, false)).toBe('1 page left')
-    expect(pageLabel(null, 8, 10, 2, false)).toBe('Last page')
+    expect(pageLabel(5, 10, 1, false)).toBe('3 pages left')
+    expect(pageLabel(5, 10, 2, false)).toBe('6 pages left')
+    expect(pageLabel(7, 10, 1, false)).toBe('1 page left')
+    expect(pageLabel(8, 10, 2, false)).toBe('Last page')
   })
 
   it('can show where you are in the chapter instead', () => {
-    expect(pageLabel(null, 5, 10, 1, false, 'position')).toBe('5 / 8')
-    expect(pageLabel(null, 1, 10, 2, false, 'position')).toBe('1 / 16')
-    expect(pageLabel(null, 8, 10, 2, false, 'position')).toBe('15 / 16')
-    expect(pageLabel(' 42 ', 5, 10, 1, false, 'position')).toBe('Page 42')
+    expect(pageLabel(5, 10, 1, false, 'position')).toBe('5 / 8')
+    expect(pageLabel(1, 10, 2, false, 'position')).toBe('1 / 16')
+    expect(pageLabel(8, 10, 2, false, 'position')).toBe('15 / 16')
   })
 
   it('shows nothing while scrolling or before the chapter is laid out', () => {
-    expect(pageLabel(null, 3, 10, 1, true)).toBe('')
-    expect(pageLabel(null, 0, 0, 1, false)).toBe('')
+    expect(pageLabel(3, 10, 1, true)).toBe('')
+    expect(pageLabel(0, 0, 1, false)).toBe('')
   })
 })
 
