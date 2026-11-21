@@ -28,7 +28,7 @@ export const DEFAULT_LOOK: ReaderLook = {
 }
 
 export const LIMITS = {
-  size: { min: 70, max: 200, step: 10 },
+  size: { min: 70, max: 300, step: 10 },
   spacing: { min: 1.1, max: 2.2, step: 0.1 },
   width: { min: 440, max: 1040, step: 60 }
 } as const
@@ -113,6 +113,22 @@ export function step(look: ReaderLook, key: keyof typeof LIMITS, direction: 1 | 
   const limits = LIMITS[key]
   const next = Math.round((look[key] + direction * limits.step) * 100) / 100
   return { ...look, [key]: clamp(next, limits) }
+}
+
+// The widest text width that still changes the page: foliate fits the pages between 6% gaps.
+export function widthRoom(look: ReaderLook, area: { width: number; height: number }): number {
+  if (area.width <= 0) return Infinity
+  const spread = area.height > area.width ? 1 : look.pages
+  if (look.flow === 'scrolled') return area.width * (spread === 2 ? 0.88 : 0.94)
+  return (area.width * 0.94) / spread
+}
+
+// Steps below the room, so a width the window had already capped narrows on the first press.
+export function narrower(look: ReaderLook, room: number): ReaderLook {
+  const { min, step: by } = LIMITS.width
+  const fits = min + (Math.ceil((room - min) / by) - 1) * by
+  const next = step(look, 'width', -1).width
+  return { ...look, width: Math.max(min, Math.min(next, fits)) }
 }
 
 // Light keeps the book's own colours; sepia and dark recolour text so it stays readable.

@@ -10,10 +10,12 @@ import {
   DEFAULT_LOOK,
   layoutOf,
   LIMITS,
+  narrower,
   pageLabel,
   parseLook,
   shownTheme,
   step,
+  widthRoom,
   withLayout
 } from '../src/renderer/src/lib/readerLook'
 import { makeBook } from './helpers/render'
@@ -129,6 +131,23 @@ describe('reader look', () => {
 
     expect(step(smallest, 'size', -1).size).toBe(LIMITS.size.min)
     expect(step(DEFAULT_LOOK, 'spacing', 1).spacing).toBe(1.6)
+  })
+
+  it('knows when a wider text width stops changing the page', () => {
+    const wide = { width: 1700, height: 900 }
+
+    expect(widthRoom(DEFAULT_LOOK, wide)).toBeCloseTo(799)
+    expect(widthRoom({ ...DEFAULT_LOOK, pages: 1 }, wide)).toBeCloseTo(1598)
+    expect(widthRoom(DEFAULT_LOOK, { width: 900, height: 1200 })).toBeCloseTo(846)
+    expect(widthRoom({ ...DEFAULT_LOOK, flow: 'scrolled' }, wide)).toBeCloseTo(1496)
+    expect(widthRoom(DEFAULT_LOOK, { width: 0, height: 0 })).toBe(Infinity)
+  })
+
+  it('narrows a width the window had capped on the first press', () => {
+    expect(narrower({ ...DEFAULT_LOOK, width: 1040 }, 799).width).toBe(740)
+    expect(narrower({ ...DEFAULT_LOOK, width: 680 }, 799).width).toBe(620)
+    expect(narrower({ ...DEFAULT_LOOK, width: 680 }, Infinity).width).toBe(620)
+    expect(narrower({ ...DEFAULT_LOOK, width: 440 }, 300).width).toBe(440)
   })
 
   it('keeps the book’s own colours and fonts in the light theme', () => {

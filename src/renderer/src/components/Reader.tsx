@@ -39,12 +39,14 @@ import {
   DEFAULT_LOOK,
   layoutOf,
   LIMITS,
+  narrower,
   pageLabel,
   parseLook,
   step,
   shownTheme,
   THEME_CHOICES,
   THEMES,
+  widthRoom,
   withLayout,
   type ReaderLook,
   type ShownTheme
@@ -222,6 +224,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<FoliateView | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const [area, setArea] = useState({ width: 0, height: 0 })
   const [problem, setProblem] = useState('')
   const [toc, setToc] = useState<TocItem[]>([])
   const [place, setPlace] = useState({
@@ -337,6 +340,16 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   useLayoutEffect(() => {
     handlers.current = { back, dismissOverlay, flushPosition, toggleBookmark, turn, wake }
   })
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() =>
+      setArea({ width: host.clientWidth, height: host.clientHeight })
+    )
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const host = hostRef.current
@@ -931,7 +944,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                 onRemove={(bookmark) => removeBookmark.mutate(bookmark.id, { onError: fail })}
               />
             )}
-            {panel === 'look' && <LookPanel look={look} onChange={setLook} />}
+            {panel === 'look' && (
+              <LookPanel look={look} room={widthRoom(look, area)} onChange={setLook} />
+            )}
           </aside>
         )}
 
@@ -1349,11 +1364,16 @@ function Highlights({
 
 function LookPanel({
   look,
+  room,
   onChange
 }: {
   look: ReaderLook
+  // The widest text width the window can show; wider changes nothing.
+  room: number
   onChange: (next: ReaderLook) => void
 }): ReactNode {
+  const most = (key: keyof typeof LIMITS): number =>
+    key === 'width' ? Math.min(LIMITS.width.max, room) : LIMITS[key].max
   const stepper = (key: keyof typeof LIMITS, label: string, shown: string): ReactNode => (
     <div className="flex items-center justify-between">
       <span className="text-[13px]">{label}</span>
@@ -1363,7 +1383,7 @@ function LookPanel({
           aria-label={`Decrease ${label.toLowerCase()}`}
           className="btn btn-ghost w-8 justify-center"
           disabled={look[key] <= LIMITS[key].min}
-          onClick={() => onChange(step(look, key, -1))}
+          onClick={() => onChange(key === 'width' ? narrower(look, room) : step(look, key, -1))}
         >
           −
         </button>
@@ -1372,7 +1392,7 @@ function LookPanel({
           type="button"
           aria-label={`Increase ${label.toLowerCase()}`}
           className="btn btn-ghost w-8 justify-center"
-          disabled={look[key] >= LIMITS[key].max}
+          disabled={look[key] >= most(key)}
           onClick={() => onChange(step(look, key, 1))}
         >
           +
