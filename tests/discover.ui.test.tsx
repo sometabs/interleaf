@@ -84,6 +84,16 @@ describe('what the screen asks for', () => {
   })
 })
 
+describe('taste match on the cards', () => {
+  it('says how well each card fits your taste', async () => {
+    show()
+
+    expect((await card('The Left Hand of Darkness')).closest('article')?.textContent).toContain(
+      '50% match with your taste'
+    )
+  })
+})
+
 describe('author filter removal', () => {
   it('does not offer an author scope', async () => {
     show()
@@ -407,6 +417,14 @@ describe('books like one book', () => {
     open()
     await card('Solaris')
     expect(screen.queryByText(/Because you liked/)).toBeNull()
+  })
+
+  // The score measures the one book here, and a grid has no way to show that relation.
+  it('leaves out the taste match', async () => {
+    open()
+    expect((await card('Solaris')).closest('article')?.textContent).not.toContain(
+      'match with your taste'
+    )
   })
 
   it('goes back to the whole shelf', async () => {

@@ -173,6 +173,7 @@ export default function Discover(): ReactNode {
       ) : layout === 'tree' ? (
         <RecommendationTree
           roots={tree}
+          rankedAgainst={likeBook?.title ?? null}
           savingOlid={saving}
           onSave={saveOne}
           onDismiss={dismissOne}
@@ -186,6 +187,13 @@ export default function Discover(): ReactNode {
               <div className="flex min-w-0 flex-col">
                 <h3 className="text-[14px] leading-snug">{rec.title}</h3>
                 {rec.author && <p className="text-[12px] text-ink-muted">{rec.author}</p>}
+
+                {/* Only a taste match: a grid shows no relations, and Advanced ranks without one. */}
+                {!likeBook && rec.scoreKind !== 'fusion' && (
+                  <p className="mt-1 text-[12px] text-ink-faint">
+                    {Math.round(rec.score * 100)}% match with your taste
+                  </p>
+                )}
 
                 {!likeBook && rec.becauseOf && (
                   <p className="mt-2 text-[12px] text-ink-muted">

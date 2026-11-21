@@ -7,6 +7,8 @@ import Spinner from './Spinner'
 
 interface Props {
   roots: RecommendationNode[]
+  // The one book scores were measured against in "Find books like this"; null for your taste.
+  rankedAgainst?: string | null
   onSave: (recommendation: Recommendation) => void
   onDismiss: (olid: string) => void
   // The book currently being added, so its node alone shows the work.
@@ -17,6 +19,14 @@ interface Handlers {
   onSave: (recommendation: Recommendation) => void
   onDismiss: (olid: string) => void
   savingOlid: string | null
+  rankedAgainst?: string | null
+}
+
+function scoreLabel(node: RecommendationNode, rankedAgainst: string | null | undefined): string {
+  if (node.scoreKind === 'fusion') return 'ranked by Advanced recommendations'
+  return rankedAgainst
+    ? `${percent(node.score)} alike to ${rankedAgainst}`
+    : `${percent(node.score)} match with your taste`
 }
 
 interface Column {
@@ -31,6 +41,7 @@ const VISIBLE_COLUMNS = 4
 // the path being explored is ever shown and the tree never needs scrolling sideways.
 export default function RecommendationTree({
   roots,
+  rankedAgainst = null,
   onSave,
   onDismiss,
   savingOlid
@@ -103,6 +114,7 @@ export default function RecommendationTree({
                       parent={column.from}
                       selected={path[level]?.olid === node.olid}
                       onChoose={() => choose(level, node)}
+                      rankedAgainst={rankedAgainst}
                       onSave={onSave}
                       onDismiss={onDismiss}
                       savingOlid={savingOlid}
@@ -118,6 +130,7 @@ export default function RecommendationTree({
       <Details
         node={path[path.length - 1]}
         parent={path.length > 1 ? path[path.length - 2] : null}
+        rankedAgainst={rankedAgainst}
         onSave={onSave}
         onDismiss={onDismiss}
         savingOlid={savingOlid}
@@ -130,6 +143,7 @@ export default function RecommendationTree({
 function Details({
   node,
   parent,
+  rankedAgainst,
   onSave,
   onDismiss,
   savingOlid
@@ -141,10 +155,7 @@ function Details({
     parent && node.similarityToParent !== null
       ? `${percent(node.similarityToParent)} alike to ${parent.title}`
       : 'Top pick'
-  const taste =
-    node.scoreKind === 'fusion'
-      ? 'ranked by Advanced recommendations'
-      : `${percent(node.score)} match with your taste`
+  const taste = scoreLabel(node, rankedAgainst)
   const saving = savingOlid === node.olid
 
   return (
@@ -212,6 +223,7 @@ function NodeRow({
   parent,
   selected,
   onChoose,
+  rankedAgainst,
   onSave,
   onDismiss,
   savingOlid
@@ -222,10 +234,8 @@ function NodeRow({
   onChoose: () => void
 } & Handlers): ReactNode {
   const saving = savingOlid === node.olid
-  const taste =
-    node.scoreKind === 'fusion'
-      ? 'Ranked by Advanced recommendations'
-      : `${percent(node.score)} match with your taste`
+  const label = scoreLabel(node, rankedAgainst)
+  const taste = label[0].toUpperCase() + label.slice(1)
   const tooltip = [taste, node.subjects.slice(0, 5).join(' · ')].filter(Boolean).join('\n')
   const opens = node.children.length > 0
 

@@ -129,6 +129,24 @@ describe('RecommendationTree', () => {
     expect(within(about).getByText('Science fiction')).toBeDefined()
   })
 
+  // Under "Find books like this" the scores measure that one book, not your taste.
+  it('names the book the scores were measured against', () => {
+    installBridge()
+    renderApp(
+      <RecommendationTree
+        roots={tree}
+        rankedAgainst="Dune"
+        onSave={() => {}}
+        onDismiss={() => {}}
+        savingOlid={null}
+      />
+    )
+
+    const about = screen.getByRole('region', { name: 'About Book root' })
+    expect(about.textContent).toContain('90% alike to Dune')
+    expect(about.textContent).not.toContain('your taste')
+  })
+
   it('adds or turns down the book shown below from its own buttons', async () => {
     const onSave = vi.fn()
     const user = show(tree, onSave)
