@@ -2,29 +2,40 @@
 
 [![CI](https://github.com/sometabs/interleaf/actions/workflows/ci.yml/badge.svg)](https://github.com/sometabs/interleaf/actions/workflows/ci.yml)
 
-A local-first desktop reading journal for Windows and Linux. Arrange your books, keep reviews,
-notes and quotes, and discover what to read next based on your own library.
+An offline-first desktop reading companion for Windows and Linux. Organize your library, read your
+EPUBs, capture notes and quotes, plan your reading queue, and discover what to read next based on
+your own books.
 
 ## Interleaf in use
 
-**Bookshelf.** Name your shelves, arrange spines and horizontal stacks, and turn a book to show
-its cover. Jump to a shelf by name or highlight a book where it sits.
+**Library.** Pick up where you left off, then browse named shelves of upright spines, horizontal
+stacks and covers turned face out. Books you can read in Interleaf carry a small mark.
 
-<img src="docs/screenshots/01-shelf.png" width="800" alt="Two named shelves with upright books, a horizontal stack, and the Project Hail Mary cover facing out">
+<img src="docs/screenshots/01-library.png" width="800" alt="The library in dark mode: Continue reading cards for Alice and Frankenstein above shelves named Reading next and Fiction">
 
-**Reading journal.** See a book's rating, reading dates, review, quotes and notes on one page.
+**Reader.** Read EPUBs in one or two pages or scrolling, in light, sepia, dark, or a theme that
+follows the app. Select a passage to keep it as a quote or a note, and bookmark pages as you go.
 
-<img src="docs/screenshots/02-book.png" width="800" alt="Project Hail Mary with its review, a saved quote, and two reading notes">
+<img src="docs/screenshots/02-reader.png" width="800" alt="Frankenstein open on two pages, with a saved quote highlighted and a bookmark ribbon on the page">
 
-**Discover.** Browse recommendations as cards or a similarity tree, or find books like a specific
-title in your library.
+**Reading journal.** A book's page gathers its status, rating, reading dates, time read, review,
+quotes and notes.
 
-<img src="docs/screenshots/04-tree.png" width="800" alt="Discover's recommendation tree branching out from Wuthering Heights">
+<img src="docs/screenshots/03-book.png" width="800" alt="Frankenstein's page with its reading progress, time read, a saved quote and a note">
+
+**Stats.** Follow your yearly goal, the books you finished each month, and how much time you spend
+reading.
+
+<img src="docs/screenshots/04-stats.png" width="800" alt="Stats showing books finished by month, a reading goal, and twelve weeks of reading time">
 
 ## What you can do
 
 - Add books from Open Library or enter them manually. Choose Grid or Shelf in Settings.
-- Order your reading queue, revisit finished books in reading history, and track your progress in Stats.
+- Attach an EPUB to a book, or drop one on the window, then read it in Interleaf. Footnotes open in
+  a popup, and quotes you save reopen at their place in the book.
+- Order your reading queue, revisit finished books in reading history, and set a yearly reading goal.
+- Discover what to read next from the books you rated highly, as cards or a similarity tree, or
+  find books like a specific title in your library.
 - Import Calibre or Kindle highlights with duplicate detection. Kindle clippings need English headers.
 - Press `Ctrl + K` to search your books, reviews, notes and quotes or run a command.
 
@@ -49,15 +60,19 @@ to try the app from source with a separate `Interleaf Dev` library.
 
 ## Your data and offline use
 
-Your library, writing, search, and statistics work offline. Book lookup, metadata refresh, and
-fetching new Discover candidates use Open Library. Interleaf ranks cached candidates locally.
-Optional **Advanced recommendations** adds meaning-based matching and may download a model on
-first use. At startup Interleaf asks GitHub whether a newer version exists; it sends nothing
-about your library.
+Your library, the reader, writing, search, and statistics work offline. Book lookup, metadata
+refresh, and fetching new Discover candidates use Open Library. Interleaf ranks cached candidates
+locally. Optional **Advanced recommendations** adds meaning-based matching and may download a
+model on first use. At startup Interleaf asks GitHub whether a newer version exists; it sends
+nothing about your library.
 
-**Data → Export library** saves the database, including your shelf layout, along with book covers
-and a readable Markdown copy. **Import** restores the library from the exported database.
-Interleaf also keeps an automatic recovery copy for startup recovery.
+EPUBs stay on your computer: Interleaf keeps its own copy and never changes the original. Books
+protected with DRM aren't supported and are refused when you attach them.
+
+**Data → Back up** saves your whole library, EPUBs included, to a folder you choose, and
+**Restore** brings it back on this computer or a new one. Interleaf also keeps automatic backups,
+in a folder you can change. **Export as Markdown** writes readable files for your notes app; it is
+not a backup.
 
 See [Library data and recommendations](docs/library-details.md) for data locations, backup
 timing, and how recommendations work.

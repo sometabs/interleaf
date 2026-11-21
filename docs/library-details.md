@@ -36,20 +36,27 @@ metadata less reliably. Reviews, notes, and quotes stay on your device.
 - **Linux**: `$XDG_CONFIG_HOME/Interleaf/` or `~/.config/Interleaf/`
 
 Source and preview builds use a separate `Interleaf Dev` directory. Each profile stores
-`interleaf.db` and its `covers/` directory.
+`interleaf.db`, its `covers/` directory, and attached EPUBs in `books/`, each named by a hash of
+its contents so the same file is never kept twice.
 
-**Data → Export library** saves a SQLite snapshot, referenced covers, and a readable Markdown copy
-in `interleaf-backup/`. Select the exported folder in **Data → Import**. Interleaf verifies the
-database, upgrades a staged copy if needed, and restarts with the restored library. Shelf names,
-positions, stacks, face-out covers, and hidden books are part of the database. UI preferences,
-the embedding model, and the embedding cache are stored separately.
+**Data → Back up** writes a dated folder such as `interleaf-backup-2026-11-20-1430` holding a
+SQLite snapshot, referenced covers, and attached EPUBs. **Data → Restore** takes that folder.
+Interleaf saves the current library as an automatic backup first, verifies the chosen database,
+upgrades a staged copy if needed, and restarts with the restored library. Shelf names, positions,
+stacks, face-out covers, hidden books, bookmarks, and reading time are part of the database. UI
+preferences, reader settings, the embedding model, and the embedding cache are stored separately.
+
+**Data → Export as Markdown** writes `interleaf-markdown-…` with one file per book and per loose
+note, plus covers. It is meant for reading in other apps and can't be restored.
 
 Interleaf takes the first automatic backup after a saved change. Further changes are backed up
 once the 24-hour window ends, or at the next launch if the app was closed at that point. It also
-backs up right before any bulk delete in **Data** and after a manual import. The three newest
-verified snapshots stay in the profile's `backups/` folder. If the database is missing or damaged
-at startup, Interleaf offers to restore the newest one or start an empty library, and keeps a copy
-of a damaged database either way.
+backs up right before any bulk delete in **Data** and before a restore. The three newest verified
+snapshots are kept, by default in the profile's `backups/` folder; **Change folder…** under
+Automatic backups moves them elsewhere. Snapshots share one `books/` folder for EPUBs, and a file
+is removed once no snapshot needs it. If the database is missing or damaged at startup, Interleaf
+offers to restore the newest snapshot or start an empty library, and keeps a copy of a damaged
+database either way.
 
 Discover thumbnails are removed once no cached recommendation uses them.
 
@@ -59,6 +66,11 @@ Discover thumbnails are removed once no cached recommendation uses them.
 - Reviews and edits to saved notes and quotes autosave. Press **Done** to save a new note or quote.
 - Reading duration counts calendar days between your start and finish dates. Stats include page
   counts for finished books that have one. Monthly charts use finish dates.
+- Time read counts only time in the Interleaf reader: the gaps between page turns, scrolls and
+  keys, each capped at three minutes, and nothing while the window is hidden. Visits shorter than
+  20 seconds aren't kept.
+- In the reader, press `Ctrl + D` to bookmark a page and the arrow keys or `Page Up`/`Page Down`
+  to turn pages.
 
 ## Development
 
