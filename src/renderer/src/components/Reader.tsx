@@ -96,6 +96,7 @@ interface FoliateRenderer extends HTMLElement {
   pages?: number
   // One per column on screen.
   heads?: unknown[] | null
+  getContents?: () => { doc: Document }[]
 }
 
 interface FoliateView extends HTMLElement {
@@ -244,6 +245,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   // Where a link jump left from, so one click goes back.
   const [returnTo, setReturnTo] = useState<string | null>(null)
   const [chromeShown, setChromeShown] = useState(true)
+  const [pointerResting, setPointerResting] = useState(false)
   const [fullScreen, setFullScreen] = useState(false)
   const [startAsked, setStartAsked] = useState(false)
   const [finishAsked, setFinishAsked] = useState(false)
@@ -335,10 +337,27 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     return () => window.clearTimeout(idleTimer.current)
   }, [])
 
+  // The cursor hides on the same idle timer, but any movement brings it back, not only near an edge.
+  const cursorTimer = useRef<number | undefined>(undefined)
+  const stir = useCallback((): void => {
+    setPointerResting(false)
+    window.clearTimeout(cursorTimer.current)
+    cursorTimer.current = window.setTimeout(() => setPointerResting(true), CHROME_IDLE_MS)
+  }, [])
+  useEffect(() => () => window.clearTimeout(cursorTimer.current), [])
+
+  const cursorHidden = pointerResting && !chromeShown && panel === null && status === 'ready'
+  const cursorHiddenRef = useRef(cursorHidden)
+  useEffect(() => {
+    cursorHiddenRef.current = cursorHidden
+    for (const { doc } of viewRef.current?.renderer.getContents?.() ?? [])
+      hideCursorIn(doc, cursorHidden)
+  }, [cursorHidden])
+
   // The book loads once per open; handlers are read through a ref so a re-render never reloads it.
-  const handlers = useRef({ back, dismissOverlay, flushPosition, toggleBookmark, turn, wake })
+  const handlers = useRef({ back, dismissOverlay, flushPosition, stir, toggleBookmark, turn, wake })
   useLayoutEffect(() => {
-    handlers.current = { back, dismissOverlay, flushPosition, toggleBookmark, turn, wake }
+    handlers.current = { back, dismissOverlay, flushPosition, stir, toggleBookmark, turn, wake }
   })
 
   useEffect(() => {
@@ -410,6 +429,12 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 
     const onLoad = (event: Event): void => {
       const { doc, index } = (event as CustomEvent<{ doc: Document; index: number }>).detail
+      const restCursor = doc.createElement('style')
+      restCursor.textContent =
+        'html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }'
+      doc.head?.append(restCursor)
+      hideCursorIn(doc, cursorHiddenRef.current)
+      doc.addEventListener('mousemove', () => handlers.current.stir())
       for (const type of ['pointerdown', 'keydown', 'wheel']) {
         doc.addEventListener(type, follow, true)
         doc.addEventListener(type, touch, true)
@@ -705,7 +730,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     <div
       ref={shellRef}
       data-testid="reader"
-      className={`fixed inset-0 z-30 flex flex-col ${dark ? 'reader-dark' : ''}`}
+      className={`fixed inset-0 z-30 flex flex-col ${dark ? 'reader-dark' : ''} ${
+        cursorHidden ? 'reader-cursor-hidden' : ''
+      }`}
       style={
         {
           background: theme.background,
@@ -715,6 +742,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         } as CSSProperties
       }
       onMouseMove={(event) => {
+        stir()
         const box = event.currentTarget.getBoundingClientRect()
         if (event.clientY - box.top < CHROME_EDGE || box.bottom - event.clientY < CHROME_EDGE)
           wake()
@@ -1070,6 +1098,10 @@ const PANEL_ICONS: Record<'contents' | 'search' | 'highlights', ReactNode> = {
       <path d="m12.5 5.5 4 4M4.5 13.5l4 4M21 15v4h-8l4-4z" />
     </Icon>
   )
+}
+
+function hideCursorIn(doc: Document, hidden: boolean): void {
+  doc.documentElement.toggleAttribute('data-cursor-hidden', hidden)
 }
 
 function applyLook(view: FoliateView, look: ReaderLook, shown: ShownTheme): void {
@@ -1472,7 +1504,7 @@ function LookPanel({
           legend="Page number"
           value={look.pageCount}
           options={[
-            ['left', 'Pages left'],
+            ['left', 'Pages left in chapter'],
             ['position', 'Page in chapter']
           ]}
           onChange={(pageCount) => onChange({ ...look, pageCount })}

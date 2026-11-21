@@ -787,3 +787,8 @@
     pointer-events: none;
   }
 }
+
+.reader-cursor-hidden,
+.reader-cursor-hidden * {
+  cursor: none !important;
+}

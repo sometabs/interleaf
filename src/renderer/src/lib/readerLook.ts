@@ -42,7 +42,7 @@ interface Theme {
 }
 
 export const THEMES: Record<ShownTheme, Theme> = {
-  light: { label: 'Light', background: '#fbfaf7', text: '#2d2926' },
+  light: { label: 'Light', background: '#f6f3ee', text: '#2d2926' },
   sepia: {
     label: 'Sepia',
     background: '#f4ecd8',
@@ -131,7 +131,7 @@ export function narrower(look: ReaderLook, room: number): ReaderLook {
   return { ...look, width: Math.max(min, Math.min(next, fits)) }
 }
 
-// Light keeps the book's own colours; sepia and dark recolour text so it stays readable.
+// Light keeps the book's colours except its page background; sepia and dark recolour all text.
 export function bookCss(look: ReaderLook, shown: ShownTheme): string {
   const theme = THEMES[shown]
   const recolour =
@@ -147,6 +147,7 @@ export function bookCss(look: ReaderLook, shown: ShownTheme): string {
     body, body *:not(code):not(pre):not(kbd):not(samp) { font-family: ${FONTS[look.font]} !important; }`
   return `
     html { color-scheme: ${shown === 'dark' ? 'dark' : 'light'}; background: transparent !important; font-size: ${look.size}% !important; }
+    body { background-color: transparent !important; }
     p, li, blockquote, dd, div { line-height: ${look.spacing} !important; }
     pre { white-space: pre-wrap !important; }
     img, svg, video { max-width: 100%; height: auto; }${recolour}${font}`
@@ -169,9 +170,9 @@ export function pageLabel(
   const perScreen = Math.max(1, columns)
   if (count === 'position') {
     const current = Math.min(content, Math.max(1, screen))
-    return `${(current - 1) * perScreen + 1} / ${content * perScreen} in chapter`
+    return `${(current - 1) * perScreen + 1} / ${content * perScreen}`
   }
   const left = Math.max(0, content - screen) * perScreen
-  if (left === 0) return 'Last page in chapter'
-  return `${left} ${left === 1 ? 'page' : 'pages'} left in chapter`
+  if (left === 0) return 'Last page'
+  return `${left} ${left === 1 ? 'page' : 'pages'} left`
 }
