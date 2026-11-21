@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import Cover from '../src/renderer/src/components/Cover'
 
@@ -34,5 +34,31 @@ describe('generated cover text', () => {
 
     expect(screen.getByText('A')).toBeDefined()
     expect(screen.queryByText('An Author')).toBeNull()
+  })
+})
+
+describe('loading covers', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // A large library loads only the jackets near the screen, not all of them at once.
+  it('waits until the cover is about to scroll into view', () => {
+    let notify: ((entries: { isIntersecting: boolean }[]) => void) | null = null
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+          notify = callback
+        }
+        observe = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+    const { container } = render(<Cover title="Far Below" path="book-1.jpg" />)
+
+    expect(container.querySelector('img')).toBeNull()
+    act(() => notify?.([{ isIntersecting: true }]))
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      'bookcover://covers/book-1.jpg'
+    )
   })
 })

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 import { paletteFor } from '../lib/bookPalette'
 
@@ -10,6 +10,29 @@ interface Props {
   /** Open Library cover id, for books not yet in the library. */
   coverId?: number | null
   size?: 'sm' | 'md' | 'lg'
+}
+
+// Starts the image a screen or so before it scrolls in, so a large library only loads what is
+// near view. Hand-rolled: loading="lazy" can stall forever inside a container-query box.
+function useNearView(): [RefObject<HTMLDivElement | null>, boolean] {
+  const ref = useRef<HTMLDivElement>(null)
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    const node = ref.current
+    if (near || !node) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setNear(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '600px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [near])
+  return [ref, near]
 }
 
 function initialFor(title: string): string {
@@ -41,24 +64,27 @@ export default function Cover({
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const failed = src !== null && failedSrc === src
 
+  const [ref, near] = useNearView()
   const shadow = size === 'lg' ? 'shadow-raised' : 'shadow-card'
   const palette = paletteFor(title)
 
   return (
     <div
+      ref={ref}
       data-testid="cover"
       className={`relative aspect-[2/3] w-full overflow-hidden rounded-[3px] bg-sunken ${shadow}`}
       style={{ containerType: 'inline-size' }}
     >
       {src && !failed ? (
-        // No loading="lazy": inside a container-query box Chromium can defer
-        // the load indefinitely and never paint.
-        <img
-          src={src}
-          alt=""
-          className="block h-full w-full object-cover"
-          onError={() => setFailedSrc(src)}
-        />
+        near && (
+          <img
+            src={src}
+            alt=""
+            decoding="async"
+            className="block h-full w-full object-cover"
+            onError={() => setFailedSrc(src)}
+          />
+        )
       ) : (
         /* A quiet clothbound stand-in. It is deliberately typographic rather
            than illustrated, so nobody mistakes it for a real jacket. */

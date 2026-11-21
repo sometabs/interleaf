@@ -1,5 +1,5 @@
 import type { Book } from '@shared/api'
-import { useState, type ReactNode } from 'react'
+import { memo, useCallback, useDeferredValue, useMemo, useState, type ReactNode } from 'react'
 
 import { usePersistentState } from '../lib/persistent'
 import { useBookFiles, useBooks } from '../lib/queries'
@@ -29,23 +29,32 @@ export default function Library({ onAdd }: Props): ReactNode {
     parseGrouping
   )
   const { data: files = [] } = useBookFiles()
-  const epubIds = new Set(files.map((file) => file.bookId))
+  const epubIds = useMemo(() => new Set(files.map((file) => file.bookId)), [files])
   const [epubChoice, setEpubOnly] = usePersistentState('interleaf.libraryEpubOnly', false, (raw) =>
     typeof raw === 'boolean' ? raw : null
   )
   // With no EPUBs at all there is nothing to narrow to, so the filter steps aside.
   const epubOnly = epubChoice && epubIds.size > 0
-  const query = filter.trim().toLowerCase()
+  // The box answers every key at once; the books follow a beat later, so typing never waits on
+  // a large library redrawing.
+  const query = useDeferredValue(filter.trim().toLowerCase())
   const shelfLayout = layout === 'shelf'
-  const matching = query
-    ? books.filter(
-        (book) =>
-          book.title.toLowerCase().includes(query) ||
-          (book.author ?? '').toLowerCase().includes(query)
-      )
-    : books
+  const matching = useMemo(
+    () =>
+      query
+        ? books.filter(
+            (book) =>
+              book.title.toLowerCase().includes(query) ||
+              (book.author ?? '').toLowerCase().includes(query)
+          )
+        : books,
+    [books, query]
+  )
 
-  const openBook = (book: Book): void => navigate({ kind: 'book', id: book.id })
+  const openBook = useCallback(
+    (book: Book): void => navigate({ kind: 'book', id: book.id }),
+    [navigate]
+  )
 
   if (isPending) return <div className="h-full" />
 
@@ -128,15 +137,13 @@ export default function Library({ onAdd }: Props): ReactNode {
           ) : epubOnly && !matching.some((book) => epubIds.has(book.id)) ? (
             <p className="py-8 text-center text-ink-muted">None of these books has an EPUB.</p>
           ) : (
-            groupBooks(matching, grouping).map((shelf) => (
-              <ShelfSection
-                key={shelf.key}
-                shelf={shelf}
-                epubIds={epubIds}
-                epubOnly={epubOnly}
-                onOpen={openBook}
-              />
-            ))
+            <Groups
+              books={matching}
+              grouping={grouping}
+              epubIds={epubIds}
+              epubOnly={epubOnly}
+              onOpen={openBook}
+            />
           )}
         </>
       )}
@@ -187,6 +194,30 @@ function Segmented<T extends string | null>({
     </div>
   )
 }
+
+const Groups = memo(function Groups({
+  books,
+  grouping,
+  epubIds,
+  epubOnly,
+  onOpen
+}: {
+  books: Book[]
+  grouping: Grouping
+  epubIds: Set<number>
+  epubOnly: boolean
+  onOpen: (book: Book) => void
+}): ReactNode {
+  return groupBooks(books, grouping).map((shelf) => (
+    <ShelfSection
+      key={shelf.key}
+      shelf={shelf}
+      epubIds={epubIds}
+      epubOnly={epubOnly}
+      onOpen={onOpen}
+    />
+  ))
+})
 
 function ShelfSection({
   shelf,

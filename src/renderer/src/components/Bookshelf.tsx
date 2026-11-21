@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { STATUS_LABELS, type Book } from '@shared/api'
 import type { BookshelfLayout } from '@shared/bookshelf'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   CSSProperties,
   DragEvent,
@@ -93,7 +93,8 @@ const BOOK_MENU_HEIGHT = 144
 const DESTINATION_MENU_HEIGHT = 240
 const menuItemClass = 'btn w-full justify-start px-2 py-1.5 text-sm'
 
-export default function Bookshelf(props: Props): ReactNode {
+// Memoised so typing in the library filter does not redraw every shelf on each key.
+export default memo(function Bookshelf(props: Props): ReactNode {
   const { data: layout, isError, refetch } = useBookshelfLayout()
   if (!layout) {
     return isError ? (
@@ -106,7 +107,7 @@ export default function Bookshelf(props: Props): ReactNode {
     ) : null
   }
   return <BookshelfView {...props} layout={layout} />
-}
+})
 
 function BookshelfView({
   books,
