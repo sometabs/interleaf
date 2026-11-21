@@ -228,7 +228,7 @@ function ReadingTime({ time }: { time: ReadingTimeSummary }): ReactNode {
                 >
                   {week.seconds > 0 && (
                     <span
-                      className={`w-full max-w-8 rounded-t-[2px] ${current ? 'bg-accent' : 'bg-accent-soft'}`}
+                      className={`w-full max-w-8 rounded-t-[2px] ${current ? 'bg-accent' : 'bg-accent/40'}`}
                       style={{ height: Math.max(4, (week.seconds / most) * 104) }}
                     />
                   )}
