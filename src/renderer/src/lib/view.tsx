@@ -13,7 +13,8 @@ export type View =
   | { kind: 'notes' }
   | { kind: 'reviews' }
   | { kind: 'review'; bookId: number }
-  | { kind: 'quotes' }
+  // `focusId` opens with that quote expanded and in view, as the reader's Open in Quotes does.
+  | { kind: 'quotes'; focusId?: number }
   | { kind: 'stats' }
   // Set when the screen was opened from one book: Discover then ranks against
   // that book alone.

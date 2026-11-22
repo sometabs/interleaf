@@ -124,6 +124,7 @@ interface FoliateView extends HTMLElement {
 interface Annotation {
   value: string
   quote?: boolean
+  note?: boolean
 }
 
 type Panel = 'contents' | 'search' | 'highlights' | 'look'
@@ -147,6 +148,8 @@ interface Picked extends Point {
 const HIGHLIGHT = '#f2c94c'
 const UNDERLINE = '#5b84c9'
 const CHROME_IDLE_MS = 2500
+// The selection popover once Note opens its editor, in CSS pixels.
+const NOTE_EDITOR_HEIGHT = 170
 const CHROME_EDGE = 64
 const TIME_SAVE_MS = 60_000
 // Opening a book to check a passage is not a reading session.
@@ -154,6 +157,38 @@ const TIME_MINIMUM_SECONDS = 20
 
 function today(): number | null {
   return fromDateInput(toDateInput(Math.floor(Date.now() / 1000)))
+}
+
+// One mark per place in the book: a quote and a note on the same passage share it.
+function marksByPlace(notes: Note[]): Map<string, { quote: boolean; note: boolean }> {
+  const marks = new Map<string, { quote: boolean; note: boolean }>()
+  for (const entry of notes) {
+    if (!entry.location) continue
+    const mark = marks.get(entry.location) ?? { quote: false, note: false }
+    if (isQuote(entry)) mark.quote = true
+    else mark.note = true
+    marks.set(entry.location, mark)
+  }
+  return marks
+}
+
+const highlightAndUnderline: typeof Overlayer.highlight = (rects, options) => {
+  const group = Overlayer.highlight(rects, { ...options, color: HIGHLIGHT })
+  const line = Overlayer.underline(rects, { color: UNDERLINE, width: 2 })
+  const both = group.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g')
+  both.append(group, line)
+  return both
+}
+
+// A reader note starts with the passage, quoted; what follows is what was written about it.
+function splitNote(bodyMd: string): { passage: string; thought: string } {
+  const lines = bodyMd.split(/\r?\n/)
+  let index = 0
+  while (index < lines.length && /^\s*>/.test(lines[index])) index++
+  return {
+    passage: lines.slice(0, index).join('\n'),
+    thought: lines.slice(index).join('\n').trim()
+  }
 }
 
 function quoteLines(text: string): string {
@@ -285,7 +320,10 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const [panel, setPanel] = useState<Panel | null>(null)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [noteDraft, setNoteDraft] = useState<string | null>(null)
-  const [opened, setOpened] = useState<(Point & { note: Note }) | null>(null)
+  // A passage clicked in the book: its quote, its note, or both; `draft` while the note is edited.
+  const [opened, setOpened] = useState<
+    (Point & { quote: Note | null; note: Note | null; draft?: string }) | null
+  >(null)
   const [footnote, setFootnote] = useState<(Point & { text: string; href: string }) | null>(null)
   // Where a link jump left from, so one click goes back.
   const [returnTo, setReturnTo] = useState<string | null>(null)
@@ -583,8 +621,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     host.addEventListener('click', (clickEvent) => turnAtEdge(clickEvent.clientX))
 
     const onCreateOverlay = (): void => {
-      for (const note of locatedRef.current) {
-        void view.addAnnotation({ value: note.location!, quote: isQuote(note) })
+      for (const [value, kinds] of marksByPlace(locatedRef.current)) {
+        void view.addAnnotation({ value, ...kinds })
       }
     }
 
@@ -595,16 +633,19 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
           annotation: Annotation
         }>
       ).detail
-      if (annotation.quote) draw(Overlayer.highlight, { color: HIGHLIGHT })
+      if (annotation.quote && annotation.note) draw(highlightAndUnderline, {})
+      else if (annotation.quote) draw(Overlayer.highlight, { color: HIGHLIGHT })
       else draw(Overlayer.underline, { color: UNDERLINE, width: 2 })
     }
 
     const onShowAnnotation = (event: Event): void => {
       const { value, range } = (event as CustomEvent<{ value: string; range: Range }>).detail
-      const note = locatedRef.current.find((candidate) => candidate.location === value)
-      if (!note) return
+      const here = locatedRef.current.filter((candidate) => candidate.location === value)
+      const quote = here.find(isQuote) ?? null
+      const note = here.find((candidate) => !isQuote(candidate)) ?? null
+      if (!quote && !note) return
       annotationAt = performance.now()
-      setOpened({ note, ...pointOf(range, host) })
+      setOpened({ quote, note, ...pointOf(range, host) })
     }
 
     void (async () => {
@@ -685,17 +726,22 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     if (viewRef.current && status === 'ready') applyLook(viewRef.current, look, themeShown)
   }, [look, themeShown, status])
 
-  // Keeps the drawn highlights in step with the journal as quotes are added or removed.
-  const drawn = useRef(new Set<string>())
+  // Keeps the drawn marks in step with the journal as quotes and notes are added or removed.
+  const drawn = useRef(new Map<string, string>())
   useEffect(() => {
     const view = viewRef.current
     if (!view || status !== 'ready') return
-    const wanted = new Map(located.map((note) => [note.location!, isQuote(note)]))
-    for (const value of drawn.current) {
-      if (!wanted.has(value)) void view.deleteAnnotation({ value })
+    const wanted = marksByPlace(located)
+    for (const [value, kinds] of drawn.current) {
+      if (wanted.get(value) && JSON.stringify(wanted.get(value)) === kinds) continue
+      void view.deleteAnnotation({ value })
+      drawn.current.delete(value)
     }
-    for (const [value, quote] of wanted) void view.addAnnotation({ value, quote })
-    drawn.current = new Set(wanted.keys())
+    for (const [value, kinds] of wanted) {
+      if (drawn.current.has(value)) continue
+      void view.addAnnotation({ value, ...kinds })
+      drawn.current.set(value, JSON.stringify(kinds))
+    }
   }, [located, status])
 
   useEffect(() => {
@@ -724,30 +770,38 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   async function saveQuote(): Promise<void> {
     if (!picked) return
     try {
-      await createNote.mutateAsync({
+      const quote = await createNote.mutateAsync({
         bookId,
         kind: QUOTE_KIND,
         bodyMd: picked.text,
         location: picked.cfi
       })
       notify('Quote saved.')
-      clearSelection()
+      keepOpenWithin(quote)
     } catch (error) {
       fail(error)
     }
+  }
+
+  // The passage stays selected with its new quote's actions, so a note can follow.
+  function keepOpenWithin(quote: Note): void {
+    setPicked((current) =>
+      current ? { ...current, within: quote, extends: [], extended: null } : current
+    )
   }
 
   async function extendQuote(): Promise<void> {
     if (!picked?.extended || picked.extends.length === 0) return
     const [kept, ...merged] = picked.extends
     try {
-      await updateNote.mutateAsync({
+      const quote = await updateNote.mutateAsync({
         id: kept.id,
         patch: { bodyMd: picked.extended.text, location: picked.extended.cfi }
       })
       for (const note of merged) await deleteNote.mutateAsync(note.id)
       notify(merged.length > 0 ? 'Quotes merged.' : 'Quote extended.')
-      clearSelection()
+      if (quote) keepOpenWithin(quote)
+      else clearSelection()
     } catch (error) {
       fail(error)
     }
@@ -764,10 +818,39 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         location: picked.cfi
       })
       notify('Note saved.')
-      clearSelection()
+      // Stays open on the passage, so it can still be quoted.
+      setNoteDraft(null)
     } catch (error) {
       fail(error)
     }
+  }
+
+  async function saveEditedNote(): Promise<void> {
+    if (!opened?.note || opened.draft === undefined) return
+    const { passage } = splitNote(opened.note.bodyMd)
+    const thought = opened.draft.trim()
+    try {
+      await updateNote.mutateAsync({
+        id: opened.note.id,
+        patch: { bodyMd: [passage, thought].filter(Boolean).join('\n\n') }
+      })
+      notify('Note saved.')
+      setOpened(null)
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  async function removeNote(note: Note): Promise<void> {
+    const sure = await confirm({
+      title: 'Delete this note?',
+      body: 'It is removed from your journal too.',
+      confirmLabel: 'Delete',
+      destructive: true
+    })
+    if (!sure) return
+    setOpened(null)
+    deleteNote.mutate(note.id)
   }
 
   async function removeQuote(note: Note): Promise<void> {
@@ -925,7 +1008,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         )}
 
         {picked && (
-          <Popover point={picked} label="Selected text">
+          <Popover point={picked} label="Selected text" reserve={NOTE_EDITOR_HEIGHT}>
             {noteDraft === null ? (
               <div className="flex gap-1">
                 {picked.within ? (
@@ -933,7 +1016,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                     <button
                       type="button"
                       className="reader-btn"
-                      onClick={() => navigate({ kind: 'quotes' })}
+                      onClick={() => navigate({ kind: 'quotes', focusId: picked.within!.id })}
                     >
                       Open in Quotes
                     </button>
@@ -1028,35 +1111,92 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         )}
 
         {opened && (
-          <Popover point={opened} label={isQuote(opened.note) ? 'Quote' : 'Note'}>
-            <div className="flex gap-1">
-              {isQuote(opened.note) ? (
-                <>
-                  <button
-                    type="button"
-                    className="reader-btn"
-                    onClick={() => navigate({ kind: 'quotes' })}
-                  >
-                    Open in Quotes
+          <Popover
+            point={opened}
+            label={opened.quote && opened.note ? 'Quote and note' : opened.note ? 'Note' : 'Quote'}
+            reserve={opened.note ? NOTE_EDITOR_HEIGHT : 0}
+          >
+            {opened.note && opened.draft !== undefined ? (
+              <div className="w-72">
+                <textarea
+                  autoFocus
+                  aria-label="Edit note"
+                  className="field min-h-24 w-full text-[13px]"
+                  value={opened.draft}
+                  onChange={(event) => setOpened({ ...opened, draft: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                      void saveEditedNote()
+                    }
+                  }}
+                />
+                <div className="mt-2 flex justify-end gap-1">
+                  <button type="button" className="btn btn-ghost" onClick={() => setOpened(null)}>
+                    Cancel
                   </button>
                   <button
                     type="button"
-                    className="reader-btn"
-                    onClick={() => void removeQuote(opened.note)}
+                    className="btn btn-primary"
+                    onClick={() => void saveEditedNote()}
                   >
-                    Delete
+                    Save
                   </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="reader-btn"
-                  onClick={() => navigate({ kind: 'note', id: opened.note.id })}
-                >
-                  Open note
-                </button>
-              )}
-            </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex max-w-80 flex-col gap-1.5">
+                {opened.note && splitNote(opened.note.bodyMd).thought && (
+                  <p className="line-clamp-4 px-1.5 pt-1 text-[13px] whitespace-pre-line">
+                    {toPlainText(splitNote(opened.note.bodyMd).thought)}
+                  </p>
+                )}
+                {opened.note && (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() =>
+                        setOpened({ ...opened, draft: splitNote(opened.note!.bodyMd).thought })
+                      }
+                    >
+                      {opened.quote ? 'Edit note' : 'Edit'}
+                    </button>
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() => navigate({ kind: 'note', id: opened.note!.id })}
+                    >
+                      Open in Notes
+                    </button>
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() => void removeNote(opened.note!)}
+                    >
+                      {opened.quote ? 'Delete note' : 'Delete'}
+                    </button>
+                  </div>
+                )}
+                {opened.quote && (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() => navigate({ kind: 'quotes', focusId: opened.quote!.id })}
+                    >
+                      Open in Quotes
+                    </button>
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() => void removeQuote(opened.quote!)}
+                    >
+                      {opened.note ? 'Delete quote' : 'Delete'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </Popover>
         )}
 
@@ -1222,36 +1362,31 @@ function applyLook(view: FoliateView, look: ReaderLook, shown: ShownTheme): void
 function Popover({
   point,
   label,
+  reserve = 0,
   children
 }: {
   point: Point
   label: string
+  // Height it may grow to, so it opens where it can stay rather than jumping when it grows.
+  reserve?: number
   children: ReactNode
 }): ReactNode {
   const ref = useRef<HTMLDivElement>(null)
-  const [height, setHeight] = useState(0)
-  // Measured, since the note editor makes it much taller than the buttons alone.
+  // Placed before the browser paints, from the real height, so a misplaced frame never shows.
   useLayoutEffect(() => {
     const element = ref.current
     if (!element) return
-    setHeight(element.offsetHeight)
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => setHeight(element.offsetHeight))
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  const below = point.y < 64 || point.y - 8 - height < 8
+    const below = point.y < 64 || point.y - 8 - Math.max(element.offsetHeight, reserve) < 8
+    element.style.top = `${below ? point.y + 28 : point.y - 8}px`
+    element.style.transform = below ? 'translateX(-50%)' : 'translate(-50%, -100%)'
+  })
   return (
     <div
       ref={ref}
       role="dialog"
       aria-label={label}
       className="absolute z-20 rounded-card border border-hairline bg-surface p-1.5 text-ink shadow-pop"
-      style={{
-        left: Math.max(24, point.x),
-        top: below ? point.y + 28 : point.y - 8,
-        transform: below ? 'translateX(-50%)' : 'translate(-50%, -100%)'
-      }}
+      style={{ left: Math.max(24, point.x) }}
     >
       {children}
     </div>

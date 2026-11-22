@@ -32,7 +32,7 @@ export default function QuoteCard({
 
   if (!open) {
     return (
-      <div data-testid="quote-card" className="card overflow-hidden">
+      <div data-testid="quote-card" data-quote-id={quote.id} className="card overflow-hidden">
         <button
           type="button"
           data-testid="quote-body"
@@ -59,7 +59,7 @@ export default function QuoteCard({
   }
 
   return (
-    <div data-testid="quote-card" data-open="true" className="card">
+    <div data-testid="quote-card" data-quote-id={quote.id} data-open="true" className="card">
       <div className="min-h-32 px-5 py-4">
         <Editor
           value={quote.bodyMd}

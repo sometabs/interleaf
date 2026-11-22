@@ -91,7 +91,7 @@ export default function App(): ReactNode {
         {view.kind === 'reviews' && <Reviews />}
         {view.kind === 'review' && <ReviewView key={view.bookId} bookId={view.bookId} />}
         {view.kind === 'notes' && <Notes />}
-        {view.kind === 'quotes' && <Quotes />}
+        {view.kind === 'quotes' && <Quotes focusId={view.focusId} />}
         {view.kind === 'stats' && <Stats />}
         {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} />}
         {view.kind === 'new-note' && <NewNoteView />}

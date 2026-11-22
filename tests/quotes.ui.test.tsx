@@ -37,6 +37,25 @@ async function enterPassage(text: string): Promise<void> {
 }
 
 describe('the Quotes screen', () => {
+  it('opens with the quote the reader asked for expanded', async () => {
+    const other = makeNote({
+      id: 4,
+      kind: 'highlight',
+      title: 'Another',
+      bodyMd: 'Another passage.'
+    })
+    installBridge({ notes: [QUOTE, other] })
+    renderApp(<Quotes focusId={4} />, { kind: 'quotes', focusId: 4 })
+
+    await screen.findByText(/There was a wall/)
+    const cards = screen.getAllByTestId('quote-card')
+    const focused = cards.find((card) => card.dataset.quoteId === '4')!
+    expect(focused.querySelector('.note-prose')).not.toBeNull()
+    expect(
+      cards.find((card) => card.dataset.quoteId === '1')!.querySelector('.note-prose')
+    ).toBeNull()
+  })
+
   it('shows quotes and nothing else', async () => {
     installBridge({ notes: [QUOTE, THOUGHT, REVIEW] })
     renderApp(<Quotes />, { kind: 'quotes' })

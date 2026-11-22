@@ -1,6 +1,6 @@
 import type { Note } from '@shared/api'
 import { toPlainText } from '@shared/plaintext'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
 import { notify } from '../lib/feedback'
@@ -14,7 +14,7 @@ import QuoteCard from './QuoteCard'
 const UNKNOWN_AUTHOR_FILTER = '__unknown_author__'
 
 // Still stored as a note of kind `highlight`; only the presentation differs.
-export default function Quotes(): ReactNode {
+export default function Quotes({ focusId }: { focusId?: number }): ReactNode {
   const { data: notes = [], isPending } = useNotes()
   const { data: books = [] } = useBooks()
 
@@ -25,7 +25,7 @@ export default function Quotes(): ReactNode {
   const [filter, setFilter] = useState('')
   const [filterMode, setFilterMode] = useState<'book' | 'author'>('book')
   const [filterValue, setFilterValue] = useState('')
-  const [openId, setOpenId] = useState<number | null>(null)
+  const [openId, setOpenId] = useState<number | null>(focusId ?? null)
   // A quote with no book cannot be stored, so one starts here and is written
   // only when Done has both a passage and a book.
   const [draft, setDraft] = useState<string | null>(null)
@@ -151,6 +151,11 @@ export default function Quotes(): ReactNode {
     if (openId === quote.id) setOpenId(null)
     deleteNote.mutate(quote.id)
   }
+
+  useEffect(() => {
+    if (isPending || focusId === undefined) return
+    document.querySelector(`[data-quote-id="${focusId}"]`)?.scrollIntoView({ block: 'center' })
+  }, [isPending, focusId])
 
   if (isPending) return <div className="h-full" />
 
