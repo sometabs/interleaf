@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import type { ReactNode } from 'react'
 
 import BookSearch from './BookSearch'
+import { useOverlayContainer } from '../lib/overlay'
 
 interface Props {
   open: boolean
@@ -9,9 +10,10 @@ interface Props {
 }
 
 export default function AddBookDialog({ open, onOpenChange }: Props): ReactNode {
+  const container = useOverlayContainer()
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <Dialog.Portal container={container}>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
         <Dialog.Content
           onEscapeKeyDown={(event) => event.stopPropagation()}

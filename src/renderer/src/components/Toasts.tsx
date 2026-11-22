@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 import { dismiss, useMessages } from '../lib/feedback'
+import { useOverlayContainer } from '../lib/overlay'
 
 export default function Toasts(): ReactNode {
   const messages = useMessages()
+  const container = useOverlayContainer()
   if (messages.length === 0) return null
 
-  return (
+  const toasts = (
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2">
       {messages.map((message) => (
         <div
@@ -31,4 +34,5 @@ export default function Toasts(): ReactNode {
       ))}
     </div>
   )
+  return container ? createPortal(toasts, container) : toasts
 }

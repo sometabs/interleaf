@@ -9,6 +9,7 @@ import { useAttachEpub, useBooks } from '../lib/queries'
 import { useView } from '../lib/view'
 import BookSearch from './BookSearch'
 import Cover from './Cover'
+import { useOverlayContainer } from '../lib/overlay'
 
 const isEpub = (file: File): boolean => file.name.toLowerCase().endsWith('.epub')
 
@@ -147,6 +148,7 @@ function BookPicker({
   onPick: (book: Book) => void
   onClose: () => void
 }): ReactNode {
+  const container = useOverlayContainer()
   const [searching, setSearching] = useState(false)
   const [filter, setFilter] = useState('')
   const matches = useMemo(
@@ -168,7 +170,7 @@ function BookPicker({
 
   return (
     <Dialog.Root open={candidate !== null} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Portal>
+      <Dialog.Portal container={container}>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
         <Dialog.Content
           // Escape closes this dialog only, not the screen behind it.

@@ -7,6 +7,7 @@ import { useState, type ReactNode } from 'react'
 import { notify } from '../lib/feedback'
 import { useExportBackup, useSearch } from '../lib/queries'
 import { useView } from '../lib/view'
+import { useOverlayContainer } from '../lib/overlay'
 
 interface Props {
   open: boolean
@@ -18,6 +19,7 @@ const shortcutClass =
   'shrink-0 rounded-control border border-hairline-strong bg-surface px-1.5 py-0.5 text-[11px] text-ink-muted'
 
 export default function CommandPalette({ open, onOpenChange, onAddBook }: Props): ReactNode {
+  const container = useOverlayContainer()
   const { navigate } = useView()
   const [query, setQuery] = useState('')
 
@@ -60,7 +62,7 @@ export default function CommandPalette({ open, onOpenChange, onAddBook }: Props)
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <Dialog.Portal container={container}>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
         <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(600px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-card border border-hairline bg-surface shadow-pop">
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>

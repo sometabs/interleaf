@@ -2,11 +2,13 @@ import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import type { ReactNode } from 'react'
 
 import { answer, usePendingConfirm } from '../lib/confirm'
+import { useOverlayContainer } from '../lib/overlay'
 
 // An alert dialog, not a plain one: it starts on Cancel and ignores a stray
 // Enter, so the safe answer is the easy one.
 export default function ConfirmDialog(): ReactNode {
   const request = usePendingConfirm()
+  const container = useOverlayContainer()
   if (!request) return null
 
   const { id, title, body, confirmLabel = 'Confirm', cancelLabel = 'Cancel', destructive } = request
@@ -19,7 +21,7 @@ export default function ConfirmDialog(): ReactNode {
         if (!open) answer(id, false)
       }}
     >
-      <AlertDialog.Portal>
+      <AlertDialog.Portal container={container}>
         <AlertDialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px]" />
         <AlertDialog.Content className="fixed left-1/2 top-[22vh] z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 rounded-card border border-hairline bg-surface p-5 shadow-pop">
           <AlertDialog.Title className="text-[15px] font-semibold">{title}</AlertDialog.Title>

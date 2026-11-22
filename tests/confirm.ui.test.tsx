@@ -79,6 +79,25 @@ describe('the confirmation itself', () => {
   })
 })
 
+describe('in full screen', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'fullscreenElement')
+  })
+
+  // Full screen shows one element only; a dialog left outside it is invisible yet blocks clicks.
+  it('opens inside the full-screen element', async () => {
+    const reader = document.createElement('div')
+    document.body.append(reader)
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: reader })
+    render(<ConfirmDialog />)
+
+    void confirm({ title: 'Delete this quote?' })
+
+    await waitFor(() => expect(reader.contains(screen.getByRole('alertdialog'))).toBe(true))
+    reader.remove()
+  })
+})
+
 describe('deleting a note', () => {
   it('asks first, and keeps the note when the answer is no', async () => {
     const user = userEvent.setup()
