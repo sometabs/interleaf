@@ -159,6 +159,17 @@ function today(): number | null {
   return fromDateInput(toDateInput(Math.floor(Date.now() / 1000)))
 }
 
+function overlapsPassage(view: FoliateView, index: number, range: Range, cfi: string): boolean {
+  try {
+    const target = view.resolveNavigation(cfi)
+    if (target.index !== index) return false
+    const found = target.anchor(range.startContainer.ownerDocument!)
+    return !!found && 'startContainer' in found && overlapOf(range, found) !== 'apart'
+  } catch {
+    return false
+  }
+}
+
 // One mark per place in the book: a quote and a note on the same passage share it.
 function marksByPlace(notes: Note[]): Map<string, { quote: boolean; note: boolean }> {
   const marks = new Map<string, { quote: boolean; note: boolean }>()
@@ -639,10 +650,20 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     }
 
     const onShowAnnotation = (event: Event): void => {
-      const { value, range } = (event as CustomEvent<{ value: string; range: Range }>).detail
+      const { value, index, range } = (
+        event as CustomEvent<{ value: string; index: number; range: Range }>
+      ).detail
       const here = locatedRef.current.filter((candidate) => candidate.location === value)
-      const quote = here.find(isQuote) ?? null
-      const note = here.find((candidate) => !isQuote(candidate)) ?? null
+      // A quote and a note can cover different but overlapping words, e.g. after extending.
+      const near = locatedRef.current.filter(
+        (candidate) =>
+          candidate.location !== value && overlapsPassage(view, index, range, candidate.location!)
+      )
+      const quote = here.find(isQuote) ?? near.find(isQuote) ?? null
+      const note =
+        here.find((candidate) => !isQuote(candidate)) ??
+        near.find((candidate) => !isQuote(candidate)) ??
+        null
       if (!quote && !note) return
       annotationAt = performance.now()
       setOpened({ quote, note, ...pointOf(range, host) })
