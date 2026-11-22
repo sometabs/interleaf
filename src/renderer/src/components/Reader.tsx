@@ -75,7 +75,7 @@ interface Relocation {
   cfi: string
   range?: Range
   section?: { current: number }
-  tocItem?: { label?: string } | null
+  tocItem?: TocItem | null
 }
 
 interface Page {
@@ -230,6 +230,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const [place, setPlace] = useState({
     fraction: 0,
     chapter: '',
+    tocItem: null as TocItem | null,
     screen: 0,
     screens: 0,
     columns: 1
@@ -411,6 +412,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       setPlace({
         fraction: detail.fraction ?? 0,
         chapter: detail.tocItem?.label?.trim() ?? '',
+        tocItem: detail.tocItem ?? null,
         screen: renderer.page ?? 0,
         screens: renderer.pages ?? 0,
         columns: renderer.heads?.length ?? 1
@@ -960,7 +962,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
             aria-label={PANEL_LABELS[panel]}
             className="absolute inset-y-0 right-0 z-10 flex w-[min(340px,90vw)] flex-col border-l border-hairline bg-surface text-ink shadow-pop"
           >
-            {panel === 'contents' && <Contents items={toc} onPick={go} />}
+            {panel === 'contents' && <Contents items={toc} current={place.tocItem} onPick={go} />}
             {panel === 'search' && readyView && (
               <Search view={readyView} onPick={(cfi) => void readyView.goTo(cfi)} />
             )}
@@ -1142,29 +1144,46 @@ function Popover({
 
 function Contents({
   items,
+  current,
   onPick
 }: {
   items: TocItem[]
+  current: TocItem | null
   onPick: (href: string) => void
 }): ReactNode {
+  const currentRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    currentRef.current?.scrollIntoView({ block: 'center' })
+  }, [])
+
   if (items.length === 0) {
     return <p className="p-5 text-[13px] text-ink-muted">This book has no table of contents.</p>
   }
+  const isCurrent = (item: TocItem): boolean =>
+    current !== null &&
+    (item === current || (item.href === current.href && item.label === current.label))
   const render = (list: TocItem[], depth: number): ReactNode => (
     <ul>
-      {list.map((item, index) => (
-        <li key={`${item.href}-${index}`}>
-          <button
-            type="button"
-            className="w-full truncate rounded-control px-3 py-1.5 text-left text-[13px] hover:bg-hover"
-            style={{ paddingLeft: 12 + depth * 14 }}
-            onClick={() => onPick(item.href)}
-          >
-            {item.label.trim() || 'Untitled'}
-          </button>
-          {item.subitems && item.subitems.length > 0 && render(item.subitems, depth + 1)}
-        </li>
-      ))}
+      {list.map((item, index) => {
+        const here = isCurrent(item)
+        return (
+          <li key={`${item.href}-${index}`}>
+            <button
+              ref={here ? currentRef : undefined}
+              type="button"
+              aria-current={here ? 'location' : undefined}
+              className={`w-full truncate rounded-control px-3 py-1.5 text-left text-[13px] hover:bg-hover ${
+                here ? 'bg-accent-soft font-medium text-accent' : ''
+              }`}
+              style={{ paddingLeft: 12 + depth * 14 }}
+              onClick={() => onPick(item.href)}
+            >
+              {item.label.trim() || 'Untitled'}
+            </button>
+            {item.subitems && item.subitems.length > 0 && render(item.subitems, depth + 1)}
+          </li>
+        )
+      })}
     </ul>
   )
   return <nav className="overflow-y-auto p-2">{render(items, 0)}</nav>
