@@ -216,6 +216,23 @@ describe('notes', () => {
     expect(notes.updateNote(db, note.id, { tag: null })?.tag).toBeNull()
   })
 
+  it('moves a quote to a new place only when asked', () => {
+    const book = books.createBook(db, { title: 'Moved' })
+    const quote = notes.createNote(db, {
+      bookId: book.id,
+      kind: 'highlight',
+      bodyMd: 'short',
+      location: 'epubcfi(/6/4!/4/2,/1:0,/1:5)'
+    })
+    expect(notes.updateNote(db, quote.id, { bodyMd: 'shorter' })?.location).toBe(quote.location)
+    const moved = notes.updateNote(db, quote.id, {
+      bodyMd: 'short and longer',
+      location: 'epubcfi(/6/4!/4/2,/1:0,/1:16)'
+    })
+    expect(moved?.location).toBe('epubcfi(/6/4!/4/2,/1:0,/1:16)')
+    expect(moved?.bodyMd).toBe('short and longer')
+  })
+
   it('keeps the label when the body is edited', () => {
     const note = notes.createNote(db, { bodyMd: 'x', tag: 'SUMMARY' })
     expect(notes.updateNote(db, note.id, { bodyMd: 'y' })?.tag).toBe('SUMMARY')

@@ -88,6 +88,8 @@ export interface NotePatch {
   title?: string
   bodyMd?: string
   tag?: string | null
+  // Where a quote sits in its EPUB; changes only when the quote is extended in the reader.
+  location?: string
 }
 
 // Control characters rather than HTML, so the renderer can split on them

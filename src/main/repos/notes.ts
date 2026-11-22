@@ -126,7 +126,7 @@ export function updateNote(db: Database, id: number, patch: NotePatch): Note | n
     db.prepare(
       `UPDATE note
        SET book_id = @bookId, kind = @kind, title = @title, body_md = @bodyMd,
-           tag = @tag, updated_at = unixepoch()
+           tag = @tag, location = @location, updated_at = unixepoch()
        WHERE id = @id`
     ).run({
       id,
@@ -134,7 +134,8 @@ export function updateNote(db: Database, id: number, patch: NotePatch): Note | n
       kind: data.kind ?? existing.kind,
       title,
       bodyMd,
-      tag: data.tag !== undefined ? asNoteTag(data.tag) : existing.tag
+      tag: data.tag !== undefined ? asNoteTag(data.tag) : existing.tag,
+      location: typeof data.location === 'string' ? data.location : existing.location
     })
   })
 

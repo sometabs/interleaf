@@ -31,8 +31,10 @@ import {
   useRecordReading,
   useRemoveBookmark,
   useSaveReadingPosition,
+  useUpdateNote,
   useUpdateBook
 } from '../lib/queries'
+import { overlapOf, unionOf, type Overlap } from '../lib/quoteOverlap'
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
 import {
   bookCss,
@@ -109,6 +111,10 @@ interface FoliateView extends HTMLElement {
   goLeft(): Promise<void>
   goRight(): Promise<void>
   getCFI(index: number, range: Range): string
+  resolveNavigation(target: string): {
+    index: number
+    anchor: (doc: Document) => Element | Range | null
+  }
   addAnnotation(annotation: Annotation, remove?: boolean): Promise<unknown>
   deleteAnnotation(annotation: Annotation): Promise<unknown>
   search(options: { query: string }): AsyncGenerator<SearchGroup | { progress: number } | 'done'>
@@ -131,6 +137,11 @@ interface Picked extends Point {
   cfi: string
   text: string
   doc: Document
+  // The quote the selection sits within, so it is offered instead of a second copy.
+  within: Note | null
+  // Quotes the selection runs over, and the single quote they would become.
+  extends: Note[]
+  extended: { cfi: string; text: string } | null
 }
 
 const HIGHLIGHT = '#f2c94c'
@@ -161,6 +172,40 @@ function pointOf(range: Range, host: HTMLElement): Point {
   return {
     x: offset.left + box.left + box.width / 2 - base.left,
     y: offset.top + box.top - base.top
+  }
+}
+
+// Only quotes are checked: a note on a quoted passage is fine.
+function touchedQuotes(
+  view: FoliateView,
+  index: number,
+  doc: Document,
+  selection: Range,
+  notes: Note[]
+): Pick<Picked, 'within' | 'extends' | 'extended'> {
+  const touched: { note: Note; range: Range; overlap: Overlap }[] = []
+  for (const note of notes) {
+    if (!isQuote(note) || !note.location) continue
+    try {
+      const target = view.resolveNavigation(note.location)
+      if (target.index !== index) continue
+      const found = target.anchor(doc)
+      if (!found || !('startContainer' in found)) continue
+      const overlap = overlapOf(selection, found)
+      if (overlap !== 'apart') touched.push({ note, range: found, overlap })
+    } catch {
+      // A quote whose place no longer resolves cannot be compared, so it never blocks.
+    }
+  }
+  if (touched.length === 1 && touched[0].overlap === 'inside') {
+    return { within: touched[0].note, extends: [], extended: null }
+  }
+  if (touched.length === 0) return { within: null, extends: [], extended: null }
+  const union = unionOf([selection, ...touched.map((entry) => entry.range)])
+  return {
+    within: null,
+    extends: sortByPlace(touched.map((entry) => entry.note)),
+    extended: { cfi: view.getCFI(index, union), text: union.toString().trim() }
   }
 }
 
@@ -210,6 +255,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const { back, navigate } = useView()
   const { data: notes = [] } = useNotes(bookId)
   const createNote = useCreateNote()
+  const updateNote = useUpdateNote()
   const deleteNote = useDeleteNote()
   const updateBook = useUpdateBook()
   const savePosition = useSaveReadingPosition(bookId)
@@ -430,6 +476,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       window.addEventListener(type, touch, true)
     }
 
+    // When the book last opened a highlight, which happens inside the same click as ours.
+    let annotationAt = -Infinity
     const onLoad = (event: Event): void => {
       const { doc, index } = (event as CustomEvent<{ doc: Document; index: number }>).detail
       const restCursor = doc.createElement('style')
@@ -455,7 +503,11 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         const selection = doc.getSelection()
         if (clickEvent.defaultPrevented || (selection && !selection.isCollapsed)) return
         const frame = doc.defaultView?.frameElement?.getBoundingClientRect()
-        turnAtEdge((frame?.left ?? 0) + clickEvent.clientX)
+        const x = (frame?.left ?? 0) + clickEvent.clientX
+        // Wait for the book's own click handling: a click on a quote opens it, not the next page.
+        window.setTimeout(() => {
+          if (performance.now() - annotationAt > 100) turnAtEdge(x)
+        })
       })
       doc.addEventListener('pointerdown', () => {
         setOpened(null)
@@ -474,7 +526,13 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
           const range = selection.getRangeAt(0)
           setOpened(null)
           setNoteDraft(null)
-          setPicked({ cfi: view.getCFI(index, range), text, doc, ...pointOf(range, host) })
+          setPicked({
+            cfi: view.getCFI(index, range),
+            text,
+            doc,
+            ...touchedQuotes(view, index, doc, range, locatedRef.current),
+            ...pointOf(range, host)
+          })
         })
       })
     }
@@ -544,7 +602,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     const onShowAnnotation = (event: Event): void => {
       const { value, range } = (event as CustomEvent<{ value: string; range: Range }>).detail
       const note = locatedRef.current.find((candidate) => candidate.location === value)
-      if (note) setOpened({ note, ...pointOf(range, host) })
+      if (!note) return
+      annotationAt = performance.now()
+      setOpened({ note, ...pointOf(range, host) })
     }
 
     void (async () => {
@@ -671,6 +731,22 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         location: picked.cfi
       })
       notify('Quote saved.')
+      clearSelection()
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  async function extendQuote(): Promise<void> {
+    if (!picked?.extended || picked.extends.length === 0) return
+    const [kept, ...merged] = picked.extends
+    try {
+      await updateNote.mutateAsync({
+        id: kept.id,
+        patch: { bodyMd: picked.extended.text, location: picked.extended.cfi }
+      })
+      for (const note of merged) await deleteNote.mutateAsync(note.id)
+      notify(merged.length > 0 ? 'Quotes merged.' : 'Quote extended.')
       clearSelection()
     } catch (error) {
       fail(error)
@@ -852,9 +928,36 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
           <Popover point={picked} label="Selected text">
             {noteDraft === null ? (
               <div className="flex gap-1">
-                <button type="button" className="reader-btn" onClick={() => void saveQuote()}>
-                  Quote
-                </button>
+                {picked.within ? (
+                  <>
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() => navigate({ kind: 'quotes' })}
+                    >
+                      Open in Quotes
+                    </button>
+                    <button
+                      type="button"
+                      className="reader-btn"
+                      onClick={() => {
+                        const quote = picked.within!
+                        clearSelection()
+                        void removeQuote(quote)
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </>
+                ) : picked.extended ? (
+                  <button type="button" className="reader-btn" onClick={() => void extendQuote()}>
+                    Extend quote
+                  </button>
+                ) : (
+                  <button type="button" className="reader-btn" onClick={() => void saveQuote()}>
+                    Quote
+                  </button>
+                )}
                 <button type="button" className="reader-btn" onClick={() => setNoteDraft('')}>
                   Note
                 </button>
@@ -1125,9 +1228,22 @@ function Popover({
   label: string
   children: ReactNode
 }): ReactNode {
-  const below = point.y < 64
+  const ref = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState(0)
+  // Measured, since the note editor makes it much taller than the buttons alone.
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return
+    setHeight(element.offsetHeight)
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => setHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  const below = point.y < 64 || point.y - 8 - height < 8
   return (
     <div
+      ref={ref}
       role="dialog"
       aria-label={label}
       className="absolute z-20 rounded-card border border-hairline bg-surface p-1.5 text-ink shadow-pop"
