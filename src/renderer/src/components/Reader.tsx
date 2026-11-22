@@ -399,8 +399,12 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     document.addEventListener('visibilitychange', onVisibility)
     const timeTimer = window.setInterval(saveTime, TIME_SAVE_MS)
 
+    let lastFraction = 0
     const onRelocate = (event: Event): void => {
       const detail = (event as CustomEvent<Relocation>).detail
+      // A chapter with no text has no pages to measure a position in.
+      if (!Number.isFinite(detail.fraction)) detail.fraction = lastFraction
+      lastFraction = detail.fraction
       const { renderer } = view
       touch()
       setShown(pageOf(view, detail))
