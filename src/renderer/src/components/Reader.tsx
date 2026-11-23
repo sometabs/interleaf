@@ -143,6 +143,9 @@ interface Picked extends Point {
   // Quotes the selection runs over, and the single quote they would become.
   extends: Note[]
   extended: { cfi: string; text: string } | null
+  // Notes the selection touches: Note edits them as one, over the passage they grow to.
+  notesTouched: Note[]
+  notesGrown: { cfi: string; text: string } | null
 }
 
 const HIGHLIGHT = '#f2c94c'
@@ -159,15 +162,21 @@ function today(): number | null {
   return fromDateInput(toDateInput(Math.floor(Date.now() / 1000)))
 }
 
-function overlapsPassage(view: FoliateView, index: number, range: Range, cfi: string): boolean {
+function rangeOf(view: FoliateView, index: number, doc: Document, cfi: string): Range | null {
   try {
     const target = view.resolveNavigation(cfi)
-    if (target.index !== index) return false
-    const found = target.anchor(range.startContainer.ownerDocument!)
-    return !!found && 'startContainer' in found && overlapOf(range, found) !== 'apart'
+    if (target.index !== index) return null
+    const found = target.anchor(doc)
+    return found && 'startContainer' in found ? found : null
   } catch {
-    return false
+    return null
   }
+}
+
+function holdsPoint(range: Range, x: number, y: number): boolean {
+  return [...range.getClientRects()].some(
+    (box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
+  )
 }
 
 // One mark per place in the book: a quote and a note on the same passage share it.
@@ -252,6 +261,27 @@ function touchedQuotes(
     within: null,
     extends: sortByPlace(touched.map((entry) => entry.note)),
     extended: { cfi: view.getCFI(index, union), text: union.toString().trim() }
+  }
+}
+
+function touchedNotes(
+  view: FoliateView,
+  index: number,
+  doc: Document,
+  selection: Range,
+  notes: Note[]
+): Pick<Picked, 'notesTouched' | 'notesGrown'> {
+  const touched: { note: Note; range: Range }[] = []
+  for (const note of notes) {
+    if (isQuote(note) || !note.location) continue
+    const range = rangeOf(view, index, doc, note.location)
+    if (range && overlapOf(selection, range) !== 'apart') touched.push({ note, range })
+  }
+  if (touched.length === 0) return { notesTouched: [], notesGrown: null }
+  const union = unionOf([selection, ...touched.map((entry) => entry.range)])
+  return {
+    notesTouched: sortByPlace(touched.map((entry) => entry.note)),
+    notesGrown: { cfi: view.getCFI(index, union), text: union.toString().trim() }
   }
 }
 
@@ -527,6 +557,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 
     // When the book last opened a highlight, which happens inside the same click as ours.
     let annotationAt = -Infinity
+    // Where the last press landed, in its frame, to tell which marks a click was on.
+    let pointer: { doc: Document; x: number; y: number } | null = null
     const onLoad = (event: Event): void => {
       const { doc, index } = (event as CustomEvent<{ doc: Document; index: number }>).detail
       const restCursor = doc.createElement('style')
@@ -558,7 +590,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
           if (performance.now() - annotationAt > 100) turnAtEdge(x)
         })
       })
-      doc.addEventListener('pointerdown', () => {
+      doc.addEventListener('pointerdown', (pointerEvent) => {
+        pointer = { doc, x: pointerEvent.clientX, y: pointerEvent.clientY }
         setOpened(null)
         setFootnote(null)
       })
@@ -580,6 +613,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
             text,
             doc,
             ...touchedQuotes(view, index, doc, range, locatedRef.current),
+            ...touchedNotes(view, index, doc, range, locatedRef.current),
             ...pointOf(range, host)
           })
         })
@@ -653,17 +687,21 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       const { value, index, range } = (
         event as CustomEvent<{ value: string; index: number; range: Range }>
       ).detail
-      const here = locatedRef.current.filter((candidate) => candidate.location === value)
-      // A quote and a note can cover different but overlapping words, e.g. after extending.
-      const near = locatedRef.current.filter(
-        (candidate) =>
-          candidate.location !== value && overlapsPassage(view, index, range, candidate.location!)
-      )
-      const quote = here.find(isQuote) ?? near.find(isQuote) ?? null
-      const note =
-        here.find((candidate) => !isQuote(candidate)) ??
-        near.find((candidate) => !isQuote(candidate)) ??
-        null
+      // Only the marks under the click: underlined words give the note, highlighted ones the quote.
+      const doc = range.startContainer.ownerDocument!
+      const under =
+        pointer?.doc === doc
+          ? locatedRef.current.filter((candidate) => {
+              const found = rangeOf(view, index, doc, candidate.location!)
+              return found !== null && holdsPoint(found, pointer!.x, pointer!.y)
+            })
+          : []
+      const here =
+        under.length > 0
+          ? under
+          : locatedRef.current.filter((candidate) => candidate.location === value)
+      const quote = here.find(isQuote) ?? null
+      const note = here.find((candidate) => !isQuote(candidate)) ?? null
       if (!quote && !note) return
       annotationAt = performance.now()
       setOpened({ quote, note, ...pointOf(range, host) })
@@ -716,6 +754,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         }
         if (!placed) await view.init({ lastLocation: position?.cfi, showTextStart: !position })
         if (cancelled) return
+        if (at && !placed) notify('This passage isn’t in the current file.')
         opened = true
         setStatus('ready')
         setReadyView(view)
@@ -832,14 +871,18 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     if (!picked || noteDraft === null) return
     try {
       const body = noteDraft.trim()
-      await createNote.mutateAsync({
-        bookId,
-        kind: 'thought',
-        bodyMd: body ? `${quoteLines(picked.text)}\n\n${body}` : quoteLines(picked.text),
-        location: picked.cfi
-      })
+      const passage = picked.notesGrown ?? { cfi: picked.cfi, text: picked.text }
+      const bodyMd = body ? `${quoteLines(passage.text)}\n\n${body}` : quoteLines(passage.text)
+      const [kept, ...merged] = picked.notesTouched
+      const note = kept
+        ? await updateNote.mutateAsync({ id: kept.id, patch: { bodyMd, location: passage.cfi } })
+        : await createNote.mutateAsync({ bookId, kind: 'thought', bodyMd, location: passage.cfi })
+      for (const other of merged) await deleteNote.mutateAsync(other.id)
       notify('Note saved.')
-      // Stays open on the passage, so it can still be quoted.
+      // Stays open on the passage, so it can still be quoted; Note again edits this note.
+      setPicked((current) =>
+        current && note ? { ...current, notesTouched: [note], notesGrown: passage } : current
+      )
       setNoteDraft(null)
     } catch (error) {
       fail(error)
@@ -1055,14 +1098,25 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                   </>
                 ) : picked.extended ? (
                   <button type="button" className="reader-btn" onClick={() => void extendQuote()}>
-                    Extend quote
+                    Quote
                   </button>
                 ) : (
                   <button type="button" className="reader-btn" onClick={() => void saveQuote()}>
                     Quote
                   </button>
                 )}
-                <button type="button" className="reader-btn" onClick={() => setNoteDraft('')}>
+                <button
+                  type="button"
+                  className="reader-btn"
+                  onClick={() =>
+                    setNoteDraft(
+                      picked.notesTouched
+                        .map((note) => splitNote(note.bodyMd).thought)
+                        .filter(Boolean)
+                        .join('\n\n')
+                    )
+                  }
+                >
                   Note
                 </button>
               </div>
