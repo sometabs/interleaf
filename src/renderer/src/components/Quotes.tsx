@@ -284,7 +284,8 @@ export default function Quotes({ focusId }: { focusId?: number }): ReactNode {
               open
               onToggle={finishDraft}
               onChange={setDraft}
-              onSave={(text) => setDraft(text)}
+              // The editor's last save lands after Done has closed the draft; it must not reopen it.
+              onSave={(text) => setDraft((current) => (current === null ? null : text))}
               onDelete={() => void discardDraft()}
               source={
                 <select

@@ -105,6 +105,23 @@ describe('the Quotes screen', () => {
     expect(state.created[0]).toMatchObject({ kind: 'highlight', bookId: 7 })
   })
 
+  it('closes the draft when Done beats the autosave timer', async () => {
+    const state = installBridge({
+      books: [makeBook({ id: 7, title: 'The Dispossessed' })],
+      notes: [QUOTE]
+    })
+    renderApp(<Quotes />, { kind: 'quotes' })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'New quote' }))
+    await user.selectOptions(await screen.findByLabelText('Book this quote is from'), '7')
+    await enterPassage('There was a wall.')
+    await user.click(screen.getByTestId('quote-done'))
+
+    await waitFor(() => expect(state.created).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByLabelText('Book this quote is from')).toBeNull())
+  })
+
   it('warns rather than asking, when Done cannot finish the quote', async () => {
     installBridge({ books: [makeBook({ id: 7, title: 'The Dispossessed' })], notes: [QUOTE] })
     renderApp(
