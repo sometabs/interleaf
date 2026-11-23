@@ -381,6 +381,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const lookRef = useRef(look)
   const themeRef = useRef(themeShown)
   const overlayRef = useRef({ panel, picked, opened, footnote })
+  const draftRef = useRef(noteDraft)
   const pendingPosition = useRef<Relocation | null>(null)
   // Opened at a quote, the saved place stays put until the reader moves on from there.
   const following = useRef(at === undefined)
@@ -392,6 +393,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     lookRef.current = look
     themeRef.current = themeShown
     overlayRef.current = { panel, picked, opened, footnote }
+    draftRef.current = noteDraft
     savePositionRef.current = savePosition.mutate
     recordReadingRef.current = recordReading.mutate
   })
@@ -592,12 +594,14 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       })
       doc.addEventListener('pointerdown', (pointerEvent) => {
         pointer = { doc, x: pointerEvent.clientX, y: pointerEvent.clientY }
-        setOpened(null)
+        setOpened((current) => (current?.draft?.trim() ? current : null))
         setFootnote(null)
       })
       doc.addEventListener('pointerup', () => {
         // The selection settles after pointerup.
         window.setTimeout(() => {
+          // A note with words in it is only closed by Cancel, Save or Escape.
+          if (draftRef.current?.trim()) return
           const selection = doc.getSelection()
           const text = selection?.toString().trim() ?? ''
           if (!selection || selection.isCollapsed || !selection.rangeCount || !text) {
@@ -689,6 +693,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       ).detail
       // Only the marks under the click: underlined words give the note, highlighted ones the quote.
       const doc = range.startContainer.ownerDocument!
+      // A footnote marker or link inside a quote opens what it points to, not the quote.
+      if (pointer?.doc === doc && doc.elementFromPoint(pointer.x, pointer.y)?.closest('a[href]'))
+        return
       const under =
         pointer?.doc === doc
           ? locatedRef.current.filter((candidate) => {
@@ -826,6 +833,18 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       if (document.fullscreenElement) void document.exitFullscreen()
     }
   }, [dismissOverlay, turn])
+
+  // A save in flight blocks the next, so a quick second click cannot store the passage twice.
+  const saving = useRef(false)
+  async function once(task: () => Promise<void>): Promise<void> {
+    if (saving.current) return
+    saving.current = true
+    try {
+      await task()
+    } finally {
+      saving.current = false
+    }
+  }
 
   async function saveQuote(): Promise<void> {
     if (!picked) return
@@ -1085,7 +1104,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                 ) : (
                   <PopButton
                     label="Quote"
-                    onClick={() => void (picked.extended ? extendQuote() : saveQuote())}
+                    onClick={() => void once(picked.extended ? extendQuote : saveQuote)}
                   >
                     {POP_ICONS.quote}
                   </PopButton>
@@ -1129,14 +1148,19 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                   value={noteDraft}
                   onChange={(event) => setNoteDraft(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) void saveNote()
+                    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey))
+                      void once(saveNote)
                   }}
                 />
                 <div className="mt-2 flex justify-end gap-1">
                   <button type="button" className="btn btn-ghost" onClick={clearSelection}>
                     Cancel
                   </button>
-                  <button type="button" className="btn btn-primary" onClick={() => void saveNote()}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void once(saveNote)}
+                  >
                     Save note
                   </button>
                 </div>
@@ -1201,7 +1225,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                   onChange={(event) => setOpened({ ...opened, draft: event.target.value })}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                      void saveEditedNote()
+                      void once(saveEditedNote)
                     }
                   }}
                 />
@@ -1212,7 +1236,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={() => void saveEditedNote()}
+                    onClick={() => void once(saveEditedNote)}
                   >
                     Save
                   </button>
@@ -1423,7 +1447,10 @@ function PopButton({
       aria-label={label}
       title={label}
       className={`reader-btn size-8 justify-center p-0 ${danger ? 'hover:text-danger' : ''}`}
-      onClick={onClick}
+      // The second click of a double-click would act on whatever button replaced this one.
+      onClick={(event) => {
+        if (event.detail <= 1) onClick()
+      }}
     >
       {children}
     </button>
