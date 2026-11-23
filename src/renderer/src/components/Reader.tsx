@@ -1074,40 +1074,24 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         {picked && (
           <Popover point={picked} label="Selected text" reserve={NOTE_EDITOR_HEIGHT}>
             {noteDraft === null ? (
-              <div className="flex gap-1">
+              <div className="flex items-center gap-0.5">
                 {picked.within ? (
-                  <>
-                    <button
-                      type="button"
-                      className="reader-btn"
-                      onClick={() => navigate({ kind: 'quotes', focusId: picked.within!.id })}
-                    >
-                      Open in Quotes
-                    </button>
-                    <button
-                      type="button"
-                      className="reader-btn"
-                      onClick={() => {
-                        const quote = picked.within!
-                        clearSelection()
-                        void removeQuote(quote)
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </>
-                ) : picked.extended ? (
-                  <button type="button" className="reader-btn" onClick={() => void extendQuote()}>
-                    Quote
-                  </button>
+                  <PopButton
+                    label="Open in Quotes"
+                    onClick={() => navigate({ kind: 'quotes', focusId: picked.within!.id })}
+                  >
+                    {POP_ICONS.open}
+                  </PopButton>
                 ) : (
-                  <button type="button" className="reader-btn" onClick={() => void saveQuote()}>
-                    Quote
-                  </button>
+                  <PopButton
+                    label="Quote"
+                    onClick={() => void (picked.extended ? extendQuote() : saveQuote())}
+                  >
+                    {POP_ICONS.quote}
+                  </PopButton>
                 )}
-                <button
-                  type="button"
-                  className="reader-btn"
+                <PopButton
+                  label="Note"
                   onClick={() =>
                     setNoteDraft(
                       picked.notesTouched
@@ -1117,8 +1101,24 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                     )
                   }
                 >
-                  Note
-                </button>
+                  {POP_ICONS.note}
+                </PopButton>
+                {picked.within && (
+                  <>
+                    <PopDivider />
+                    <PopButton
+                      label="Delete quote"
+                      danger
+                      onClick={() => {
+                        const quote = picked.within!
+                        clearSelection()
+                        void removeQuote(quote)
+                      }}
+                    >
+                      {POP_ICONS.remove}
+                    </PopButton>
+                  </>
+                )}
               </div>
             ) : (
               <div className="w-72">
@@ -1220,54 +1220,60 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
               </div>
             ) : (
               <div className="flex max-w-80 flex-col gap-1.5">
+                {opened.note && opened.quote && <PopHeading kind="note" />}
                 {opened.note && splitNote(opened.note.bodyMd).thought && (
                   <p className="line-clamp-4 px-1.5 pt-1 text-[13px] whitespace-pre-line">
                     {toPlainText(splitNote(opened.note.bodyMd).thought)}
                   </p>
                 )}
                 {opened.note && (
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      className="reader-btn"
+                  <div className="flex items-center gap-0.5">
+                    <PopButton
+                      label="Edit note"
                       onClick={() =>
                         setOpened({ ...opened, draft: splitNote(opened.note!.bodyMd).thought })
                       }
                     >
-                      {opened.quote ? 'Edit note' : 'Edit'}
-                    </button>
-                    <button
-                      type="button"
-                      className="reader-btn"
+                      {POP_ICONS.edit}
+                    </PopButton>
+                    <PopButton
+                      label="Open in Notes"
                       onClick={() => navigate({ kind: 'note', id: opened.note!.id })}
                     >
-                      Open in Notes
-                    </button>
-                    <button
-                      type="button"
-                      className="reader-btn"
+                      {POP_ICONS.open}
+                    </PopButton>
+                    <PopDivider />
+                    <PopButton
+                      label="Delete note"
+                      danger
                       onClick={() => void removeNote(opened.note!)}
                     >
-                      {opened.quote ? 'Delete note' : 'Delete'}
-                    </button>
+                      {POP_ICONS.remove}
+                    </PopButton>
                   </div>
                 )}
+                {opened.note && opened.quote && (
+                  <>
+                    <span aria-hidden className="mx-1.5 h-px bg-hairline" />
+                    <PopHeading kind="quote" />
+                  </>
+                )}
                 {opened.quote && (
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      className="reader-btn"
+                  <div className="flex items-center gap-0.5">
+                    <PopButton
+                      label="Open in Quotes"
                       onClick={() => navigate({ kind: 'quotes', focusId: opened.quote!.id })}
                     >
-                      Open in Quotes
-                    </button>
-                    <button
-                      type="button"
-                      className="reader-btn"
+                      {POP_ICONS.open}
+                    </PopButton>
+                    <PopDivider />
+                    <PopButton
+                      label="Delete quote"
+                      danger
                       onClick={() => void removeQuote(opened.quote!)}
                     >
-                      {opened.note ? 'Delete quote' : 'Delete'}
-                    </button>
+                      {POP_ICONS.remove}
+                    </PopButton>
                   </div>
                 )}
               </div>
@@ -1397,6 +1403,84 @@ function Icon({ children, filled = false }: { children: ReactNode; filled?: bool
     >
       {children}
     </svg>
+  )
+}
+
+function PopButton({
+  label,
+  danger = false,
+  onClick,
+  children
+}: {
+  label: string
+  danger?: boolean
+  onClick: () => void
+  children: ReactNode
+}): ReactNode {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={`reader-btn size-8 justify-center p-0 ${danger ? 'hover:text-danger' : ''}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
+function PopDivider(): ReactNode {
+  return <span aria-hidden className="mx-1 h-4 w-px bg-hairline-strong" />
+}
+
+// When a passage has both, each section starts with its mark as drawn on the page, and its name.
+function PopHeading({ kind }: { kind: 'note' | 'quote' }): ReactNode {
+  return (
+    <span className="flex items-center gap-2 px-1.5 pt-1 text-[11px] font-semibold tracking-wider text-ink-muted uppercase">
+      {kind === 'note' ? (
+        <span aria-hidden className="mt-1 w-3.5 border-b-2" style={{ borderColor: UNDERLINE }} />
+      ) : (
+        <span
+          aria-hidden
+          className="h-2.5 w-3.5 rounded-[2px]"
+          style={{ background: HIGHLIGHT, opacity: 0.45 }}
+        />
+      )}
+      {kind === 'note' ? 'Note' : 'Quote'}
+    </span>
+  )
+}
+
+const POP_ICONS = {
+  quote: (
+    <Icon>
+      <path d="M3 19h4L17.5 8.5a2.83 2.83 0 0 0-4-4L3 15v4" />
+      <path d="m12.5 5.5 4 4M4.5 13.5l4 4M21 15v4h-8l4-4z" />
+    </Icon>
+  ),
+  note: (
+    <Icon>
+      <path d="M3 20l1.3-3.9C2 12.7 2.9 8.2 6.4 5.7c3.5-2.5 8.6-2.3 11.8.5 3.3 2.8 3.7 7.3 1 10.5-2.6 3.2-7.6 4.2-11.5 2.3L3 20" />
+    </Icon>
+  ),
+  open: (
+    <Icon>
+      <path d="M12 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+      <path d="M11 13l9-9M15 4h5v5" />
+    </Icon>
+  ),
+  edit: (
+    <Icon>
+      <path d="M4 20h4L18.5 9.5a2.83 2.83 0 0 0-4-4L4 16v4" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
+  ),
+  remove: (
+    <Icon>
+      <path d="M4 7h16M10 11v6M14 11v6" />
+      <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+    </Icon>
   )
 }
 
