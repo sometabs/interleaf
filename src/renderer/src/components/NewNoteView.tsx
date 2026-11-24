@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 
-import { confirm } from '../lib/confirm'
+import { useUnsavedDraft } from '../lib/leaveGuard'
 import { useBooks, useCreateNote } from '../lib/queries'
 import { useView } from '../lib/view'
 import Editor from './Editor'
@@ -15,21 +15,9 @@ export default function NewNoteView(): ReactNode {
   const [bookId, setBookId] = useState<number | null>(null)
 
   const hasContent = title.trim() !== '' || body.trim() !== ''
-
-  async function leave(): Promise<void> {
-    if (!hasContent) {
-      back()
-      return
-    }
-
-    const discard = await confirm({
-      title: 'Discard this note?',
-      body: 'This draft has not been saved.',
-      confirmLabel: 'Discard',
-      destructive: true
-    })
-    if (discard) back()
-  }
+  const saving = useRef(false)
+  // Back, Escape and every other way out ask before dropping the draft.
+  useUnsavedDraft(() => hasContent && !saving.current)
 
   function save(): void {
     if (!hasContent) {
@@ -37,6 +25,7 @@ export default function NewNoteView(): ReactNode {
       return
     }
 
+    saving.current = true
     createNote.mutate(
       {
         kind: 'thought',
@@ -45,14 +34,19 @@ export default function NewNoteView(): ReactNode {
         tag,
         bookId
       },
-      { onSuccess: back }
+      {
+        onSuccess: back,
+        onError: () => {
+          saving.current = false
+        }
+      }
     )
   }
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-8 pt-6 pb-6">
       <div className="mb-4 flex items-center gap-2">
-        <button type="button" className="btn btn-ghost -ml-2" onClick={() => void leave()}>
+        <button type="button" className="btn btn-ghost -ml-2" onClick={back}>
           ← Back
         </button>
 

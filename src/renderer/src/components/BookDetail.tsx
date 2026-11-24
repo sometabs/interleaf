@@ -2,6 +2,7 @@ import { STATUS_LABELS, type Book, type BookStatus, type Note } from '@shared/ap
 import { useRef, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
+import { useUnsavedDraft } from '../lib/leaveGuard'
 import {
   formatDate,
   fromDateInput,
@@ -532,6 +533,7 @@ function DraftQuoteCard({
   onDiscard: () => void
 }): ReactNode {
   const [body, setBody] = useState('')
+  useUnsavedDraft(() => body.trim() !== '')
 
   async function discard(): Promise<void> {
     if (body.trim()) {
@@ -582,6 +584,7 @@ function DraftNoteCard({
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const hasContent = title.trim() !== '' || body.trim() !== ''
+  useUnsavedDraft(() => hasContent)
 
   async function discard(): Promise<void> {
     if (hasContent) {

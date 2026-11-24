@@ -3,6 +3,7 @@ import { toPlainText } from '@shared/plaintext'
 import { useEffect, useState, type ReactNode } from 'react'
 
 import { confirm } from '../lib/confirm'
+import { useUnsavedDraft } from '../lib/leaveGuard'
 import { notify } from '../lib/feedback'
 import { useBooks, useCreateNote, useDeleteNote, useNotes, useUpdateNote } from '../lib/queries'
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
@@ -30,6 +31,7 @@ export default function Quotes({ focusId }: { focusId?: number }): ReactNode {
   // only when Done has both a passage and a book.
   const [draft, setDraft] = useState<string | null>(null)
   const [draftBookId, setDraftBookId] = useState<number | null>(null)
+  useUnsavedDraft(() => (draft ?? '').trim() !== '')
 
   const quotes = notes.filter(isQuote)
 

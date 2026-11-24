@@ -1,6 +1,8 @@
 import type { HighlightImportPlan } from '@shared/api'
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 
+import { leaveScreen } from './leaveGuard'
+
 export type View =
   | { kind: 'library' }
   | { kind: 'queue' }
@@ -64,11 +66,13 @@ export function ViewProvider({
   const [history, setHistory] = useState<View[]>([initial])
 
   const navigate = useCallback((next: View) => {
-    setHistory((current) => [...current.slice(-19), next])
+    leaveScreen(() => setHistory((current) => [...current.slice(-19), next]))
   }, [])
 
   const back = useCallback(() => {
-    setHistory((current) => (current.length > 1 ? current.slice(0, -1) : current))
+    leaveScreen(() =>
+      setHistory((current) => (current.length > 1 ? current.slice(0, -1) : current))
+    )
   }, [])
 
   const value = useMemo<Navigation>(
