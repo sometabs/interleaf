@@ -45,6 +45,7 @@ import {
   LIMITS,
   narrower,
   pageLabel,
+  paintBook,
   parseLook,
   step,
   shownTheme,
@@ -53,7 +54,7 @@ import {
   widthRoom,
   withLayout,
   type ReaderLook,
-  type ShownTheme
+  type Theme
 } from '../lib/readerLook'
 import { useAppDark } from '../lib/settings'
 import { useView } from '../lib/view'
@@ -343,6 +344,9 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const removeBookmark = useRemoveBookmark(bookId)
   const [look, setLook] = usePersistentState<ReaderLook>('reader.look', DEFAULT_LOOK, parseLook)
   const themeShown = shownTheme(look.theme, useAppDark())
+  const colors = THEMES[themeShown]
+  // Only what lays the book out: a colour change must not rebuild every page.
+  const css = bookCss(look, themeShown)
 
   const shellRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -382,6 +386,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const locatedRef = useRef(located)
   const lookRef = useRef(look)
   const themeRef = useRef(themeShown)
+  const colorsRef = useRef<Theme>(colors)
   const overlayRef = useRef({ panel, picked, opened, footnote })
   const draftRef = useRef(noteDraft)
   // What the note box opened with, so an untouched one leaves without asking.
@@ -403,6 +408,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     locatedRef.current = located
     lookRef.current = look
     themeRef.current = themeShown
+    colorsRef.current = colors
     overlayRef.current = { panel, picked, opened, footnote }
     draftRef.current = noteDraft
     savePositionRef.current = savePosition.mutate
@@ -579,6 +585,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         'html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }'
       doc.head?.append(restCursor)
       hideCursorIn(doc, cursorHiddenRef.current)
+      paintBook(doc, colorsRef.current)
       doc.addEventListener('mousemove', () => handlers.current.stir())
       for (const type of ['pointerdown', 'keydown', 'wheel']) {
         doc.addEventListener(type, follow, true)
@@ -759,7 +766,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         view.addEventListener('draw-annotation', onDraw)
         view.addEventListener('show-annotation', onShowAnnotation)
         view.addEventListener('link', onLink)
-        applyLook(view, lookRef.current, themeRef.current)
+        applyLook(view, lookRef.current, bookCss(lookRef.current, themeRef.current))
         // A quote from a replaced file may point nowhere; then open where reading stopped.
         let placed = false
         if (at) {
@@ -800,9 +807,17 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     }
   }, [bookId, at])
 
+  const { flow, pages, width, margin } = look
   useEffect(() => {
-    if (viewRef.current && status === 'ready') applyLook(viewRef.current, look, themeShown)
-  }, [look, themeShown, status])
+    if (viewRef.current && status === 'ready')
+      applyLook(viewRef.current, { flow, pages, width, margin }, css)
+  }, [flow, pages, width, margin, css, status])
+
+  // Repaints the open chapters in place, which is cheap enough to follow a colour picker.
+  useEffect(() => {
+    if (status !== 'ready') return
+    for (const { doc } of viewRef.current?.renderer.getContents?.() ?? []) paintBook(doc, colors)
+  }, [colors, status])
 
   // Keeps the drawn marks in step with the journal as quotes and notes are added or removed.
   const drawn = useRef(new Map<string, string>())
@@ -970,8 +985,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   }
 
   if (!book) return null
-  const theme = THEMES[themeShown]
-  const dark = themeShown === 'dark'
+  const theme = colors
+  const dark = colors.dark
   const chromeVisible = chromeShown || panel !== null || status !== 'ready'
   const askStart =
     status === 'ready' && !startAsked && (book.status === 'want' || book.status === 'abandoned')
@@ -1545,14 +1560,18 @@ function hideCursorIn(doc: Document, hidden: boolean): void {
   doc.documentElement.toggleAttribute('data-cursor-hidden', hidden)
 }
 
-function applyLook(view: FoliateView, look: ReaderLook, shown: ShownTheme): void {
+function applyLook(
+  view: FoliateView,
+  layout: Pick<ReaderLook, 'flow' | 'pages' | 'width' | 'margin'>,
+  css: string
+): void {
   const renderer = view.renderer
-  renderer.setAttribute('flow', look.flow)
-  renderer.setAttribute('max-column-count', String(look.pages))
-  renderer.setAttribute('max-inline-size', `${look.width}px`)
-  renderer.setAttribute('margin', `${look.margin}px`)
+  renderer.setAttribute('flow', layout.flow)
+  renderer.setAttribute('max-column-count', String(layout.pages))
+  renderer.setAttribute('max-inline-size', `${layout.width}px`)
+  renderer.setAttribute('margin', `${layout.margin}px`)
   renderer.setAttribute('gap', '6%')
-  renderer.setStyles?.(bookCss(look, shown))
+  renderer.setStyles?.(css)
 }
 
 function Popover({
@@ -1905,35 +1924,36 @@ function LookPanel({
         <legend className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
           Theme
         </legend>
-        <div className="grid grid-cols-4 gap-2">
-          {THEME_CHOICES.map((name) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={look.theme === name}
-              title={name === 'auto' ? 'Light or dark, following the app' : undefined}
-              className={`flex items-center justify-center gap-1.5 rounded-control border px-2 py-2 text-[12px] ${
-                look.theme === name ? 'border-accent ring-1 ring-accent' : 'border-hairline-strong'
-              } ${name === 'auto' ? 'bg-surface text-ink' : ''}`}
-              style={
-                name === 'auto'
-                  ? undefined
-                  : { background: THEMES[name].background, color: THEMES[name].text }
-              }
-              onClick={() => onChange({ ...look, theme: name })}
-            >
-              {name === 'auto' && (
-                <span
-                  aria-hidden
-                  className="size-3 rounded-full border border-hairline-strong"
-                  style={{
-                    background: `linear-gradient(90deg, ${THEMES.light.background} 50%, ${THEMES.dark.background} 50%)`
-                  }}
-                />
-              )}
-              {name === 'auto' ? 'Auto' : THEMES[name].label}
-            </button>
-          ))}
+        <div className="grid grid-cols-3 gap-2">
+          {THEME_CHOICES.map((name) => {
+            const colors = name === 'auto' ? null : THEMES[name]
+            return (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={look.theme === name}
+                title={name === 'auto' ? 'Light or dark, following the app' : undefined}
+                className={`flex items-center justify-center gap-1.5 rounded-control border px-2 py-2 text-[12px] ${
+                  look.theme === name
+                    ? 'border-accent ring-1 ring-accent'
+                    : 'border-hairline-strong'
+                } ${name === 'auto' ? 'bg-surface text-ink' : ''}`}
+                style={colors ? { background: colors.background, color: colors.text } : undefined}
+                onClick={() => onChange({ ...look, theme: name })}
+              >
+                {name === 'auto' && (
+                  <span
+                    aria-hidden
+                    className="size-3 rounded-full border border-hairline-strong"
+                    style={{
+                      background: `linear-gradient(90deg, ${THEMES.light.background} 50%, ${THEMES.dark.background} 50%)`
+                    }}
+                  />
+                )}
+                {colors ? colors.label : 'Auto'}
+              </button>
+            )
+          })}
         </div>
       </fieldset>
 

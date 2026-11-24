@@ -7,14 +7,18 @@ import { isNoteReference, isNoteTarget, noteText } from '../src/renderer/src/lib
 import { matchLibrary, normalTitle } from '../src/renderer/src/lib/epubMatch'
 import {
   bookCss,
+  contrast,
   DEFAULT_LOOK,
   layoutOf,
   LIMITS,
   narrower,
   pageLabel,
+  paintBook,
   parseLook,
+  READABLE,
   shownTheme,
   step,
+  THEMES,
   widthRoom,
   withLayout
 } from '../src/renderer/src/lib/readerLook'
@@ -178,8 +182,11 @@ describe('reader look', () => {
 
   it('recolours text in the dark theme and sets the chosen font', () => {
     const css = bookCss({ ...DEFAULT_LOOK, theme: 'dark', font: 'serif' }, 'dark')
+    const doc = document.implementation.createHTMLDocument('chapter')
+    paintBook(doc, THEMES.dark)
 
-    expect(css).toContain('color-scheme: dark')
+    expect(css).toContain('color: var(--reader-text)')
+    expect(doc.documentElement.style.getPropertyValue('color-scheme')).toBe('dark')
     expect(css).toMatch(/font-family: [^;]*serif/)
   })
 
@@ -215,6 +222,51 @@ describe('clicking page edges', () => {
     expect(DEFAULT_LOOK.edgeTurn).toBe(true)
     expect(parseLook({})?.edgeTurn).toBe(true)
     expect(parseLook({ ...DEFAULT_LOOK, edgeTurn: false })?.edgeTurn).toBe(false)
+  })
+})
+
+describe('reader themes', () => {
+  it('offers gray and black beside the others, and drops a theme that no longer exists', () => {
+    expect(parseLook({ ...DEFAULT_LOOK, theme: 'gray' })?.theme).toBe('gray')
+    expect(parseLook({ ...DEFAULT_LOOK, theme: 'black' })?.theme).toBe('black')
+    expect(parseLook({ ...DEFAULT_LOOK, theme: 'custom' })?.theme).toBe('auto')
+  })
+
+  it('measures contrast the WCAG way', () => {
+    expect(contrast('#000000', '#ffffff')).toBeCloseTo(21, 0)
+    expect(contrast('#777777', '#777777')).toBe(1)
+  })
+
+  it('keeps text and links readable in every theme', () => {
+    for (const theme of Object.values(THEMES)) {
+      expect(contrast(theme.text, theme.background)).toBeGreaterThanOrEqual(READABLE)
+      if (theme.link) {
+        expect(contrast(theme.link, theme.background)).toBeGreaterThanOrEqual(READABLE)
+        expect(theme.link).not.toBe(theme.text)
+      }
+    }
+  })
+
+  it('treats black as dark and gray as light, for the panels and the book', () => {
+    expect(THEMES.black.dark).toBe(true)
+    expect(THEMES.gray.dark).toBe(false)
+    expect(THEMES.black.colors?.['--color-canvas']).toBe('#000000')
+  })
+
+  // A theme switch repaints; only a change of layout may restyle, which lays out every page.
+  it('keeps colours out of the book styles', () => {
+    expect(bookCss(DEFAULT_LOOK, 'gray')).toBe(bookCss(DEFAULT_LOOK, 'black'))
+    expect(bookCss(DEFAULT_LOOK, 'black')).toContain('var(--reader-text)')
+  })
+
+  it('paints the colours onto a chapter as variables', () => {
+    const doc = document.implementation.createHTMLDocument('chapter')
+    paintBook(doc, THEMES.black)
+
+    const style = doc.documentElement.style
+    expect(style.getPropertyValue('--reader-text')).toBe(THEMES.black.text)
+    expect(style.getPropertyValue('--reader-link')).toBe(THEMES.black.link)
+    expect(style.getPropertyValue('color-scheme')).toBe('dark')
   })
 })
 

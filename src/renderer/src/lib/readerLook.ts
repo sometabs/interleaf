@@ -1,4 +1,4 @@
-export type ReaderTheme = 'auto' | 'light' | 'sepia' | 'dark'
+export type ReaderTheme = 'auto' | 'light' | 'gray' | 'sepia' | 'dark' | 'black'
 export type ShownTheme = Exclude<ReaderTheme, 'auto'>
 export type ReaderFont = 'book' | 'serif' | 'sans'
 export type ReaderFlow = 'paginated' | 'scrolled'
@@ -43,20 +43,91 @@ export const LIMITS = {
   margin: { min: 0, max: 120, step: 10 }
 } as const
 
-interface Theme {
+export interface Theme {
   label: string
   background: string
   text: string
+  dark: boolean
+  // Links in the book, footnote markers included; null keeps the book's own.
+  link: string | null
   // App colours redefined for the reader's panels; light and dark use the app's own.
   colors?: Record<string, string>
 }
 
+function rgb(hex: string): [number, number, number] {
+  return [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number]
+}
+
+/** `from` moved towards `to` by `amount`, from 0 (unchanged) to 1 (all the way). */
+function mix(from: string, to: string, amount: number): string {
+  const [a, b] = [rgb(from), rgb(to)]
+  return `#${a
+    .map((channel, index) => Math.round(channel + (b[index] - channel) * amount))
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
+function luminance(hex: string): number {
+  const [r, g, b] = rgb(hex).map((channel) => {
+    const value = channel / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** The WCAG contrast ratio, from 1 (identical) to 21 (black on white). */
+export function contrast(a: string, b: string): number {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (light + 0.05) / (dark + 0.05)
+}
+
+// What body text needs to be read comfortably.
+export const READABLE = 4.5
+
+// The text colour pulled towards blue, then back towards the text until it reads.
+function linkColor(background: string, text: string): string {
+  const dark = luminance(background) < 0.2
+  let link = mix(text, dark ? '#8ab4f8' : '#1f5fbf', 0.6)
+  for (let i = 0; i < 8 && contrast(link, background) < READABLE; i++) link = mix(link, text, 0.3)
+  return link
+}
+
+// Every panel colour follows from the page and its text, so a theme is two colours.
+function themeFrom(label: string, background: string, text: string): Theme {
+  const dark = luminance(background) < 0.2
+  const link = linkColor(background, text)
+  return {
+    label,
+    background,
+    text,
+    dark,
+    link,
+    colors: {
+      '--color-canvas': background,
+      '--color-surface': mix(background, '#ffffff', dark ? 0.06 : 0.5),
+      '--color-sunken': mix(background, text, 0.05),
+      '--color-hover': mix(background, text, 0.08),
+      '--color-hairline': mix(background, text, 0.14),
+      '--color-hairline-strong': mix(background, text, 0.26),
+      '--color-ink': text,
+      '--color-ink-muted': mix(text, background, 0.3),
+      '--color-ink-faint': mix(text, background, 0.5),
+      '--color-accent': link,
+      // Buttons keep the app's own fill, which already carries white text in light and dark.
+      '--color-accent-soft': mix(background, link, 0.18)
+    }
+  }
+}
+
 export const THEMES: Record<ShownTheme, Theme> = {
-  light: { label: 'Light', background: '#f6f3ee', text: '#2d2926' },
+  light: { label: 'Light', background: '#f6f3ee', text: '#2d2926', dark: false, link: null },
+  gray: themeFrom('Gray', '#e9ecef', '#2b2f33'),
   sepia: {
     label: 'Sepia',
     background: '#f4ecd8',
     text: '#4a3b2a',
+    dark: false,
+    link: '#8a5a2b',
     colors: {
       '--color-canvas': '#f4ecd8',
       '--color-surface': '#fbf6ea',
@@ -73,7 +144,16 @@ export const THEMES: Record<ShownTheme, Theme> = {
       '--color-action-hover': '#744a22'
     }
   },
-  dark: { label: 'Dark', background: '#1c1b1a', text: '#dcd6cc' }
+  dark: { label: 'Dark', background: '#1c1b1a', text: '#dcd6cc', dark: true, link: '#9fb6da' },
+  black: themeFrom('Black', '#000000', '#c9c9c9')
+}
+
+/** The colours a loaded chapter reads, as variables: switching theme repaints, it reflows nothing. */
+export function paintBook(doc: Document, theme: Theme): void {
+  const root = doc.documentElement.style
+  root.setProperty('--reader-text', theme.text)
+  root.setProperty('--reader-link', theme.link ?? theme.text)
+  root.setProperty('color-scheme', theme.dark ? 'dark' : 'light')
 }
 
 const FONTS: Record<Exclude<ReaderFont, 'book'>, string> = {
@@ -81,7 +161,7 @@ const FONTS: Record<Exclude<ReaderFont, 'book'>, string> = {
   sans: '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif'
 }
 
-export const THEME_CHOICES: ReaderTheme[] = ['auto', 'light', 'sepia', 'dark']
+export const THEME_CHOICES: ReaderTheme[] = ['auto', 'light', 'gray', 'sepia', 'dark', 'black']
 
 // Auto follows the app between light and dark; sepia is only ever a deliberate choice.
 export function shownTheme(theme: ReaderTheme, appDark: boolean): ShownTheme {
@@ -145,15 +225,15 @@ export function narrower(look: ReaderLook, room: number): ReaderLook {
   return { ...look, width: Math.max(min, Math.min(next, fits)) }
 }
 
-// Light keeps the book's colours except its page background; sepia and dark recolour all text.
+// Light keeps the book's colours except its page background; the others recolour all text.
+// The colours themselves come from `paintBook`, so changing one does not lay the book out again.
 export function bookCss(look: ReaderLook, shown: ShownTheme): string {
-  const theme = THEMES[shown]
   const recolour =
     shown === 'light'
       ? ''
       : `
-    html, body, body * { color: ${theme.text} !important; background-color: transparent !important; }
-    a, a * { color: ${shown === 'dark' ? '#9fb6da' : '#8a5a2b'} !important; }`
+    html, body, body * { color: var(--reader-text) !important; background-color: transparent !important; }
+    a, a * { color: var(--reader-link) !important; }`
   const font =
     look.font === 'book'
       ? ''
@@ -165,7 +245,7 @@ export function bookCss(look: ReaderLook, shown: ShownTheme): string {
       : `
     p, li, dd, blockquote { text-align: ${look.align} !important; }`
   return `
-    html { color-scheme: ${shown === 'dark' ? 'dark' : 'light'}; background: transparent !important; font-size: ${look.size}% !important; }
+    html { background: transparent !important; font-size: ${look.size}% !important; }
     body { background-color: transparent !important; }
     p, li, blockquote, dd, div { line-height: ${look.spacing} !important; }
     pre { white-space: pre-wrap !important; }
