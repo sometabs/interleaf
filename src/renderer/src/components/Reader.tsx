@@ -18,6 +18,7 @@ import {
 import { confirm } from '../lib/confirm'
 import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
 import { fail, notify } from '../lib/feedback'
+import { useUnsavedDraft } from '../lib/leaveGuard'
 import { inertPage, isPage } from '../lib/epubContent'
 import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
 import { usePersistentState } from '../lib/persistent'
@@ -383,6 +384,15 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const themeRef = useRef(themeShown)
   const overlayRef = useRef({ panel, picked, opened, footnote })
   const draftRef = useRef(noteDraft)
+  // What the note box opened with, so an untouched one leaves without asking.
+  const noteDraftStart = useRef('')
+  useUnsavedDraft(
+    () =>
+      (noteDraft !== null && noteDraft.trim() !== noteDraftStart.current.trim()) ||
+      (!!opened?.note &&
+        opened.draft !== undefined &&
+        opened.draft.trim() !== splitNote(opened.note.bodyMd).thought.trim())
+  )
   const pendingPosition = useRef<Relocation | null>(null)
   // Opened at a quote, the saved place stays put until the reader moves on from there.
   const following = useRef(at === undefined)
@@ -1112,14 +1122,13 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                 )}
                 <PopButton
                   label="Note"
-                  onClick={() =>
-                    setNoteDraft(
-                      picked.notesTouched
-                        .map((note) => splitNote(note.bodyMd).thought)
-                        .filter(Boolean)
-                        .join('\n\n')
-                    )
-                  }
+                  onClick={() => {
+                    noteDraftStart.current = picked.notesTouched
+                      .map((note) => splitNote(note.bodyMd).thought)
+                      .filter(Boolean)
+                      .join('\n\n')
+                    setNoteDraft(noteDraftStart.current)
+                  }}
                 >
                   {POP_ICONS.note}
                 </PopButton>
