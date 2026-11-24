@@ -52,7 +52,7 @@ linux:
     - deb
   maintainer: sometabs
   category: Utility
-  synopsis: Offline book journal with tagged notes, reviews, and recommendations
+  synopsis: Offline-first desktop reading companion
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
