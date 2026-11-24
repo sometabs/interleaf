@@ -9,6 +9,7 @@ import type {
   HighlightImportResult,
   HighlightImportSource
 } from '../../shared/api'
+import { escapeMarkdownText } from '../../shared/markdownText'
 import * as notes from '../repos/notes'
 import { parseCollection, type CalibreAnnotation } from './calibre'
 import { parseKindleClippings, type KindleHighlight } from './kindle'
@@ -178,13 +179,13 @@ function importKey(
 // The passage stays a plain paragraph, exactly as a hand-typed quote is, so
 // only the note supplied by Calibre carries a quotation marker.
 function toBody(highlight: SourceHighlight): string {
-  const passage = highlight.text.trim()
+  const passage = escapeMarkdownText(highlight.text.trim())
   const note = (highlight.note ?? '').trim()
   if (!note) return passage
 
   const quoted = note
     .split(/\r?\n/)
-    .map((line) => `> ${line}`.trimEnd())
+    .map((line) => `> ${escapeMarkdownText(line)}`.trimEnd())
     .join('\n')
   return `${passage}\n\n${quoted}`
 }

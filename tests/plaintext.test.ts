@@ -10,14 +10,16 @@ describe('reducing a note to its words', () => {
     ['bold italic', 'the ***desert*** planet', 'the desert planet'],
     ['underscored bold', 'the __desert__ planet', 'the desert planet'],
     ['underline', 'the <u>desert</u> planet', 'the desert planet'],
-    ['strikethrough', 'the ~~desert~~ planet', 'the desert planet'],
-    ['inline code', 'the `spice` must flow', 'the spice must flow'],
+    // The editor shows these as typed, so the preview does too.
+    ['tildes', 'the ~~desert~~ planet', 'the ~~desert~~ planet'],
+    ['backticks', 'the `spice` must flow', 'the `spice` must flow'],
+    ['escaped characters', '\\# not \\*a\\* \\<name> \\- 1\\. x', '# not *a* <name> - 1. x'],
     ['heading', '# On Dune', 'On Dune'],
     ['deep heading', '### A smaller point', 'A smaller point'],
     ['quote', '> Fear is the mind-killer.', 'Fear is the mind-killer.'],
     ['bullet', '-   the water discipline', 'the water discipline'],
     ['numbered', '1.  the water discipline', 'the water discipline'],
-    ['a link keeps its words', 'see [Dune](https://example.com) now', 'see Dune now'],
+    ['link syntax', 'see [Dune](https://example.com) now', 'see [Dune](https://example.com) now'],
     ['a quoted bullet', '> - **nested**', 'nested'],
     ['plain text is untouched', 'Just a sentence.', 'Just a sentence.']
   ]

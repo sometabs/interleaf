@@ -3,6 +3,8 @@
 import MarkdownIt from 'markdown-it'
 import TurndownService from 'turndown'
 
+import { escapeMarkdownText } from '@shared/markdownText'
+
 // `html: true` carries `<u>` through; `breaks: true` stops every note
 // collapsing into one paragraph on first open.
 const md = new MarkdownIt({
@@ -25,8 +27,17 @@ md.disable([
   'strikethrough',
   'link',
   'image',
-  'autolink'
+  'autolink',
+  'html_block'
 ])
+
+// The editor writes only these tags. Anything else in angle brackets is text the
+// user typed, which would otherwise be swallowed as an unknown tag.
+const OWN_TAG = /^<\/?(u|strong|em|b|i)>$/i
+md.renderer.rules.html_inline = (tokens, index) => {
+  const { content } = tokens[index]
+  return OWN_TAG.test(content) ? content : md.utils.escapeHtml(content)
+}
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -37,17 +48,14 @@ const turndown = new TurndownService({
   br: ''
 })
 
-// Verbatim: turndown unwraps tags it does not know, losing the underline.
-turndown.keep(['u'])
+// Markdown has no underline. Converted inside, so its text is escaped like any other.
+turndown.addRule('underline', {
+  filter: ['u'],
+  replacement: (content) => `<u>${content}</u>`
+})
 
-// Turndown escapes everything that could begin markdown syntax, but half is no
-// longer parsed back in, so escaping it writes backslashes nobody typed.
-const escapeText = TurndownService.prototype.escape
-turndown.escape = (text: string): string =>
-  escapeText(text)
-    .replace(/\\([`[\]~=])/g, '$1')
-    // A run of dashes is a rule to turndown but three dashes to this parser.
-    .replace(/^\\(-{3,})/gm, '$1')
+// One rule for typed text, reader passages and imports alike.
+turndown.escape = escapeMarkdownText
 
 // Unwrapped only when the paragraph is the item's whole content, so an item
 // holding several blocks keeps the spacing that separates them.

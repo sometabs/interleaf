@@ -48,7 +48,7 @@ export default function Notes(): ReactNode {
     if (tagFilter === NONE ? note.tag !== null : tagFilter && note.tag !== tagFilter) return false
     if (!query) return true
 
-    return [note.title, note.bodyMd, bookTitle(note) ?? '', note.tag ?? '']
+    return [note.title, toPlainText(note.bodyMd), bookTitle(note) ?? '', note.tag ?? '']
       .join('\n')
       .toLowerCase()
       .includes(query)

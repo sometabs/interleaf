@@ -2,6 +2,7 @@ import 'foliate-js/view.js'
 import { compare as compareCfi } from 'foliate-js/epubcfi.js'
 import { Overlayer } from 'foliate-js/overlayer.js'
 import type { Bookmark, Note } from '@shared/api'
+import { escapeMarkdownText } from '@shared/markdownText'
 import { toPlainText } from '@shared/plaintext'
 import {
   useCallback,
@@ -214,7 +215,7 @@ function splitNote(bodyMd: string): { passage: string; thought: string } {
 function quoteLines(text: string): string {
   return text
     .split(/\n+/)
-    .map((line) => `> ${line.trim()}`)
+    .map((line) => `> ${escapeMarkdownText(line.trim())}`)
     .join('\n')
 }
 
@@ -852,7 +853,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
       const quote = await createNote.mutateAsync({
         bookId,
         kind: QUOTE_KIND,
-        bodyMd: picked.text,
+        bodyMd: escapeMarkdownText(picked.text),
         location: picked.cfi
       })
       notify('Quote saved.')
@@ -875,7 +876,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     try {
       const quote = await updateNote.mutateAsync({
         id: kept.id,
-        patch: { bodyMd: picked.extended.text, location: picked.extended.cfi }
+        patch: { bodyMd: escapeMarkdownText(picked.extended.text), location: picked.extended.cfi }
       })
       for (const note of merged) await deleteNote.mutateAsync(note.id)
       notify(merged.length > 0 ? 'Quotes merged.' : 'Quote extended.')

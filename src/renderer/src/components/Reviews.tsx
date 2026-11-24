@@ -33,7 +33,7 @@ export default function Reviews(): ReactNode {
     if (ratingFilter !== ANY && book.rating !== Number(ratingFilter)) return false
     if (!query) return true
 
-    return [review?.bodyMd ?? '', book.title, book.author ?? '']
+    return [toPlainText(review?.bodyMd ?? ''), book.title, book.author ?? '']
       .join('\n')
       .toLowerCase()
       .includes(query)

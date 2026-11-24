@@ -122,4 +122,19 @@ describe('markdown the editor does not read', () => {
     expect(htmlToMarkdown('<p>- not a list</p>')).toBe('\\- not a list')
     expect(htmlToMarkdown('<p># not a heading</p>')).toBe('\\# not a heading')
   })
+
+  it('shows typed angle brackets and entities as text, even when stored bare', () => {
+    expect(markdownToHtml('he wrote <name> here')).toContain('&lt;name&gt;')
+    expect(markdownToHtml('x<y and y>z')).toContain('x&lt;y and y&gt;z')
+    expect(markdownToHtml('<div>on its own line</div>')).toContain('&lt;div&gt;')
+    expect(htmlToMarkdown('<p>fish &amp;amp; chips</p>')).toBe('fish \\&amp; chips')
+  })
+
+  // Older versions stored underline as raw HTML around whatever it held.
+  it('still opens underline written by older versions', () => {
+    const html = markdownToHtml('<u><strong>x</strong></u> and <u>a &lt; b</u>')
+
+    expect(html).toContain('<u><strong>x</strong></u>')
+    expect(html).toContain('<u>a &lt; b</u>')
+  })
 })
