@@ -637,7 +637,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 
     // The outer fifth of the reading area turns the page, margins included.
     const turnAtEdge = (pageX: number): void => {
-      if (lookRef.current.flow !== 'paginated') return
+      if (lookRef.current.flow !== 'paginated' || !lookRef.current.edgeTurn) return
       const area = host.getBoundingClientRect()
       const x = pageX - area.left
       if (x < area.width * 0.2) {
@@ -1988,6 +1988,49 @@ function LookPanel({
           onChange={(pageCount) => onChange({ ...look, pageCount })}
         />
       )}
+
+      {look.flow === 'paginated' && (
+        <Switch
+          label="Click page edges to turn"
+          hint="Arrow keys and the scroll wheel always turn pages."
+          checked={look.edgeTurn}
+          onChange={(edgeTurn) => onChange({ ...look, edgeTurn })}
+        />
+      )}
+    </div>
+  )
+}
+
+function Switch({
+  label,
+  hint,
+  checked,
+  onChange
+}: {
+  label: string
+  hint: string
+  checked: boolean
+  onChange: (next: boolean) => void
+}): ReactNode {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px]">{label}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-label={label}
+          onClick={() => onChange(!checked)}
+          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-action' : 'bg-hairline-strong'}`}
+        >
+          <span
+            aria-hidden="true"
+            className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-card transition-transform ${checked ? 'translate-x-4' : ''}`}
+          />
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-ink-faint">{hint}</p>
     </div>
   )
 }

@@ -18,6 +18,8 @@ export interface ReaderLook {
   align: ReaderAlign
   // Space above and below the text, in CSS pixels.
   margin: number
+  // Clicking the outer fifth of a page turns it.
+  edgeTurn: boolean
 }
 
 export const DEFAULT_LOOK: ReaderLook = {
@@ -30,7 +32,8 @@ export const DEFAULT_LOOK: ReaderLook = {
   pages: 2,
   pageCount: 'left',
   align: 'book',
-  margin: 40
+  margin: 40,
+  edgeTurn: true
 }
 
 export const LIMITS = {
@@ -103,7 +106,8 @@ export function parseLook(raw: unknown): ReaderLook | null {
     pageCount: look.pageCount === 'position' ? 'position' : 'left',
     align: look.align === 'left' || look.align === 'justify' ? look.align : 'book',
     margin:
-      typeof look.margin === 'number' ? clamp(look.margin, LIMITS.margin) : DEFAULT_LOOK.margin
+      typeof look.margin === 'number' ? clamp(look.margin, LIMITS.margin) : DEFAULT_LOOK.margin,
+    edgeTurn: look.edgeTurn !== false
   }
 }
 

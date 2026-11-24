@@ -210,6 +210,14 @@ describe('reader look', () => {
   })
 })
 
+describe('clicking page edges', () => {
+  it('is on unless switched off, also for settings saved before it existed', () => {
+    expect(DEFAULT_LOOK.edgeTurn).toBe(true)
+    expect(parseLook({})?.edgeTurn).toBe(true)
+    expect(parseLook({ ...DEFAULT_LOOK, edgeTurn: false })?.edgeTurn).toBe(false)
+  })
+})
+
 describe('page label', () => {
   // Ten screens include a blank one at each end, so eight hold text.
   it('counts the pages left in the chapter, two per screen side by side', () => {
