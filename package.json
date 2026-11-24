@@ -1,6 +1,6 @@
 {
   "name": "interleaf",
-  "version": "1.29.0",
+  "version": "1.30.0",
   "description": "Offline book journal with tagged notes, reviews, and recommendations",
   "main": "./out/main/index.js",
   "author": "sometabs",
@@ -56,6 +56,7 @@
     "@tanstack/react-query": "^5.101.4",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@tiptap/core": "^3.34.0",
     "@tiptap/extensions": "^3.34.0",
     "@tiptap/pm": "^3.34.0",
     "@tiptap/react": "^3.34.0",
