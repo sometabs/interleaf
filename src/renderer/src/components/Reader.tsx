@@ -19,7 +19,8 @@ import { confirm } from '../lib/confirm'
 import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
 import { fail, notify } from '../lib/feedback'
 import { useUnsavedDraft } from '../lib/leaveGuard'
-import { inertPage, isPage } from '../lib/epubContent'
+import { followTextSize, inertPage, isPage } from '../lib/epubContent'
+import { placePopover } from '../lib/popoverPlacement'
 import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
 import { usePersistentState } from '../lib/persistent'
 import { ReadingClock } from '../lib/readingClock'
@@ -580,6 +581,8 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     let pointer: { doc: Document; x: number; y: number } | null = null
     const onLoad = (event: Event): void => {
       const { doc, index } = (event as CustomEvent<{ doc: Document; index: number }>).detail
+      // Runs before the chapter is laid out, so the pages are counted at the right size.
+      followTextSize(doc)
       const restCursor = doc.createElement('style')
       restCursor.textContent =
         'html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }'
@@ -1590,10 +1593,16 @@ function Popover({
   // Placed before the browser paints, from the real height, so a misplaced frame never shows.
   useLayoutEffect(() => {
     const element = ref.current
-    if (!element) return
-    const below = point.y < 64 || point.y - 8 - Math.max(element.offsetHeight, reserve) < 8
-    element.style.top = `${below ? point.y + 28 : point.y - 8}px`
-    element.style.transform = below ? 'translateX(-50%)' : 'translate(-50%, -100%)'
+    const area = element?.offsetParent
+    if (!element || !(area instanceof HTMLElement)) return
+    const place = placePopover(
+      point,
+      { width: element.offsetWidth, height: Math.max(element.offsetHeight, reserve) },
+      { width: area.clientWidth, height: area.clientHeight }
+    )
+    element.style.left = `${place.left}px`
+    element.style.top = `${place.top}px`
+    element.style.transform = place.below ? 'translateX(-50%)' : 'translate(-50%, -100%)'
   })
   return (
     <div
@@ -1601,7 +1610,6 @@ function Popover({
       role="dialog"
       aria-label={label}
       className="absolute z-20 rounded-card border border-hairline bg-surface p-1.5 text-ink shadow-pop"
-      style={{ left: Math.max(24, point.x) }}
     >
       {children}
     </div>

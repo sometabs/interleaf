@@ -2,7 +2,8 @@
 import type { EpubCandidate } from '@shared/api'
 import { describe, expect, it } from 'vitest'
 
-import { inertPage } from '../src/renderer/src/lib/epubContent'
+import { followTextSize, inertPage, relativeFontSize } from '../src/renderer/src/lib/epubContent'
+import { placePopover } from '../src/renderer/src/lib/popoverPlacement'
 import { isNoteReference, isNoteTarget, noteText } from '../src/renderer/src/lib/footnotes'
 import { matchLibrary, normalTitle } from '../src/renderer/src/lib/epubMatch'
 import {
@@ -37,6 +38,66 @@ function candidate(overrides: Partial<EpubCandidate> = {}): EpubCandidate {
     ...overrides
   }
 }
+
+describe('fixed font sizes in a book', () => {
+  it('turns keywords, px and pt into rem, and leaves relative sizes alone', () => {
+    expect(relativeFontSize('medium')).toBe('1rem')
+    expect(relativeFontSize('small')).toBe('0.8125rem')
+    expect(relativeFontSize('X-Large')).toBe('1.5rem')
+    expect(relativeFontSize('12pt')).toBe('1rem')
+    expect(relativeFontSize('20px')).toBe('1.25rem')
+    for (const relative of ['1.2em', '90%', '1rem', 'larger', 'inherit', '']) {
+      expect(relativeFontSize(relative)).toBeNull()
+    }
+  })
+
+  // A book whose text sat at `font-size: medium` never grew with the reader's text size.
+  it('makes a chapter follow the reader text size, keeping importance', () => {
+    // A live document: only one with a window parses its stylesheets.
+    const style = document.createElement('style')
+    style.textContent =
+      'body { font-size: medium } p.note { font-size: small !important } h1 { font-size: 1.5em }'
+    document.head.append(style)
+    document.body.innerHTML = '<p style="font-size: 10pt">inline</p>'
+
+    try {
+      followTextSize(document)
+
+      const rules = [...(style.sheet!.cssRules as unknown as CSSStyleRule[])]
+      expect(rules[0].style.getPropertyValue('font-size')).toBe('1rem')
+      expect(rules[1].style.getPropertyValue('font-size')).toBe('0.8125rem')
+      expect(rules[1].style.getPropertyPriority('font-size')).toBe('important')
+      expect(rules[2].style.getPropertyValue('font-size')).toBe('1.5em')
+      expect(document.querySelector('p')!.style.fontSize).toBe('0.8333rem')
+    } finally {
+      style.remove()
+      document.body.innerHTML = ''
+    }
+  })
+})
+
+describe('placing a popup', () => {
+  const area = { width: 1200, height: 700 }
+  const size = { width: 320, height: 150 }
+
+  it('opens above the passage when it fits', () => {
+    expect(placePopover({ x: 600, y: 400 }, size, area)).toEqual({
+      left: 600,
+      top: 392,
+      below: false
+    })
+  })
+
+  it('opens below near the top, or where there is more room', () => {
+    expect(placePopover({ x: 600, y: 40 }, size, area).below).toBe(true)
+    expect(placePopover({ x: 600, y: 120 }, size, area).below).toBe(true)
+  })
+
+  it('stays fully inside the area at either side', () => {
+    expect(placePopover({ x: 1180, y: 400 }, size, area).left).toBe(1200 - 160 - 8)
+    expect(placePopover({ x: 10, y: 400 }, size, area).left).toBe(160 + 8)
+  })
+})
 
 describe('making book pages inert', () => {
   const page = (body: string): string =>
