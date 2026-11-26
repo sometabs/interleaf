@@ -6,17 +6,12 @@ export function usePersistentState<T>(
   fallback: T,
   parse: (raw: unknown) => T | null
 ): [T, (next: T) => void] {
-  const [value, setValue] = useState<T>(() => readPersistentState(key, fallback, parse))
+  const [value, setValue] = useState<T>(() => readPersistentState(key, parse) ?? fallback)
 
   const store = useCallback(
     (next: T) => {
       setValue(next)
-      try {
-        window.localStorage.setItem(key, JSON.stringify(next))
-      } catch {
-        // A full or disabled store costs the preference its persistence, which
-        // is not worth breaking the interaction over.
-      }
+      writePersistentState(key, next)
     },
     [key]
   )
@@ -24,12 +19,21 @@ export function usePersistentState<T>(
   return [value, store]
 }
 
-function readPersistentState<T>(key: string, fallback: T, parse: (raw: unknown) => T | null): T {
+export function readPersistentState<T>(key: string, parse: (raw: unknown) => T | null): T | null {
   try {
     const raw = window.localStorage.getItem(key)
-    if (raw === null) return fallback
-    return parse(JSON.parse(raw)) ?? fallback
+    if (raw === null) return null
+    return parse(JSON.parse(raw))
   } catch {
-    return fallback
+    return null
+  }
+}
+
+export function writePersistentState(key: string, value: unknown): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // A full or disabled store costs the preference its persistence, which
+    // is not worth breaking the interaction over.
   }
 }

@@ -8,8 +8,10 @@ import {
   type UseQueryResult
 } from '@tanstack/react-query'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { BookshelfLayout } from '@shared/bookshelf'
+import { DEFAULT_LOOK, parseLook, type ReaderLook } from '@shared/readerLook'
+import { readPersistentState, writePersistentState } from './persistent'
 import { useView } from './view'
 
 import type {
@@ -61,6 +63,7 @@ const api = (): InterleafBridge => window.interleaf
 const keys = {
   books: ['books'] as const,
   bookshelf: ['bookshelf'] as const,
+  readerLook: ['reader-look'] as const,
   goals: ['reading-goals'] as const,
   bookFiles: ['book-files'] as const,
   backupStatus: ['backup-status'] as const,
@@ -151,6 +154,41 @@ export function useSaveBookshelfLayout(): UseMutationResult<
       }
     }
   })
+}
+
+const LOCAL_LOOK = 'reader.look'
+
+// The database copy goes into backups; the local copy draws the reader before the database answers.
+export function useReaderLook(): [ReaderLook, (next: ReaderLook) => void] {
+  const client = useQueryClient()
+  const { data } = useQuery({
+    queryKey: keys.readerLook,
+    staleTime: Infinity,
+    queryFn: async (): Promise<ReaderLook> => {
+      const saved = await api().getReaderLook()
+      if (saved) {
+        writePersistentState(LOCAL_LOOK, saved)
+        return saved
+      }
+      // Set up before the database kept it.
+      const local = readPersistentState(LOCAL_LOOK, parseLook)
+      return local ? api().saveReaderLook(local) : DEFAULT_LOOK
+    },
+    placeholderData: () => readPersistentState(LOCAL_LOOK, parseLook) ?? DEFAULT_LOOK
+  })
+  const { mutate } = useMutation({
+    mutationKey: keys.readerLook,
+    mutationFn: (look: ReaderLook) => api().saveReaderLook(look)
+  })
+  const set = useCallback(
+    (next: ReaderLook) => {
+      client.setQueryData(keys.readerLook, next)
+      writePersistentState(LOCAL_LOOK, next)
+      mutate(next)
+    },
+    [client, mutate]
+  )
+  return [data ?? DEFAULT_LOOK, set]
 }
 
 export function useReadingGoals(): UseQueryResult<ReadingGoal[]> {

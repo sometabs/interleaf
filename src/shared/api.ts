@@ -2,6 +2,7 @@
 // compile error rather than a runtime mismatch.
 
 import type { BookshelfLayout } from './bookshelf'
+import type { ReaderLook } from './readerLook'
 
 export type BookStatus = 'want' | 'reading' | 'read' | 'abandoned'
 export type NoteKind = 'review' | 'thought' | 'highlight'
@@ -388,6 +389,9 @@ export interface InterleafApi {
   listBooks(): Promise<Book[]>
   getBookshelfLayout(): Promise<BookshelfLayout>
   saveBookshelfLayout(layout: BookshelfLayout): Promise<BookshelfLayout>
+  // Null until the reader is first set up on this library.
+  getReaderLook(): Promise<ReaderLook | null>
+  saveReaderLook(look: ReaderLook): Promise<ReaderLook>
   listReadingGoals(): Promise<ReadingGoal[]>
   // Null removes the goal for that year.
   setReadingGoal(year: number, books: number | null): Promise<void>
@@ -496,6 +500,8 @@ export const IPC_CHANNELS = [
   'listBooks',
   'getBookshelfLayout',
   'saveBookshelfLayout',
+  'getReaderLook',
+  'saveReaderLook',
   'listReadingGoals',
   'setReadingGoal',
   'listBookFiles',

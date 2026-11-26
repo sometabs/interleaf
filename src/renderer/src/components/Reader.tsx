@@ -4,6 +4,7 @@ import { Overlayer } from 'foliate-js/overlayer.js'
 import type { Bookmark, Note } from '@shared/api'
 import { escapeMarkdownText } from '@shared/markdownText'
 import { toPlainText } from '@shared/plaintext'
+import { LIMITS, THEME_CHOICES, type ReaderLook } from '@shared/readerLook'
 import {
   useCallback,
   useEffect,
@@ -22,7 +23,6 @@ import { useUnsavedDraft } from '../lib/leaveGuard'
 import { followTextSize, inertPage, isPage } from '../lib/epubContent'
 import { placePopover } from '../lib/popoverPlacement'
 import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
-import { usePersistentState } from '../lib/persistent'
 import { ReadingClock } from '../lib/readingClock'
 import {
   useAddBookmark,
@@ -31,6 +31,7 @@ import {
   useCreateNote,
   useDeleteNote,
   useNotes,
+  useReaderLook,
   useRecordReading,
   useRemoveBookmark,
   useSaveReadingPosition,
@@ -41,20 +42,15 @@ import { overlapOf, unionOf, type Overlap } from '../lib/quoteOverlap'
 import { isQuote, QUOTE_KIND } from '../lib/quotes'
 import {
   bookCss,
-  DEFAULT_LOOK,
   layoutOf,
-  LIMITS,
   narrower,
   pageLabel,
   paintBook,
-  parseLook,
   step,
   shownTheme,
-  THEME_CHOICES,
   THEMES,
   widthRoom,
   withLayout,
-  type ReaderLook,
   type Theme
 } from '../lib/readerLook'
 import { useAppDark } from '../lib/settings'
@@ -343,7 +339,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   const { data: bookmarks = [] } = useBookmarks(bookId)
   const addBookmark = useAddBookmark(bookId)
   const removeBookmark = useRemoveBookmark(bookId)
-  const [look, setLook] = usePersistentState<ReaderLook>('reader.look', DEFAULT_LOOK, parseLook)
+  const [look, setLook] = useReaderLook()
   const themeShown = shownTheme(look.theme, useAppDark())
   const colors = THEMES[themeShown]
   // Only what lays the book out: a colour change must not rebuild every page.

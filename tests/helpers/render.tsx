@@ -15,6 +15,7 @@ import type {
   Note
 } from '../../src/shared/api'
 import { EMPTY_BOOKSHELF_LAYOUT, type BookshelfLayout } from '../../src/shared/bookshelf'
+import type { ReaderLook } from '../../src/shared/readerLook'
 import { fail } from '../../src/renderer/src/lib/feedback'
 import { SettingsProvider } from '../../src/renderer/src/lib/settings'
 import { ViewProvider, type View } from '../../src/renderer/src/lib/view'
@@ -62,6 +63,7 @@ export interface FakeBridge {
   books: Book[]
   notes: Note[]
   bookshelf: BookshelfLayout | null
+  readerLook: ReaderLook | null
   goals: ReadingGoal[]
   created: unknown[]
   deleted: number[]
@@ -76,6 +78,7 @@ export function installBridge(
     books?: Book[]
     notes?: Note[]
     bookshelf?: BookshelfLayout
+    readerLook?: ReaderLook
     goals?: ReadingGoal[]
   } = {},
   overrides: Partial<InterleafApi> = {}
@@ -89,6 +92,7 @@ export function installBridge(
     books: initial.books ?? [],
     notes: initial.notes ?? [],
     bookshelf: initial.bookshelf ?? null,
+    readerLook: initial.readerLook ?? null,
     goals: initial.goals ?? [],
     created: [],
     deleted: [],
@@ -129,6 +133,11 @@ export function installBridge(
 
     listBooks: async () => state.books.map((book) => ({ ...book })),
     getBookshelfLayout: async () => state.bookshelf ?? EMPTY_BOOKSHELF_LAYOUT,
+    getReaderLook: async () => state.readerLook,
+    saveReaderLook: async (look) => {
+      state.readerLook = look
+      return look
+    },
     listReadingGoals: async () => state.goals.map((goal) => ({ ...goal })),
     listBookFiles: async () => [],
     recentReading: async () => [],

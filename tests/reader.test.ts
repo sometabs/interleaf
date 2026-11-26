@@ -6,16 +6,14 @@ import { followTextSize, inertPage, relativeFontSize } from '../src/renderer/src
 import { placePopover } from '../src/renderer/src/lib/popoverPlacement'
 import { isNoteReference, isNoteTarget, noteText } from '../src/renderer/src/lib/footnotes'
 import { matchLibrary, normalTitle } from '../src/renderer/src/lib/epubMatch'
+import { DEFAULT_LOOK, LIMITS, parseLook } from '../src/shared/readerLook'
 import {
   bookCss,
   contrast,
-  DEFAULT_LOOK,
   layoutOf,
-  LIMITS,
   narrower,
   pageLabel,
   paintBook,
-  parseLook,
   READABLE,
   shownTheme,
   step,

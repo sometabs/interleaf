@@ -16,6 +16,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase } from '../src/main/db/database'
 import { createBook, listBooks, updateBook } from '../src/main/repos/books'
 import { getBookshelfLayout, saveBookshelfLayout } from '../src/main/repos/bookshelf'
+import { getReaderLook, saveReaderLook } from '../src/main/repos/readerLook'
+import { DEFAULT_LOOK } from '../src/shared/readerLook'
 import { createNote, listNotes } from '../src/main/repos/notes'
 import { setBookFile } from '../src/main/repos/bookFiles'
 import {
@@ -86,6 +88,20 @@ describe('automatic backups', () => {
     const copy = createDatabase(join(snapshot.dir, DB_NAME))
     try {
       expect(getBookshelfLayout(copy)).toEqual(layout)
+    } finally {
+      copy.close()
+    }
+  })
+
+  it('backs up a change to the reader settings alone', () => {
+    save('First')
+    vi.advanceTimersByTime(BACKUP_INTERVAL)
+    const look = saveReaderLook(db, { ...DEFAULT_LOOK, size: 160 })
+    backups.schedule()
+    vi.advanceTimersByTime(BACKUP_INTERVAL)
+    const copy = createDatabase(join(latestRecoverySnapshot(root)!.dir, DB_NAME))
+    try {
+      expect(getReaderLook(copy)).toEqual(look)
     } finally {
       copy.close()
     }

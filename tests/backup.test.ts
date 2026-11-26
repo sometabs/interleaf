@@ -16,7 +16,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, MIGRATIONS } from '../src/main/db/database'
 import * as books from '../src/main/repos/books'
 import { getBookshelfLayout, saveBookshelfLayout } from '../src/main/repos/bookshelf'
+import { getReaderLook, saveReaderLook } from '../src/main/repos/readerLook'
 import * as notes from '../src/main/repos/notes'
+import { DEFAULT_LOOK } from '../src/shared/readerLook'
 import {
   BackupError,
   exportBackup,
@@ -256,6 +258,23 @@ describe('restoring a backup', () => {
     const restored = createDatabase(freshPath)
     try {
       expect(getBookshelfLayout(restored)).toEqual(layout)
+    } finally {
+      restored.close()
+    }
+  })
+
+  it('brings the reader settings to a new machine', () => {
+    const db = seed()
+    const look = saveReaderLook(db, { ...DEFAULT_LOOK, theme: 'sepia', size: 140, margin: 60 })
+    const { dir } = exportBackup(db, parent)
+    db.close()
+
+    const freshPath = join(parent, 'new-profile', 'interleaf.db')
+    mkdirSync(join(parent, 'new-profile'))
+    restoreBackup(dir, freshPath)
+    const restored = createDatabase(freshPath)
+    try {
+      expect(getReaderLook(restored)).toEqual(look)
     } finally {
       restored.close()
     }

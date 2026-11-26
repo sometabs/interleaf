@@ -28,6 +28,7 @@ import readingGoals024 from './migrations/024_reading_goals.sql?raw'
 import bookFiles025 from './migrations/025_book_files.sql?raw'
 import bookmarks026 from './migrations/026_bookmarks.sql?raw'
 import readingSessions027 from './migrations/027_reading_sessions.sql?raw'
+import readerLook028 from './migrations/028_reader_look.sql?raw'
 
 function revisionTriggers(tables: string[]): string {
   return tables
@@ -74,7 +75,8 @@ export const MIGRATIONS: string[] = [
   readingGoals024 + revisionTriggers(['reading_goal']),
   bookFiles025 + revisionTriggers(['book_file']),
   bookmarks026 + revisionTriggers(['bookmark']),
-  readingSessions027 + revisionTriggers(['reading_session'])
+  readingSessions027 + revisionTriggers(['reading_session']),
+  readerLook028 + revisionTriggers(['reader_look'])
 ]
 
 /** SQLite has no regex, so migrations that clean up text need this. */
