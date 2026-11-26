@@ -1,6 +1,6 @@
 {
   "name": "interleaf",
-  "version": "1.30.0",
+  "version": "1.31.0",
   "description": "An offline-first desktop reading companion. Keep your library, read EPUBs, save notes, quotes and reviews, and get book recommendations, with optional local AI.",
   "main": "./out/main/index.js",
   "author": "sometabs",
