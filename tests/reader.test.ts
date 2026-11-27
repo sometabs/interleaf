@@ -2,10 +2,16 @@
 import type { EpubCandidate } from '@shared/api'
 import { describe, expect, it } from 'vitest'
 
-import { followTextSize, inertPage, relativeFontSize } from '../src/renderer/src/lib/epubContent'
+import {
+  followTextSize,
+  inertPage,
+  relativeFontSize,
+  removeActiveElements
+} from '../src/renderer/src/lib/epubContent'
 import { placePopover } from '../src/renderer/src/lib/popoverPlacement'
 import { isNoteReference, isNoteTarget, noteText } from '../src/renderer/src/lib/footnotes'
 import { matchLibrary, normalTitle } from '../src/renderer/src/lib/epubMatch'
+import { passageOf, samePassage } from '../src/renderer/src/lib/quotes'
 import { DEFAULT_LOOK, LIMITS, parseLook } from '../src/shared/readerLook'
 import {
   bookCss,
@@ -21,7 +27,7 @@ import {
   widthRoom,
   withLayout
 } from '../src/renderer/src/lib/readerLook'
-import { makeBook } from './helpers/render'
+import { makeBook, makeNote } from './helpers/render'
 
 const XHTML = 'application/xhtml+xml'
 
@@ -94,6 +100,59 @@ describe('placing a popup', () => {
   it('stays fully inside the area at either side', () => {
     expect(placePopover({ x: 1180, y: 400 }, size, area).left).toBe(1200 - 160 - 8)
     expect(placePopover({ x: 10, y: 400 }, size, area).left).toBe(160 + 8)
+  })
+})
+
+describe('quotes in a replaced file', () => {
+  it('finds a quote whose words are still at its place', () => {
+    const quote = makeNote({
+      kind: 'highlight',
+      bodyMd: 'The lamps of the harbour went out one by one\\.'
+    })
+
+    expect(samePassage(passageOf(quote), '“The lamps of the harbour  went out one by one.”')).toBe(
+      true
+    )
+  })
+
+  it('rejects other words at the same place', () => {
+    const quote = makeNote({
+      kind: 'highlight',
+      bodyMd: 'The lamps of the harbour went out one by one.'
+    })
+
+    expect(
+      samePassage(passageOf(quote), 'eflections during my journey across the marsh, whi')
+    ).toBe(false)
+    expect(samePassage(passageOf(quote), '')).toBe(false)
+  })
+
+  it('still finds a quote after a typo in it was fixed', () => {
+    expect(
+      samePassage(
+        'The lamps of the harbor went out one by one.',
+        'The lamps of the harbour went out one by one.'
+      )
+    ).toBe(true)
+  })
+
+  it('checks a reader note by its quoted passage, not what was written about it', () => {
+    const note = makeNote({
+      kind: 'thought',
+      bodyMd: '> The lamps of the harbour\n> went out one by one.\n\nA quiet ending.'
+    })
+
+    expect(passageOf(note)).toBe('The lamps of the harbour went out one by one.')
+    expect(samePassage(passageOf(note), 'The lamps of the harbour went out one by one.')).toBe(true)
+  })
+
+  it('reads a chapter without what the reader strips from it, so places line up', () => {
+    const doc = new DOMParser().parseFromString(
+      '<html xmlns="http://www.w3.org/1999/xhtml"><body><script>x()</script><p>One</p></body></html>',
+      XHTML
+    )
+
+    expect(removeActiveElements(doc).body.children[0].textContent).toBe('One')
   })
 })
 

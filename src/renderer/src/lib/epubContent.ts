@@ -8,9 +8,16 @@ export function isPage(type: string): boolean {
   return PAGE_TYPES.has(type)
 }
 
-export function inertPage(source: string, type: string): string {
-  const doc = new DOMParser().parseFromString(source, type as DOMParserSupportedType)
+/** Takes out what `inertPage` takes out, so places in the book point where they do on screen. */
+export function removeActiveElements(doc: Document): Document {
   for (const element of doc.querySelectorAll(ACTIVE_ELEMENTS)) element.remove()
+  return doc
+}
+
+export function inertPage(source: string, type: string): string {
+  const doc = removeActiveElements(
+    new DOMParser().parseFromString(source, type as DOMParserSupportedType)
+  )
   for (const element of doc.querySelectorAll('*')) {
     for (const { name, value } of [...element.attributes]) {
       const lower = name.toLowerCase()

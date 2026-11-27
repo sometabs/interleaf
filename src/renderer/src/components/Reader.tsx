@@ -20,7 +20,7 @@ import { confirm } from '../lib/confirm'
 import { fromDateInput, relativeDate, toDateInput } from '../lib/dates'
 import { fail, notify } from '../lib/feedback'
 import { useUnsavedDraft } from '../lib/leaveGuard'
-import { followTextSize, inertPage, isPage } from '../lib/epubContent'
+import { followTextSize, inertPage, isPage, removeActiveElements } from '../lib/epubContent'
 import { placePopover } from '../lib/popoverPlacement'
 import { isNoteReference, isNoteTarget, noteText } from '../lib/footnotes'
 import { ReadingClock } from '../lib/readingClock'
@@ -39,7 +39,7 @@ import {
   useUpdateBook
 } from '../lib/queries'
 import { overlapOf, unionOf, type Overlap } from '../lib/quoteOverlap'
-import { isQuote, QUOTE_KIND } from '../lib/quotes'
+import { isQuote, passageOf, QUOTE_KIND, samePassage, splitNote } from '../lib/quotes'
 import {
   bookCss,
   layoutOf,
@@ -97,7 +97,7 @@ interface FoliateRenderer extends HTMLElement {
   pages?: number
   // One per column on screen.
   heads?: unknown[] | null
-  getContents?: () => { doc: Document }[]
+  getContents?: () => { doc: Document; index: number }[]
 }
 
 interface FoliateView extends HTMLElement {
@@ -200,15 +200,32 @@ const highlightAndUnderline: typeof Overlayer.highlight = (rects, options) => {
   return both
 }
 
-// A reader note starts with the passage, quoted; what follows is what was written about it.
-function splitNote(bodyMd: string): { passage: string; thought: string } {
-  const lines = bodyMd.split(/\r?\n/)
-  let index = 0
-  while (index < lines.length && /^\s*>/.test(lines[index])) index++
-  return {
-    passage: lines.slice(0, index).join('\n'),
-    thought: lines.slice(index).join('\n').trim()
+type SectionDocs = Map<number, Promise<Document | null>>
+
+// A place saved in a replaced EPUB can land on other words in the new one, so the words are checked.
+async function fitsFile(view: FoliateView, note: Note, docs: SectionDocs): Promise<boolean> {
+  try {
+    const target = view.resolveNavigation(note.location!)
+    const shown = view.renderer.getContents?.().find((entry) => entry.index === target.index)
+    let doc: Document | null | undefined = shown?.doc
+    if (!doc) {
+      if (!docs.has(target.index)) {
+        const loading = view.book.sections[target.index]?.createDocument?.()
+        docs.set(target.index, loading ? loading.then(removeActiveElements) : Promise.resolve(null))
+      }
+      doc = await docs.get(target.index)
+    }
+    const found = doc ? target.anchor(doc) : null
+    if (!found) return false
+    const words = 'startContainer' in found ? found.toString() : (found.textContent ?? '')
+    return samePassage(passageOf(note), words)
+  } catch {
+    return false
   }
+}
+
+function placeKey(note: Note): string {
+  return `${note.location}\n${passageOf(note)}`
 }
 
 function quoteLines(text: string): string {
@@ -379,7 +396,13 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 
   const [readyView, setReadyView] = useState<FoliateView | null>(null)
 
-  const located = useMemo(() => notes.filter((note) => note.location), [notes])
+  // Only places whose words were found in the open file: the reader shows nothing for the rest.
+  const [fits, setFits] = useState<ReadonlyMap<string, boolean>>(new Map())
+  const sectionDocs = useRef<SectionDocs>(new Map())
+  const located = useMemo(
+    () => notes.filter((note) => note.location && fits.get(placeKey(note))),
+    [notes, fits]
+  )
   const locatedRef = useRef(located)
   const lookRef = useRef(look)
   const themeRef = useRef(themeShown)
@@ -733,9 +756,10 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
 
     void (async () => {
       try {
-        const [bytes, position] = await Promise.all([
+        const [bytes, position, saved] = await Promise.all([
           window.interleaf.readEpub(bookId),
-          window.interleaf.getReadingPosition(bookId)
+          window.interleaf.getReadingPosition(bookId),
+          at ? window.interleaf.listNotes(bookId) : []
         ])
         if (cancelled) return
         const file = new File([bytes as Uint8Array<ArrayBuffer>], 'book.epub', {
@@ -766,9 +790,14 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
         view.addEventListener('show-annotation', onShowAnnotation)
         view.addEventListener('link', onLink)
         applyLook(view, lookRef.current, bookCss(lookRef.current, themeRef.current))
-        // A quote from a replaced file may point nowhere; then open where reading stopped.
+        // A quote from a replaced file may point nowhere or at other words; then open where reading stopped.
+        const atNotes = saved.filter((note) => note.location === at)
+        const atChecks = await Promise.all(
+          atNotes.map((note) => fitsFile(view, note, sectionDocs.current))
+        )
+        if (cancelled) return
         let placed = false
-        if (at) {
+        if (at && (atNotes.length === 0 || atChecks.some(Boolean))) {
           try {
             await view.init({ lastLocation: at })
             placed = Boolean((view as FoliateView & { lastLocation?: unknown }).lastLocation)
@@ -817,6 +846,18 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
     if (status !== 'ready') return
     for (const { doc } of viewRef.current?.renderer.getContents?.() ?? []) paintBook(doc, colors)
   }, [colors, status])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || status !== 'ready') return
+    const unchecked = notes.filter((note) => note.location && !fits.has(placeKey(note)))
+    if (unchecked.length === 0) return
+    void Promise.all(
+      unchecked.map(
+        async (note) => [placeKey(note), await fitsFile(view, note, sectionDocs.current)] as const
+      )
+    ).then((checked) => setFits((current) => new Map([...current, ...checked])))
+  }, [notes, fits, status])
 
   // Keeps the drawn marks in step with the journal as quotes and notes are added or removed.
   const drawn = useRef(new Map<string, string>())
