@@ -953,11 +953,11 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   }
 
   async function saveNote(): Promise<void> {
-    if (!picked || noteDraft === null) return
+    if (!picked || !noteDraft?.trim()) return
     try {
       const body = noteDraft.trim()
       const passage = picked.notesGrown ?? { cfi: picked.cfi, text: picked.text }
-      const bodyMd = body ? `${quoteLines(passage.text)}\n\n${body}` : quoteLines(passage.text)
+      const bodyMd = `${quoteLines(passage.text)}\n\n${body}`
       const [kept, ...merged] = picked.notesTouched
       const note = kept
         ? await updateNote.mutateAsync({ id: kept.id, patch: { bodyMd, location: passage.cfi } })
@@ -975,7 +975,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
   }
 
   async function saveEditedNote(): Promise<void> {
-    if (!opened?.note || opened.draft === undefined) return
+    if (!opened?.note || !opened.draft?.trim()) return
     const { passage } = splitNote(opened.note.bodyMd)
     const thought = opened.draft.trim()
     try {
@@ -1224,6 +1224,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                   <button
                     type="button"
                     className="btn btn-primary"
+                    disabled={!noteDraft.trim()}
                     onClick={() => void once(saveNote)}
                   >
                     Save note
@@ -1301,6 +1302,7 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                   <button
                     type="button"
                     className="btn btn-primary"
+                    disabled={!opened.draft.trim()}
                     onClick={() => void once(saveEditedNote)}
                   >
                     Save
