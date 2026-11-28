@@ -152,7 +152,7 @@ const HIGHLIGHT = '#f2c94c'
 const UNDERLINE = '#5b84c9'
 const CHROME_IDLE_MS = 2500
 // The selection popover once Note opens its editor, in CSS pixels.
-const NOTE_EDITOR_HEIGHT = 170
+const NOTE_EDITOR_HEIGHT = 210
 const CHROME_EDGE = 64
 const TIME_SAVE_MS = 60_000
 // Opening a book to check a passage is not a reading session.
@@ -1205,11 +1205,11 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                 )}
               </div>
             ) : (
-              <div className="w-72">
+              <div className="w-96 max-w-[80vw]">
                 <textarea
                   autoFocus
                   aria-label="Note on this passage"
-                  className="field min-h-24 w-full text-[13px]"
+                  className="field min-h-36 w-full text-[15px] leading-relaxed"
                   value={noteDraft}
                   onChange={(event) => setNoteDraft(event.target.value)}
                   onKeyDown={(event) => {
@@ -1281,11 +1281,11 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
             reserve={opened.note ? NOTE_EDITOR_HEIGHT : 0}
           >
             {opened.note && opened.draft !== undefined ? (
-              <div className="w-72">
+              <div className="w-96 max-w-[80vw]">
                 <textarea
                   autoFocus
                   aria-label="Edit note"
-                  className="field min-h-24 w-full text-[13px]"
+                  className="field min-h-36 w-full text-[15px] leading-relaxed"
                   value={opened.draft}
                   onChange={(event) => setOpened({ ...opened, draft: event.target.value })}
                   onKeyDown={(event) => {
@@ -1308,10 +1308,10 @@ export default function Reader({ bookId, at }: { bookId: number; at?: string }):
                 </div>
               </div>
             ) : (
-              <div className="flex max-w-80 flex-col gap-1.5">
+              <div className="flex max-w-[min(24rem,80vw)] flex-col gap-1.5">
                 {opened.note && opened.quote && <PopHeading kind="note" />}
                 {opened.note && splitNote(opened.note.bodyMd).thought && (
-                  <p className="line-clamp-4 px-1.5 pt-1 text-[13px] whitespace-pre-line">
+                  <p className="max-h-[15.5rem] overflow-y-auto px-1.5 pt-1 text-[15px] leading-relaxed whitespace-pre-line">
                     {toPlainText(splitNote(opened.note.bodyMd).thought)}
                   </p>
                 )}
